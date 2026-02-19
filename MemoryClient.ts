@@ -118,4 +118,101 @@ export class MemoryClient {
 			console.error('[MemoryClient] Failed to update state:', error);
 		}
 	}
+
+	// Path to consolidated facts
+	private get factsPath(): string {
+		return `${this.config.basePath}/consolidation/facts.jsonl`;
+	}
+
+	// Search consolidated facts by query
+	async searchFacts(query: string, limit: number = 20): Promise<Fact[]> {
+		try {
+			const factsFile = this.app.vault.getAbstractFileByPath(this.factsPath);
+
+			if (!(factsFile instanceof TFile)) {
+				return [];
+			}
+
+			const content = await this.app.vault.read(factsFile);
+			const lines = content.trim().split('\n');
+
+			const queryLower = query.toLowerCase();
+			const scoredFacts: Array<{ fact: Fact; score: number }> = [];
+
+			for (const line of lines) {
+				if (!line.trim()) continue;
+
+				try {
+					const fact: Fact = JSON.parse(line);
+					let score = 0;
+
+					// Content match
+					if (fact.content.toLowerCase().includes(queryLower)) {
+						score += 1.0;
+					}
+
+					// Topic match
+					for (const topic of fact.topics || []) {
+						if (topic.toLowerCase().includes(queryLower)) {
+							score += 0.5;
+						}
+					}
+
+					// Entity match
+					for (const entity of fact.entities || []) {
+						if (entity.toLowerCase().includes(queryLower)) {
+							score += 0.3;
+						}
+					}
+
+					// Importance boost
+					score *= (1 + (fact.importance || 0));
+
+					if (score > 0) {
+						scoredFacts.push({ fact, score });
+					}
+				} catch (e) {
+					// Skip malformed lines
+				}
+			}
+
+			// Sort by score, return top results
+			scoredFacts.sort((a, b) => b.score - a.score);
+			return scoredFacts.slice(0, limit).map(s => s.fact);
+
+		} catch (error) {
+			console.error('[MemoryClient] Failed to search facts:', error);
+			return [];
+		}
+	}
+
+	// Get recent facts for context injection
+	async getRecentFacts(limit: number = 10): Promise<Fact[]> {
+		try {
+			const factsFile = this.app.vault.getAbstractFileByPath(this.factsPath);
+
+			if (!(factsFile instanceof TFile)) {
+				return [];
+			}
+
+			const content = await this.app.vault.read(factsFile);
+			const lines = content.trim().split('\n');
+
+			const facts: Fact[] = [];
+			for (const line of lines.reverse()) {
+				if (!line.trim()) continue;
+				try {
+					facts.push(JSON.parse(line));
+					if (facts.length >= limit) break;
+				} catch (e) {
+					// Skip malformed
+				}
+			}
+
+			return facts;
+		} catch (error) {
+			console.error('[MemoryClient] Failed to get recent facts:', error);
+			return [];
+		}
+	}
 }
