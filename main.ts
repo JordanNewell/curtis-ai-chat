@@ -998,13 +998,27 @@ class AIChatModal extends Modal {
 		this.messages.push({ role: 'user', content });
 		this.plugin.addToChatHistory({ role: 'user', content });
 
+		// Capture user message to memory
+		this.plugin.memoryClient.capture({
+			role: 'user',
+			content: content,
+			metadata: {
+				provider: this.plugin.settings.provider,
+				model: this.modelSelect.value
+			}
+		});
+
 		// Add assistant placeholder
 		const assistantMsgEl = this.addMessage('assistant', '');
 		let responseContent = '';
 
 		try {
+			// Get memory context
+			const memoryContext = await this.plugin.memoryClient.getContext(content);
+
 			const messages: any[] = [
 				{ role: 'system', content: this.plugin.settings.systemPrompt },
+				...(memoryContext ? [{ role: 'system', content: memoryContext }] : []),
 				...this.messages,
 			];
 
@@ -1016,6 +1030,16 @@ class AIChatModal extends Modal {
 
 			this.messages.push({ role: 'assistant', content: responseContent });
 			this.plugin.addToChatHistory({ role: 'assistant', content: responseContent });
+
+			// Capture assistant response to memory
+			this.plugin.memoryClient.capture({
+				role: 'assistant',
+				content: responseContent,
+				metadata: {
+					provider: this.plugin.settings.provider,
+					model: this.modelSelect.value
+				}
+			});
 
 		} catch (error: any) {
 			assistantMsgEl.querySelector('p')!.setText(`Error: ${error.message}`);
