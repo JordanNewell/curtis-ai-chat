@@ -16,7 +16,12 @@ export interface MemoryMessage {
     /** ISO timestamp of when the message was created */
     timestamp: string;
     /** Optional metadata associated with the message */
-    metadata?: Record<string, unknown>;
+    metadata?: {
+        session_id?: string;
+        source?: string;
+        provider?: string;
+        model?: string;
+    };
 }
 
 /**
@@ -41,20 +46,24 @@ export interface Episode {
     session_id: string;
     /** ISO timestamp of when the episode started */
     started_at: string;
-    /** ISO timestamp of when the episode ended (null if ongoing) */
-    ended_at: string | null;
+    /** ISO timestamp of when the episode ended */
+    ended_at: string;
     /** Context or topic of the episode */
-    context: string;
+    context: {
+        source: string;
+        session_id?: string;
+        project?: string;
+    };
     /** Array of messages in this episode */
     messages: MemoryMessage[];
-    /** Optional summary of the episode */
-    summary?: string;
+    /** Summary of the episode */
+    summary: string;
     /** Key topics discussed in this episode */
     key_topics: string[];
     /** Optional metadata associated with the episode */
     metadata?: Record<string, unknown>;
     /** Duration of the episode in seconds */
-    duration_seconds?: number;
+    duration_seconds: number;
 }
 
 /**
@@ -63,8 +72,8 @@ export interface Episode {
 export interface EpisodeIndex {
     /** ISO timestamp of when the index was created */
     created: string;
-    /** Array of episode IDs in chronological order */
-    episodes: string[];
+    /** Array of episodes in chronological order */
+    episodes: Episode[];
     /** ID of the current/active episode (null if none active) */
     current_episode: string | null;
 }
@@ -72,15 +81,7 @@ export interface EpisodeIndex {
 /**
  * Type of fact for categorization
  */
-export type FactType =
-    | 'preference'
-    | 'behavior'
-    | 'knowledge'
-    | 'relationship'
-    | 'context'
-    | 'decision'
-    | 'goal'
-    | 'other';
+export type FactType = 'consolidated_memory' | 'extracted_fact';
 
 /**
  * Represents a single fact extracted from conversations
@@ -106,8 +107,8 @@ export interface Fact {
     timestamp: string;
     /** Confidence score for the fact's accuracy (0-1) */
     confidence: number;
-    /** ISO timestamp of when the fact was last consolidated (null if never) */
-    consolidated_at: string | null;
+    /** ISO timestamp of when the fact was last consolidated */
+    consolidated_at: string;
 }
 
 /**
@@ -129,9 +130,9 @@ export interface MemoryClientConfig {
     /** Base path to the memory storage directory */
     basePath: string;
     /** Maximum number of facts to load into context */
-    maxFactsToLoad?: number;
-    /** Optional session ID for the current session */
-    sessionId?: string;
+    maxFactsToLoad: number;
+    /** Session ID for the current session */
+    sessionId: string;
 }
 
 /**
