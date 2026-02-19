@@ -881,6 +881,25 @@ class AIChatModal extends Modal {
 			new TemplatesModal(this.app, this.plugin).open();
 		};
 
+		// Memory toggle
+		const memoryContainer = contentEl.createDiv({ cls: 'ai-memory-toggle' });
+		const memoryToggle = memoryContainer.createEl('input', {
+			type: 'checkbox',
+			attr: { id: 'memory-toggle' }
+		});
+		memoryToggle.checked = this.plugin.memoryClient.getRemember();
+		memoryToggle.addEventListener('change', () => {
+			this.plugin.memoryClient.setRemember(memoryToggle.checked);
+		});
+
+		const memoryLabel = memoryContainer.createEl('label', {
+			attr: { for: 'memory-toggle' },
+			text: '🧠 Remember conversation'
+		});
+
+		// Memory stats indicator
+		this.updateMemoryStats(memoryContainer);
+
 		// Chat container
 		this.chatContainer = contentEl.createDiv({ cls: 'ai-chat-messages' });
 
@@ -1027,8 +1046,39 @@ class AIChatModal extends Modal {
 		this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
 	}
 
+	async updateMemoryStats(container: HTMLElement) {
+		const stats = await this.plugin.memoryClient.getStats();
+		container.createSpan({
+			cls: 'ai-memory-stats',
+			text: ` (${stats.factCount} facts)`
+		});
+	}
+
 	addStyles() {
 		// Styles are injected via styles.css
+		const { contentEl } = this;
+
+		// Memory toggle styles
+		contentEl.createEl('style', { text: `
+			.ai-memory-toggle {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				margin: 8px 0;
+				padding: 8px;
+				background: var(--background-secondary);
+				border-radius: 6px;
+			}
+			.ai-memory-toggle label {
+				cursor: pointer;
+				font-size: 14px;
+			}
+			.ai-memory-stats {
+				opacity: 0.6;
+				font-size: 12px;
+				margin-left: auto;
+			}
+		` });
 	}
 
 	onClose() {
