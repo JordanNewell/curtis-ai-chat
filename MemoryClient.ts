@@ -215,4 +215,48 @@ export class MemoryClient {
 			return [];
 		}
 	}
+
+	// Generate context string for AI prompt
+	async getContext(topic?: string): Promise<string> {
+		const facts = topic
+			? await this.searchFacts(topic, this.config.maxFactsToLoad)
+			: await this.getRecentFacts(this.config.maxFactsToLoad);
+
+		if (facts.length === 0) {
+			return '';
+		}
+
+		const contextLines = facts.map(fact => {
+			const importance = fact.importance > 0.7 ? '⭐ ' : '';
+			return `${importance}${fact.content}`;
+		});
+
+		return `## Relevant Context from Memory\n\n${contextLines.join('\n')}\n\n---\n\n`;
+	}
+
+	// Get memory stats for UI display
+	async getStats(): Promise<{ factCount: number; episodeCount: number }> {
+		let factCount = 0;
+		let episodeCount = 0;
+
+		try {
+			const factsFile = this.app.vault.getAbstractFileByPath(this.factsPath);
+			if (factsFile instanceof TFile) {
+				const content = await this.app.vault.read(factsFile);
+				factCount = content.trim().split('\n').filter(l => l).length;
+			}
+		} catch (e) {}
+
+		try {
+			const episodePath = `${this.config.basePath}/episodic/episode_index.json`;
+			const episodeFile = this.app.vault.getAbstractFileByPath(episodePath);
+			if (episodeFile instanceof TFile) {
+				const content = await this.app.vault.read(episodeFile);
+				const index = JSON.parse(content);
+				episodeCount = index.episodes?.length || 0;
+			}
+		} catch (e) {}
+
+		return { factCount, episodeCount };
+	}
 }
