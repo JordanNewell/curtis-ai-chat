@@ -1,6 +1,8 @@
 // MemoryClient - Direct file access to Claude Code memory system
 
-import { App, Notice, TFile } from 'obsidian';
+import { App, Notice } from 'obsidian';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
 	MemoryMessage,
 	WorkingMemoryState,
@@ -25,6 +27,22 @@ export class MemoryClient {
 	constructor(app: App, config?: Partial<MemoryClientConfig>) {
 		this.app = app;
 		this.config = { ...DEFAULT_CONFIG, ...config };
+		this.ensureDirectories();
+	}
+
+	// Ensure memory directories exist
+	private ensureDirectories(): void {
+		const dirs = [
+			this.config.basePath,
+			`${this.config.basePath}/working_memory`,
+			`${this.config.basePath}/episodic`,
+			`${this.config.basePath}/consolidation`
+		];
+		for (const dir of dirs) {
+			if (!fs.existsSync(dir)) {
+				fs.mkdirSync(dir, { recursive: true });
+			}
+		}
 	}
 
 	// Toggle "remember" state
@@ -72,22 +90,17 @@ export class MemoryClient {
 		};
 
 		try {
-			// Append to buffer file (JSONL format)
+			// Append to buffer file (JSONL format) using Node.js fs
 			const line = JSON.stringify(fullMessage) + '\n';
 
-			// Use Obsidian's vault API for file operations
-			const bufferFile = this.app.vault.getAbstractFileByPath(this.workingMemoryBufferPath);
-
-			if (bufferFile instanceof TFile) {
-				const existing = await this.app.vault.read(bufferFile);
-				await this.app.vault.modify(bufferFile, existing + line);
+			if (fs.existsSync(this.workingMemoryBufferPath)) {
+				fs.appendFileSync(this.workingMemoryBufferPath, line, 'utf-8');
 			} else {
-				// File doesn't exist, create it
-				await this.app.vault.create(this.workingMemoryBufferPath, line);
+				fs.writeFileSync(this.workingMemoryBufferPath, line, 'utf-8');
 			}
 
 			// Update state
-			await this.updateWorkingMemoryState();
+			this.updateWorkingMemoryState();
 
 			return true;
 		} catch (error) {
@@ -97,10 +110,8 @@ export class MemoryClient {
 	}
 
 	// Update working memory state file
-	private async updateWorkingMemoryState(): Promise<void> {
+	private updateWorkingMemoryState(): void {
 		try {
-			const stateFile = this.app.vault.getAbstractFileByPath(this.workingMemoryPath);
-
 			const state: WorkingMemoryState = {
 				buffer: [],
 				max_turns: 3,
@@ -108,12 +119,7 @@ export class MemoryClient {
 			};
 
 			const content = JSON.stringify(state, null, 2);
-
-			if (stateFile instanceof TFile) {
-				await this.app.vault.modify(stateFile, content);
-			} else {
-				await this.app.vault.create(this.workingMemoryPath, content);
-			}
+			fs.writeFileSync(this.workingMemoryPath, content, 'utf-8');
 		} catch (error) {
 			console.error('[MemoryClient] Failed to update state:', error);
 		}
@@ -127,13 +133,11 @@ export class MemoryClient {
 	// Search consolidated facts by query
 	async searchFacts(query: string, limit: number = 20): Promise<Fact[]> {
 		try {
-			const factsFile = this.app.vault.getAbstractFileByPath(this.factsPath);
-
-			if (!(factsFile instanceof TFile)) {
+			if (!fs.existsSync(this.factsPath)) {
 				return [];
 			}
 
-			const content = await this.app.vault.read(factsFile);
+			const content = fs.readFileSync(this.factsPath, 'utf-8');
 			const lines = content.trim().split('\n');
 
 			const queryLower = query.toLowerCase();
@@ -189,13 +193,11 @@ export class MemoryClient {
 	// Get recent facts for context injection
 	async getRecentFacts(limit: number = 10): Promise<Fact[]> {
 		try {
-			const factsFile = this.app.vault.getAbstractFileByPath(this.factsPath);
-
-			if (!(factsFile instanceof TFile)) {
+			if (!fs.existsSync(this.factsPath)) {
 				return [];
 			}
 
-			const content = await this.app.vault.read(factsFile);
+			const content = fs.readFileSync(this.factsPath, 'utf-8');
 			const lines = content.trim().split('\n');
 
 			const facts: Fact[] = [];
@@ -240,18 +242,16 @@ export class MemoryClient {
 		let episodeCount = 0;
 
 		try {
-			const factsFile = this.app.vault.getAbstractFileByPath(this.factsPath);
-			if (factsFile instanceof TFile) {
-				const content = await this.app.vault.read(factsFile);
+			if (fs.existsSync(this.factsPath)) {
+				const content = fs.readFileSync(this.factsPath, 'utf-8');
 				factCount = content.trim().split('\n').filter(l => l).length;
 			}
 		} catch (e) {}
 
 		try {
 			const episodePath = `${this.config.basePath}/episodic/episode_index.json`;
-			const episodeFile = this.app.vault.getAbstractFileByPath(episodePath);
-			if (episodeFile instanceof TFile) {
-				const content = await this.app.vault.read(episodeFile);
+			if (fs.existsSync(episodePath)) {
+				const content = fs.readFileSync(episodePath, 'utf-8');
 				const index = JSON.parse(content);
 				episodeCount = index.episodes?.length || 0;
 			}
