@@ -1,4 +1,3 @@
-import { Plugin, Editor, MarkdownView } from 'obsidian';
 import type CurtisPlugin from '../main';
 
 export function registerCommands(plugin: CurtisPlugin): void {
@@ -6,7 +5,6 @@ export function registerCommands(plugin: CurtisPlugin): void {
 	plugin.addCommand({
 		id: 'open-chat',
 		name: 'Open AI Chat',
-		hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'g' }],
 		callback: () => plugin.activateChatView(),
 	});
 
@@ -26,7 +24,6 @@ export function registerCommands(plugin: CurtisPlugin): void {
 	plugin.addCommand({
 		id: 'explain-selection',
 		name: 'Explain selection',
-		hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'e' }],
 		editorCallback: (editor) => plugin.processSelection(editor, 'explain'),
 	});
 

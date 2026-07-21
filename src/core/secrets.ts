@@ -48,7 +48,7 @@ export async function migrateSecretsToKeychain(
 
 	// One-time: re-key any secrets stored under the old "obsibuddi" prefix.
 	try {
-		const secrets = await ss.listSecrets();
+		const secrets = ss.listSecrets();
 		for (const key of secrets) {
 			if (key.startsWith(OLD_PREFIX)) {
 				const newKey = SECRET_PREFIX + key.slice(OLD_PREFIX.length);

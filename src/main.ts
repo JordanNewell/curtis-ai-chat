@@ -1,7 +1,7 @@
 // Curtis — Main Plugin Entry Point
 
 import { Editor, Notice, Plugin } from 'obsidian';
-import type { CurtisSettings, AIMessage, MessageContent, TokenUsage, AIProvider } from './types';
+import type { CurtisSettings, AIMessage, TokenUsage, AIProvider } from './types';
 import { DEFAULT_SETTINGS, CurtisSettingTab } from './settings';
 import { ProviderRegistry } from './providers/registry';
 import { chatStream } from './providers/transport';
@@ -9,6 +9,7 @@ import { EventBus } from './core/events';
 import { HookSystem } from './core/hooks';
 import { ToolRegistry } from './core/tools';
 import { runMigrations } from './core/migration';
+import type { SettingsData } from './core/migration';
 import { migrateSecretsToKeychain, resolveApiKey } from './core/secrets';
 import { MemoryStore } from './memory';
 import { TemplateManager } from './templates';
@@ -36,7 +37,7 @@ export default class CurtisPlugin extends Plugin {
 		//    < 1.11.4 — keys stay in plaintext with a one-time warning).
 		const { migrated, skipped } = await migrateSecretsToKeychain(this.app, this.settings);
 		if (migrated.length > 0) {
-			console.log(`[Curtis] Migrated ${migrated.length} API key(s) to OS keychain: ${migrated.join(', ')}`);
+			new Notice(`Migrated ${migrated.length} API key(s) to OS keychain`);
 			await this.saveSettings();
 		} else if (skipped) {
 			console.warn('[Curtis] OS keychain unavailable (Obsidian < 1.11.4). API keys remain in plaintext data.json.');
@@ -49,7 +50,7 @@ export default class CurtisPlugin extends Plugin {
 		this.memoryStore = new MemoryStore(this.app);
 		await this.memoryStore.load(this);
 		this.templateManager = new TemplateManager();
-		this.conversationStore = new ConversationStore();
+		this.conversationStore = new ConversationStore(this.app);
 		this.conversationStore.load();
 
 		// 4. Initialize provider registry (with keychain-aware key resolver)
@@ -77,34 +78,31 @@ export default class CurtisPlugin extends Plugin {
 
 		// 8. Ribbon icon
 		this.addRibbonIcon('bot', 'Open AI Chat', () => {
-			this.activateChatView();
+			void this.activateChatView();
 		});
-
-		console.log('[Curtis] Plugin loaded');
 	}
 
 	onunload(): void {
 		this.conversationStore.save();
-		this.memoryStore.save(this);
-		console.log('[Curtis] Plugin unloaded');
+		void this.memoryStore.save(this);
 	}
 
 	async loadSettings(): Promise<void> {
-		const data = await this.loadData();
+		const data = (await this.loadData()) as SettingsData | null;
 		const migrated = runMigrations(data || {});
 
 		// Deep-merge defaults over stored data so nested objects (e.g. providerConfigs)
 		// don't get wiped when the stored copy is partial/empty.
 		this.settings = {
 			...DEFAULT_SETTINGS,
-			...migrated,
+			...(migrated as Partial<CurtisSettings>),
 			providerConfigs: {
 				...DEFAULT_SETTINGS.providerConfigs,
 				...(migrated.providerConfigs || {}),
 			},
 			hotkeys: {
 				...DEFAULT_SETTINGS.hotkeys,
-				...(migrated.hotkeys || {}),
+				...((migrated.hotkeys as CurtisSettings['hotkeys']) || {}),
 			},
 		};
 		await this.saveData(this.settings);
@@ -163,9 +161,8 @@ export default class CurtisPlugin extends Plugin {
 		const actionDef = SELECTION_ACTIONS[action];
 		if (!actionDef) return;
 
-		let provider: AIProvider;
 		try {
-			provider = this.getAuthenticatedProvider();
+			this.getAuthenticatedProvider();
 		} catch {
 			new Notice('No AI provider configured. Check settings.');
 			return;
@@ -253,23 +250,12 @@ export default class CurtisPlugin extends Plugin {
 
 		// Run hooks: provider:request
 		const requestInit = provider.formatRequest(processedMessages, options);
-		const finalRequest = (await this.hookSystem.runPipeline('provider:request', requestInit, {})) as RequestInit;
+		const finalRequest = await this.hookSystem.runPipeline('provider:request', requestInit, {});
 
-		// Track usage + cost centrally so all transports report identically.
+		// Track usage centrally so all transports report identically.
 		const onUsage = (usage: TokenUsage): void => {
 			callbacks?.onUsage?.(usage);
 			this.eventBus.emit('provider:response', { usage, provider: provider.id, model: modelId });
-			if (this.settings.enableCostTracking) {
-				const cost = this.providerRegistry.estimateCost(
-					provider.id,
-					modelId,
-					usage.promptTokens,
-					usage.completionTokens
-				);
-				if (cost !== null && cost > 0) {
-					console.debug(`[Curtis] Cost: $${cost.toFixed(6)}`);
-				}
-			}
 		};
 
 		// Track the last stream error so we can decide whether to retry with
@@ -323,11 +309,11 @@ export default class CurtisPlugin extends Plugin {
 			if (isImageRejection) {
 				const textOnly = stripImageContent(processedMessages);
 				const strippedRequest = provider.formatRequest(textOnly, options);
-				const finalStrippedRequest = (await this.hookSystem.runPipeline(
+				const finalStrippedRequest = await this.hookSystem.runPipeline(
 					'provider:request',
 					strippedRequest,
 					{}
-				)) as RequestInit;
+				);
 				new Notice('This endpoint rejected the image — retrying as text only. Try a different provider for vision.', 6000);
 				streamError = null;
 				const retry = await chatStream(
@@ -448,7 +434,7 @@ function messagesHaveImageContent(messages: AIMessage[]): boolean {
 function stripImageContent(messages: AIMessage[]): AIMessage[] {
 	return messages.map((m) => {
 		if (!Array.isArray(m.content)) return m;
-		const textParts = (m.content as MessageContent[]).filter((p) => p.type === 'text');
+		const textParts = m.content.filter((p) => p.type === 'text');
 		const joined = textParts.map((p) => p.text || '').join('\n').trim();
 		return { ...m, content: joined || '[image removed — provider does not support images]' };
 	});

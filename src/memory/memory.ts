@@ -243,7 +243,7 @@ export class MemoryStore {
 		} finally {
 			// Release on the next microtask so the modify event (which fires
 			// synchronously after vault.modify resolves) is caught by the guard.
-			setTimeout(() => { this.writing = false; }, 0);
+			window.setTimeout(() => { this.writing = false; }, 0);
 		}
 	}
 
@@ -264,8 +264,11 @@ export class MemoryStore {
 function cryptoId(): string {
 	try {
 		// Obsidian desktop — crypto.randomUUID available
-		return (crypto as any).randomUUID();
+		if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+			return crypto.randomUUID();
+		}
 	} catch {
-		return `mem_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+		// fall through to manual ID
 	}
+	return `mem_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }

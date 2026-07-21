@@ -13,6 +13,32 @@ import type {
 	StreamResponse,
 } from '../types';
 
+/**
+ * OpenAI-compatible /v1/chat/completions non-streaming response shape.
+ * Only the fields consumed in `parseResponse` are typed.
+ */
+interface OpenAIChatResponse {
+	choices?: Array<{ message?: { content?: string } }>;
+	usage?: {
+		prompt_tokens?: number;
+		completion_tokens?: number;
+		total_tokens?: number;
+	};
+}
+
+/**
+ * OpenAI-compatible streaming chunk shape. Only fields consumed in
+ * `parseStream` are typed.
+ */
+interface OpenAIChatChunk {
+	choices?: Array<{ delta?: { content?: string } }>;
+	usage?: {
+		prompt_tokens?: number;
+		completion_tokens?: number;
+		total_tokens?: number;
+	};
+}
+
 export abstract class BaseProvider implements AIProvider {
 	abstract readonly id: string;
 	abstract readonly name: string;
@@ -43,13 +69,14 @@ export abstract class BaseProvider implements AIProvider {
 	}
 
 	async parseResponse(response: StreamResponse): Promise<AIResponse> {
-		const data = await response.json();
-		const content = data.choices?.[0]?.message?.content || '';
-		const usage = data.usage
+		const data = (await response.json()) as OpenAIChatResponse;
+		const content = data?.choices?.[0]?.message?.content || '';
+		const u = data?.usage;
+		const usage = u
 			? {
-					promptTokens: data.usage.prompt_tokens || 0,
-					completionTokens: data.usage.completion_tokens || 0,
-					totalTokens: data.usage.total_tokens || 0,
+					promptTokens: u.prompt_tokens || 0,
+					completionTokens: u.completion_tokens || 0,
+					totalTokens: u.total_tokens || 0,
 				}
 			: undefined;
 		return { content, usage };
@@ -82,7 +109,7 @@ export abstract class BaseProvider implements AIProvider {
 					if (data === '[DONE]') continue;
 
 					try {
-						const parsed = JSON.parse(data);
+						const parsed = JSON.parse(data) as OpenAIChatChunk;
 						const delta = parsed.choices?.[0]?.delta?.content || '';
 						if (delta) onChunk(delta);
 

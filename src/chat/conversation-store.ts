@@ -1,18 +1,24 @@
 // Conversation Store — persistent conversation management
 
+import { App } from 'obsidian';
 import type { Conversation, ConversationMessage, ConversationStats } from '../types';
 
 const STORAGE_KEY = 'ai-conversations';
 
 export class ConversationStore {
+	private app: App;
 	private conversations = new Map<string, Conversation>();
 	private currentConversationId: string | null = null;
 
+	constructor(app: App) {
+		this.app = app;
+	}
+
 	load(): void {
 		try {
-			const raw = localStorage.getItem(STORAGE_KEY);
+			const raw: unknown = this.app.loadLocalStorage(STORAGE_KEY);
 			if (!raw) return;
-			const entries: [string, Conversation][] = JSON.parse(raw);
+			const entries = (typeof raw === 'string' ? JSON.parse(raw) : raw) as [string, Conversation][];
 			this.conversations = new Map(entries);
 		} catch (e) {
 			console.error('[Curtis] Failed to load conversations:', e);
@@ -23,7 +29,7 @@ export class ConversationStore {
 	save(): void {
 		try {
 			const entries = Array.from(this.conversations.entries());
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+			this.app.saveLocalStorage(STORAGE_KEY, entries);
 		} catch (e) {
 			console.error('[Curtis] Failed to save conversations:', e);
 		}

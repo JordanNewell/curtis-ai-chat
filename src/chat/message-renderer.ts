@@ -79,7 +79,7 @@ export class MessageRenderer {
 			const pre = block.parentElement;
 			if (!pre || pre.querySelector('.ai-code-copy-btn')) continue;
 
-			pre.style.position = 'relative';
+			pre.addClass('ai-code-block');
 
 			const btn = pre.createEl('button', {
 				cls: 'ai-code-copy-btn',
@@ -90,7 +90,7 @@ export class MessageRenderer {
 				const code = block.textContent || '';
 				navigator.clipboard.writeText(code).then(() => {
 					btn.textContent = 'Copied!';
-					setTimeout(() => {
+					window.setTimeout(() => {
 						btn.textContent = 'Copy';
 					}, 2000);
 				});
@@ -105,7 +105,7 @@ export class MessageRenderer {
 	 */
 	renderUserMessage(container: HTMLElement, content: string): void {
 		container.empty();
-		container.style.whiteSpace = 'pre-wrap';
+		container.addClass('ai-user-message-text');
 		container.setText(content);
 	}
 

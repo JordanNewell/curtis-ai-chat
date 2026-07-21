@@ -64,7 +64,7 @@ export type ErrorCallback = (error: Error) => void;
 export interface StreamResponse {
 	readonly ok: boolean;
 	readonly status: number;
-	json(): Promise<any>;
+	json(): Promise<unknown>;
 	text(): Promise<string>;
 	body?: ReadableLike;
 }

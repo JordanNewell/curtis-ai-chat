@@ -27,15 +27,21 @@
 //   rag:query             — RAG query executed
 // ============================================================================
 
-type EventHandler<T = any> = (data: T) => void;
+type EventHandler<T = unknown> = (data: T) => void;
+
+export interface TokenUsagePayload {
+	promptTokens?: number;
+	completionTokens?: number;
+	totalTokens: number;
+}
 
 export interface EventBusEvents {
-	'provider:response': { content?: string; usage?: any; provider: string; model: string };
+	'provider:response': { content?: string; usage?: TokenUsagePayload; provider: string; model: string };
 	'provider:chunk': { delta: string; provider: string };
 	'provider:error': { error: Error; provider: string };
 	'provider:switch': { provider: string; model: string; previousProvider?: string; previousModel?: string };
 	'chat:message:sent': { conversationId: string; messageId: string; content: string };
-	'chat:message:received': { conversationId: string; messageId: string; content: string; tokens?: any };
+	'chat:message:received': { conversationId: string; messageId: string; content: string; tokens?: TokenUsagePayload };
 	'chat:conversation:new': { conversationId: string; provider: string; model: string };
 	'chat:conversation:load': { conversationId: string };
 	'chat:conversation:delete': { conversationId: string };
@@ -44,7 +50,7 @@ export interface EventBusEvents {
 	'vault:file:removed': { path: string };
 	'memory:fact:stored': { factId: string; content: string };
 	'memory:fact:recalled': { facts: string[] };
-	'settings:changed': { key: string; value: any };
+	'settings:changed': { key: string; value: unknown };
 	'settings:migrated': { from: number; to: number };
 	'rag:indexed': { fileCount: number; chunkCount: number };
 	'rag:query': { query: string; resultCount: number };
@@ -88,7 +94,7 @@ export class EventBus {
 	}
 
 	// Wildcard listener for debugging/plugin API
-	onAny(handler: (event: string, data: any) => void): () => void {
+	onAny(handler: (event: string, data: unknown) => void): () => void {
 		// Store in a special key
 		const key = '*';
 		if (!this.handlers.has(key)) {

@@ -64,7 +64,7 @@ export class ModelPickerModal extends FuzzySuggestModal<ModelPickerEntry> {
 			cls: 'ai-model-suggestion-name',
 			text: entry.item.model.name,
 		});
-		if (isActive) name.style.color = 'var(--interactive-accent)';
+		if (isActive) name.addClass('is-active');
 		text.createDiv({
 			cls: 'ai-model-suggestion-provider',
 			text: entry.item.providerName,

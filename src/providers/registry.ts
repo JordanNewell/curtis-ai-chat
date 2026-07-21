@@ -5,6 +5,47 @@ import type { AIProvider, AIModel, ProviderDefinition, ProviderConfig } from '..
 import { OpenAICompatibleProvider } from './base';
 import { AnthropicProvider, getAnthropicModels } from './anthropic';
 
+/**
+ * Model-listing response shapes we know how to parse. The discovery endpoint
+ * varies by provider; we match against the field that's present at runtime.
+ */
+interface OpenAIModelsResponse {
+	data?: Array<{
+		id: string;
+		context_length?: number;
+		context_window?: number;
+	}>;
+}
+
+interface OllamaModelsResponse {
+	models?: Array<{
+		name?: string;
+		model?: string;
+	}>;
+}
+
+interface GeminiModelsResponse {
+	models?: Array<{
+		name?: string;
+		displayName?: string;
+		inputTokenLimit?: number;
+		supportedGenerationMethods?: string[];
+	}>;
+}
+
+/** Minimal record shared by every fallback shape. */
+interface GenericModelEntry {
+	id?: string;
+	name?: string;
+	context_length?: number;
+}
+
+interface GenericModelsResponse {
+	models?: GenericModelEntry[];
+}
+
+type ModelsResponse = OpenAIModelsResponse | OllamaModelsResponse | GeminiModelsResponse | GenericModelsResponse;
+
 // ============================================================================
 // BUILT-IN PROVIDER DEFINITIONS
 // ============================================================================
@@ -531,7 +572,7 @@ export class ProviderRegistry {
 				return [];
 			}
 
-			const data = resp.json;
+			const data = resp.json as ModelsResponse;
 			const discovered = this.parseModelsResponse(def.id, data);
 			if (discovered.length === 0) return [];
 
@@ -566,10 +607,10 @@ export class ProviderRegistry {
 	}
 
 	/** Parse three known /models response shapes into a unified AIModel[] list. */
-	private parseModelsResponse(providerId: string, data: any): AIModel[] {
+	private parseModelsResponse(providerId: string, data: ModelsResponse): AIModel[] {
 		// OpenAI-compat: { data: [{ id, context_length? }] }
-		if (Array.isArray(data?.data)) {
-			return data.data.map((m: any) => ({
+		if ('data' in data && Array.isArray(data.data)) {
+			return data.data.map((m) => ({
 				id: m.id,
 				name: m.id,
 				contextLength: m.context_length || m.context_window || 0,
@@ -578,20 +619,22 @@ export class ProviderRegistry {
 			}));
 		}
 		// Ollama: { models: [{ name, ... }] } — names often have :tag suffix
-		if (Array.isArray(data?.models) && providerId === 'ollama') {
-			return data.models.map((m: any) => ({
-				id: m.name || m.model,
-				name: m.name || m.model,
+		if ('models' in data && Array.isArray(data.models) && providerId === 'ollama') {
+			const ollama = data as OllamaModelsResponse;
+			return (ollama.models ?? []).map((m) => ({
+				id: m.name || m.model || '',
+				name: m.name || m.model || '',
 				contextLength: 0,
 				inputPrice: 0,
 				outputPrice: 0,
 			}));
 		}
 		// Gemini: { models: [{ name: "models/gemini-...", supportedGenerationMethods }] }
-		if (Array.isArray(data?.models) && providerId === 'google') {
-			return data.models
-				.filter((m: any) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
-				.map((m: any) => {
+		if ('models' in data && Array.isArray(data.models) && providerId === 'google') {
+			const gemini = data as GeminiModelsResponse;
+			return (gemini.models ?? [])
+				.filter((m) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+				.map((m) => {
 					const id = (m.name || '').replace(/^models\//, '');
 					return {
 						id,
@@ -603,11 +646,12 @@ export class ProviderRegistry {
 					};
 				});
 		}
-		// Generic fallback: try data.models or data directly
-		if (Array.isArray(data?.models)) {
-			return data.models.map((m: any) => ({
-				id: m.id || m.name,
-				name: m.name || m.id,
+		// Generic fallback: try data.models
+		if ('models' in data && Array.isArray(data.models)) {
+			const generic = data as GenericModelsResponse;
+			return (generic.models ?? []).map((m) => ({
+				id: m.id || m.name || '',
+				name: m.name || m.id || '',
 				contextLength: m.context_length || 0,
 				inputPrice: 0,
 				outputPrice: 0,

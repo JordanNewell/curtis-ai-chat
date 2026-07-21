@@ -11,6 +11,19 @@
 import type { StreamResponse, ReadableLike, ReadableReader } from '../types';
 
 /**
+ * Minimal Node IncomingMessage / readable-stream surface we consume.
+ * Captured as an interface so the shim is decoupled from Node typings
+ * (which aren't resolvable in the mobile renderer environment).
+ */
+export interface NodeIncomingMessage {
+	statusCode?: number;
+	on(event: 'data', listener: (chunk: Buffer | Uint8Array) => void): unknown;
+	on(event: 'end', listener: () => void): unknown;
+	on(event: 'error', listener: (err: Error) => void): unknown;
+	destroy?(error?: Error): unknown;
+}
+
+/**
  * Wrap a Node IncomingMessage (event-emitter style) as a WHATWG-style reader.
  * Pulls data via `.on('data')`/`.on('end')`/`.on('error')` and fulfills `read()`
  * promises against a buffered queue. Cancels via `destroy()` when the reader
@@ -22,9 +35,9 @@ export class NodeIncomingReader implements ReadableReader {
 	private error: Error | null = null;
 	private waiters: Array<() => void> = [];
 	private locked = false;
-	private stream: any;
+	private stream: NodeIncomingMessage | undefined;
 
-	constructor(stream: any) {
+	constructor(stream: NodeIncomingMessage) {
 		this.stream = stream;
 		stream.on('data', (chunk: Buffer | Uint8Array) => {
 			this.chunks.push(chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk));
@@ -73,7 +86,7 @@ export class NodeIncomingReader implements ReadableReader {
 }
 
 /** ReadableLike wrapper for Node IncomingMessage. */
-export function wrapNodeStream(stream: any): ReadableLike {
+export function wrapNodeStream(stream: NodeIncomingMessage): ReadableLike {
 	return {
 		getReader: () => new NodeIncomingReader(stream),
 	};
@@ -83,11 +96,11 @@ export function wrapNodeStream(stream: any): ReadableLike {
  * Build a StreamResponse from a Node IncomingMessage (desktop https path).
  * `status` is read from `statusCode`; body is wrapped for `getReader()`.
  */
-export function streamResponseFromNode(stream: any): StreamResponse {
-	const textCache: { value: string | null } = { value: null };
+export function streamResponseFromNode(stream: NodeIncomingMessage): StreamResponse {
+	const status = stream.statusCode ?? 0;
 	return {
-		ok: stream.statusCode >= 200 && stream.statusCode < 400,
-		status: stream.statusCode,
+		ok: status >= 200 && status < 400,
+		status,
 		body: wrapNodeStream(stream),
 		json: async () => JSON.parse(await readAllText(stream)),
 		text: async () => readAllText(stream),
@@ -101,7 +114,7 @@ export function streamResponseFromNode(stream: any): StreamResponse {
 export function streamResponseFromBuffer(
 	status: number,
 	bodyText: string,
-	jsonCache?: any
+	jsonCache?: unknown
 ): StreamResponse {
 	let textAlreadyRead = false;
 	let readerReturned = false;
@@ -127,7 +140,7 @@ export function streamResponseFromBuffer(
 }
 
 /** Read the full body of a Node stream into a UTF-8 string. Used for error bodies. */
-function readAllText(stream: any): Promise<string> {
+function readAllText(stream: NodeIncomingMessage): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const chunks: Buffer[] = [];
 		stream.on('data', (c: Buffer) => chunks.push(c));

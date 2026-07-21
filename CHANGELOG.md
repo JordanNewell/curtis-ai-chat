@@ -2,6 +2,32 @@
 
 All notable changes to Curtis are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [3.0.1] — 2026-07-21
+
+Maintenance release addressing Obsidian community plugin review feedback. No user-facing behavior changes; the plugin is functionally identical to 3.0.0.
+
+### Changed
+
+- **Manifest description** rewritten to drop the word "Obsidian" (implied by directory context) and to not start with the plugin name
+- **Settings UI**: 12 hand-rolled HTML headings replaced with `Setting.setHeading()` for consistent styling; deprecated `setDynamicTooltip` removed
+- **Conversation storage** migrated from raw `localStorage` to `App#saveLocalStorage` / `App#loadLocalStorage` for proper per-vault isolation
+- **Active note resolver** migrated off deprecated `workspace.activeLeaf` to `workspace.activeEditor`
+- **Build**: `builtin-modules` npm dependency replaced with Node's built-in `module.builtinModules`
+
+### Removed
+
+- Default hotkeys on `Open AI Chat` and `Explain selection` commands (let users bind their own to avoid conflicts)
+- Unused imports and dead variables across the codebase
+
+### Added
+
+- **Artifact attestations**: GitHub Actions workflow generates build-provenance attestations for release assets (`main.js`, `manifest.json`, `styles.css`), letting users cryptographically verify release files were built from the public source
+
+### Fixed
+
+- **Type safety**: ~30 `any` types in provider implementations replaced with proper TypeScript interfaces (Anthropic stream events as discriminated union, OpenAI chat response shapes, Node `IncomingMessage` minimal surface, model discovery endpoint shapes, Electron `window.require` typing). `StreamResponse.json()` now returns `Promise<unknown>` instead of `Promise<any>`, forcing callers to narrow.
+- **DOM safety**: `innerHTML` writes in settings replaced with `createEl` chain; static style assignments converted to CSS classes throughout the chat view
+
 ## [3.0.0] — 2026-07-20
 
 Complete rewrite from v2. New chat panel, new providers, new features, new internals. Not backwards-compatible with v2 conversation history.

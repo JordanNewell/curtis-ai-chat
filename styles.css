@@ -161,6 +161,7 @@
 
 /* Wallpaper mode — image fills the panel. */
 .ai-chat-background.has-wallpaper {
+	background-image: var(--wallpaper-url);
 	background-attachment: local;
 }
 
@@ -1213,5 +1214,51 @@ pre:hover .ai-code-copy-btn {
 	.ai-chat-background.has-wallpaper::after {
 		display: none;
 	}
+}
+
+/* ============================================================================
+   UTILITY CLASSES — support the no-static-styles-assignment lint rule.
+   These replace direct el.style.x = y writes in view.ts / message-renderer.ts.
+   ============================================================================ */
+
+/* Hide any element via display:none. Used in place of el.style.display = 'none'
+ * (the Obsidian linter forbids direct style writes). Applied to:
+ *   - .ai-chat-image-strip (when no pending images)
+ *   - .ai-chat-abort-btn (initial state, before first send)
+ *   - .ai-slash-menu (when no suggestions / hidden) */
+.is-hidden {
+	display: none;
+}
+
+/* Position the <pre> relatively so the absolutely-positioned copy button
+ * (.ai-code-copy-btn) anchors against it. */
+.ai-code-block {
+	position: relative;
+}
+
+/* Whitespace handling for rendered user message text. Redundant with
+ * .ai-message-user .ai-message-content, but renderUserMessage can be called
+ * on containers without the .ai-message-user ancestor. */
+.ai-user-message-text {
+	white-space: pre-wrap;
+}
+
+/* Override the earlier .ai-chat-file-input rule (which sets position/inset/
+ * opacity/pointer-events): the input only needs to exist in the DOM for the
+ * file-picker dialog to fire — it never needs to be visible. */
+.ai-chat-file-input {
+	display: none;
+}
+
+/* Position the history dropdown absolutely relative to its container.
+ * `top` is set dynamically via setCssProps in showHistoryDropdown. */
+.ai-history-dropdown {
+	position: absolute;
+	right: 8px;
+}
+
+/* Highlight the active model name in the picker. */
+.ai-model-suggestion-name.is-active {
+	color: var(--interactive-accent);
 }
 

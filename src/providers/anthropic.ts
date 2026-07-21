@@ -13,6 +13,31 @@ import type {
 	StreamResponse,
 } from '../types';
 
+/**
+ * Anthropic Messages API non-streaming response shape. Only the fields we
+ * consume are typed; everything else is left as unknown via the index lookup
+ * guards in `parseResponse`.
+ */
+interface AnthropicMessageResponse {
+	content?: Array<{ type?: string; text?: string }>;
+	usage?: {
+		input_tokens?: number;
+		output_tokens?: number;
+	};
+}
+
+/**
+ * Anthropic Messages API streaming event shapes (discriminated union on
+ * `type`). Only the variants we handle in `parseStream` are modeled; any
+ * other event type falls through the if/else chain and is ignored.
+ */
+type AnthropicStreamEvent =
+	| { type: 'message_start'; message?: { usage?: { input_tokens?: number } } }
+	| { type: 'content_block_delta'; delta?: { text?: string } }
+	| { type: 'message_delta'; usage?: { input_tokens?: number; output_tokens?: number } }
+	| { type: 'error'; error?: { message?: string } }
+	| { type: string }; // unknown-but-present variant (ping, content_block_start, etc.)
+
 const ANTHROPIC_MODELS: AIModel[] = [
 	{
 		id: 'claude-opus-4-6',
@@ -100,13 +125,16 @@ export class AnthropicProvider implements AIProvider {
 	}
 
 	async parseResponse(response: StreamResponse): Promise<AIResponse> {
-		const data = await response.json();
-		const content = data.content?.[0]?.text || '';
-		const usage: TokenUsage | undefined = data.usage
+		const data = (await response.json()) as AnthropicMessageResponse;
+		const usageData = data?.usage;
+		const inputTokens = usageData?.input_tokens ?? 0;
+		const outputTokens = usageData?.output_tokens ?? 0;
+		const content = data?.content?.[0]?.text || '';
+		const usage: TokenUsage | undefined = usageData
 			? {
-					promptTokens: data.usage.input_tokens || 0,
-					completionTokens: data.usage.output_tokens || 0,
-					totalTokens: (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0),
+					promptTokens: inputTokens,
+					completionTokens: outputTokens,
+					totalTokens: inputTokens + outputTokens,
 				}
 			: undefined;
 		return { content, usage };
@@ -123,7 +151,6 @@ export class AnthropicProvider implements AIProvider {
 
 		const decoder = new TextDecoder();
 		let buffer = '';
-		let accumulatedContent = '';
 		// Reset per-stream; the message_start handler sets this.
 		this.pendingInputTokens = 0;
 
@@ -142,32 +169,39 @@ export class AnthropicProvider implements AIProvider {
 					if (data === '[DONE]') continue;
 
 					try {
-						const parsed = JSON.parse(data);
+						const parsed = JSON.parse(data) as AnthropicStreamEvent;
 						if (parsed.type === 'message_start') {
 							// Initial event carries input_tokens (prompt size) under
 							// message.usage. Save it; the final usage comes from
 							// message_delta which only carries output_tokens.
-							this.pendingInputTokens = parsed.message?.usage?.input_tokens || 0;
+							const ev = parsed as Extract<AnthropicStreamEvent, { type: 'message_start' }>;
+							this.pendingInputTokens = ev.message?.usage?.input_tokens || 0;
 						} else if (parsed.type === 'content_block_delta') {
-							const delta = parsed.delta?.text || '';
+							const ev = parsed as Extract<AnthropicStreamEvent, { type: 'content_block_delta' }>;
+							const delta = ev.delta?.text || '';
 							if (delta) {
-								accumulatedContent += delta;
 								onChunk(delta);
 							}
-						} else if (parsed.type === 'message_delta' && parsed.usage && onUsage) {
-							// output_tokens here is cumulative; input_tokens is 0 in
-							// this event (lives on message_start), so use the saved one.
-							const inputTokens = this.pendingInputTokens || parsed.usage.input_tokens || 0;
-							const outputTokens = parsed.usage.output_tokens || 0;
-							onUsage({
-								promptTokens: inputTokens,
-								completionTokens: outputTokens,
-								totalTokens: inputTokens + outputTokens,
-							});
-						} else if (parsed.type === 'error' && onError) {
-							// Mid-stream error event — surface and stop.
-							const errMsg = parsed.error?.message || 'Anthropic stream error';
-							onError(new Error(errMsg));
+						} else if (parsed.type === 'message_delta') {
+							const ev = parsed as Extract<AnthropicStreamEvent, { type: 'message_delta' }>;
+							if (ev.usage && onUsage) {
+								// output_tokens here is cumulative; input_tokens is 0 in
+								// this event (lives on message_start), so use the saved one.
+								const inputTokens = this.pendingInputTokens || ev.usage.input_tokens || 0;
+								const outputTokens = ev.usage.output_tokens || 0;
+								onUsage({
+									promptTokens: inputTokens,
+									completionTokens: outputTokens,
+									totalTokens: inputTokens + outputTokens,
+								});
+							}
+						} else if (parsed.type === 'error') {
+							const ev = parsed as Extract<AnthropicStreamEvent, { type: 'error' }>;
+							if (onError) {
+								// Mid-stream error event — surface and stop.
+								const errMsg = ev.error?.message || 'Anthropic stream error';
+								onError(new Error(errMsg));
+							}
 						}
 					} catch (e) {
 						if (onError) onError(e as Error);

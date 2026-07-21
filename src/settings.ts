@@ -22,7 +22,7 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 				defaultModel: def.models[0]?.id,
 			} as ProviderConfig,
 		])
-	),
+	) as Record<string, ProviderConfig>,
 
 	customProviders: [],
 
@@ -79,10 +79,8 @@ export class CurtisSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: 'Curtis Settings' });
-
 		// ---- Active Provider & Model ----
-		containerEl.createEl('h3', { text: 'Active Provider' });
+		new Setting(containerEl).setName('Active Provider').setHeading();
 
 		const enabledProviders = PROVIDER_DEFINITIONS.filter(
 			(d) => this.plugin.settings.providerConfigs[d.id]?.enabled
@@ -128,11 +126,14 @@ export class CurtisSettingTab extends PluginSettingTab {
 		}
 
 		// ---- Provider Configuration ----
-		containerEl.createEl('h3', { text: 'Provider Configuration' });
+		new Setting(containerEl).setName('Provider Configuration').setHeading();
 		const privacyNote = containerEl.createEl('p', {
 			cls: 'ai-setting-hint ai-privacy-note',
 		});
-		privacyNote.innerHTML = '<strong>Privacy:</strong> Cloud providers (Anthropic, OpenAI, Gemini, etc.) send your chat content to their servers. For fully private, offline AI, enable <em>Ollama (Local)</em> — nothing leaves your machine.';
+		privacyNote.createEl('strong', { text: 'Privacy:' });
+		privacyNote.appendText(' Cloud providers (Anthropic, OpenAI, Gemini, etc.) send your chat content to their servers. For fully private, offline AI, enable ');
+		privacyNote.createEl('em', { text: 'Ollama (Local)' });
+		privacyNote.appendText(' — nothing leaves your machine.');
 
 		for (const def of PROVIDER_DEFINITIONS) {
 			const config = this.plugin.settings.providerConfigs[def.id] || {
@@ -142,7 +143,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 			this.plugin.settings.providerConfigs[def.id] = config;
 
 			const details = containerEl.createDiv({ cls: 'ai-provider-settings' });
-			details.createEl('h4', { text: def.name });
+			new Setting(details).setName(def.name).setHeading();
 
 			new Setting(details)
 				.setName('Enable')
@@ -269,7 +270,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 		}
 
 		// ---- Custom Providers ----
-		containerEl.createEl('h3', { text: 'Custom Providers' });
+		new Setting(containerEl).setName('Custom Providers').setHeading();
 		containerEl.createEl('p', {
 			cls: 'ai-setting-hint',
 			text: 'Add any OpenAI-compatible endpoint (LiteLLM, llama.cpp, Novita, DeepInfra, Portkey, Helicone, self-hosted servers, etc.).',
@@ -281,7 +282,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 			this.plugin.settings.providerConfigs[def.id] = config;
 
 			const details = containerEl.createDiv({ cls: 'ai-provider-settings' });
-			details.createEl('h4', { text: def.name });
+			new Setting(details).setName(def.name).setHeading();
 
 			new Setting(details)
 				.setName('Enable')
@@ -340,7 +341,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 			});
 
 		// ---- Generation Settings ----
-		containerEl.createEl('h3', { text: 'Generation' });
+		new Setting(containerEl).setName('Generation').setHeading();
 
 		new Setting(containerEl)
 			.setName('Temperature')
@@ -349,7 +350,6 @@ export class CurtisSettingTab extends PluginSettingTab {
 				slider
 					.setLimits(0, 2, 0.1)
 					.setValue(this.plugin.settings.temperature)
-					.setDynamicTooltip()
 					.onChange(async (val) => {
 						this.plugin.settings.temperature = val;
 						await this.plugin.saveSettings();
@@ -407,7 +407,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 			});
 
 		// ---- Chat UI ----
-		containerEl.createEl('h3', { text: 'Chat UI' });
+		new Setting(containerEl).setName('Chat UI').setHeading();
 
 		new Setting(containerEl)
 			.setName('Enter key behavior')
@@ -449,7 +449,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 		});
 
 	// ---- Notes ----
-	containerEl.createEl('h3', { text: 'Notes' });
+	new Setting(containerEl).setName('Notes').setHeading();
 
 	new Setting(containerEl)
 		.setName('Note save folder')
@@ -505,7 +505,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 		});
 
 	// ---- Chat Background ----
-	containerEl.createEl('h3', { text: 'Chat Background' });
+	new Setting(containerEl).setName('Chat Background').setHeading();
 
 	new Setting(containerEl)
 		.setName('Background style')
@@ -546,7 +546,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 		});
 
 	// ---- Memory ----
-	containerEl.createEl('h3', { text: 'Memory' });
+	new Setting(containerEl).setName('Memory').setHeading();
 
 	new Setting(containerEl)
 		.setName('Enable memory')
@@ -612,7 +612,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 		});
 
 		// ---- Support ----
-		containerEl.createEl('h3', { text: '🙏 Support Curtis' });
+		new Setting(containerEl).setName('🙏 Support').setHeading();
 		const supportBlurb = containerEl.createEl('p', {
 			cls: 'ai-setting-hint ai-support-blurb',
 		});

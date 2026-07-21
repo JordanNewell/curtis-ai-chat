@@ -45,17 +45,17 @@ export function registerContextMenu(plugin: CurtisPlugin): void {
 				'bottom': CONTEXT_ACTIONS.filter(a => a.section === 'ai-bottom'),
 			};
 
-			for (const [group, actions] of Object.entries(groups)) {
+			for (const [group, actions] of Object.entries(groups) as Array<[string, ContextAction[]]>) {
 				for (const action of actions) {
 					menu.addItem((item) => {
 						item.setTitle(action.label);
 						item.setIcon('bot');
 						item.onClick(() => {
 							if (action.action === 'chat') {
-								plugin.activateChatView();
+								void plugin.activateChatView();
 								// TODO: pre-load selection into chat
 							} else {
-								plugin.processSelection(editor, action.action);
+								void plugin.processSelection(editor, action.action);
 							}
 						});
 					});
@@ -72,9 +72,10 @@ export function registerContextMenu(plugin: CurtisPlugin): void {
 				menu.addItem((item) => {
 					item.setTitle('Save to memory');
 					item.setIcon('brain');
-					item.onClick(async () => {
-						await plugin.memoryStore.addFact(selection);
-						new Notice('Saved to memory');
+					item.onClick(() => {
+						void plugin.memoryStore.addFact(selection).then(() => {
+							new Notice('Saved to memory');
+						});
 					});
 				});
 			}

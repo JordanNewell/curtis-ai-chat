@@ -146,7 +146,10 @@ export async function createNote(
 
 	const body = opts.frontmatter
 		? `---\n${Object.entries(opts.frontmatter)
-				.map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
+				.map(([k, v]) => {
+					const value = typeof v === 'string' ? v : JSON.stringify(v);
+					return `${k}: ${value}`;
+				})
 				.join('\n')}\n---\n\n${content}`
 		: content;
 

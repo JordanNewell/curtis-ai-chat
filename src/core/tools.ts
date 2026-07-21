@@ -1,4 +1,4 @@
-import { App, TFile, Notice } from 'obsidian';
+import { App, TFile } from 'obsidian';
 
 // ============================================================================
 // Tool/Function Calling Framework
@@ -30,7 +30,7 @@ export interface ToolDefinition {
 	name: string;
 	description: string;
 	parameters: Record<string, ToolParameter>;
-	execute: (params: Record<string, any>, context: ToolContext) => Promise<string>;
+	execute: (params: Record<string, unknown>, context: ToolContext) => Promise<string>;
 }
 
 export interface ToolParameter {
@@ -38,7 +38,7 @@ export interface ToolParameter {
 	description: string;
 	required?: boolean;
 	enum?: string[];
-	default?: any;
+	default?: unknown;
 }
 
 export interface ToolContext {
@@ -49,7 +49,17 @@ export interface ToolContext {
 export interface ToolCall {
 	id: string;
 	name: string;
-	arguments: Record<string, any>;
+	arguments: Record<string, unknown>;
+}
+
+/** Coerce a tool param value to string. Empty string if absent or wrong type. */
+function str(v: unknown): string {
+	return typeof v === 'string' ? v : '';
+}
+
+/** Coerce a tool param value to number. 0 if absent or wrong type. */
+function num(v: unknown): number {
+	return typeof v === 'number' && Number.isFinite(v) ? v : 0;
 }
 
 export interface ToolResult {
@@ -118,10 +128,10 @@ export class ToolRegistry {
 				tool_call_id: call.id,
 				content: result,
 			};
-		} catch (error: any) {
+		} catch (error: unknown) {
 			return {
 				tool_call_id: call.id,
-				content: `Tool error: ${error.message}`,
+				content: `Tool error: ${error instanceof Error ? error.message : String(error)}`,
 				is_error: true,
 			};
 		}
@@ -130,28 +140,33 @@ export class ToolRegistry {
 	/**
 	 * Get all tool definitions in OpenAI function calling format.
 	 */
-	getOpenAITools(): Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, any> } }> {
-		return this.getAllTools().map(tool => ({
-			type: 'function',
-			function: {
-				name: tool.name,
-				description: tool.description,
-				parameters: {
-					type: 'object',
-					properties: Object.fromEntries(
-						Object.entries(tool.parameters).map(([key, param]) => [key, {
-							type: param.type,
-							description: param.description,
-							...param.enum ? { enum: param.enum } : {},
-							...param.default !== undefined ? { default: param.default } : {},
-						}])
-					),
-					required: Object.entries(tool.parameters)
-						.filter(([, p]) => p.required)
-						.map(([k]) => k),
+	getOpenAITools(): Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }> {
+		return this.getAllTools().map(tool => {
+			const properties: Record<string, Record<string, unknown>> = {};
+			const required: string[] = [];
+			for (const [key, param] of Object.entries(tool.parameters)) {
+				const schema: Record<string, unknown> = {
+					type: param.type,
+					description: param.description,
+				};
+				if (param.enum) schema.enum = param.enum;
+				if (param.default !== undefined) schema.default = param.default;
+				properties[key] = schema;
+				if (param.required) required.push(key);
+			}
+			return {
+				type: 'function' as const,
+				function: {
+					name: tool.name,
+					description: tool.description,
+					parameters: {
+						type: 'object',
+						properties,
+						required,
+					},
 				},
-			},
-		}));
+			};
+		});
 	}
 
 	private registerBuiltinTools(): void {
@@ -162,8 +177,9 @@ export class ToolRegistry {
 				path: { type: 'string', description: 'The file path of the note (e.g., "folder/note.md")', required: true },
 			},
 			execute: async (params) => {
-				const file = this.app.vault.getAbstractFileByPath(params.path);
-				if (!(file instanceof TFile)) return `Note not found: ${params.path}`;
+				const path = str(params.path);
+				const file = this.app.vault.getAbstractFileByPath(path);
+				if (!(file instanceof TFile)) return `Note not found: ${path}`;
 				return await this.app.vault.read(file);
 			},
 		});
@@ -176,8 +192,8 @@ export class ToolRegistry {
 				max_results: { type: 'number', description: 'Maximum number of results (default: 10)', default: 10 },
 			},
 			execute: async (params) => {
-				const query = params.query.toLowerCase();
-				const max = params.max_results || 10;
+				const query = str(params.query).toLowerCase();
+				const max = num(params.max_results) || 10;
 				const files = this.app.vault.getMarkdownFiles();
 				const results: string[] = [];
 
@@ -185,7 +201,6 @@ export class ToolRegistry {
 					if (file.path.toLowerCase().includes(query) || file.basename.toLowerCase().includes(query)) {
 						const cache = this.app.metadataCache.getFileCache(file);
 						const tags = cache?.frontmatter?.tags || [];
-						const wordCount = cache?.frontmatter?.wordcount || 0;
 						results.push(`- **${file.basename}** (${file.path}) [${tags.length ? '#' + tags.join(' #') : 'no tags'}]`);
 						if (results.length >= max) break;
 					}
@@ -208,7 +223,7 @@ export class ToolRegistry {
 						return `No filename matches. Content matches:\n${contentMatches.join('\n')}`;
 					}
 
-					return `No notes found matching "${params.query}"`;
+					return `No notes found matching "${query}"`;
 				}
 
 				return `Found ${results.length} notes:\n${results.join('\n')}`;
@@ -224,15 +239,17 @@ export class ToolRegistry {
 				folder: { type: 'string', description: 'Folder to create the note in (default: vault root)', default: '/' },
 			},
 			execute: async (params) => {
-				const folder = params.folder || '/';
-				const path = folder === '/' ? `${params.title}.md` : `${folder}/${params.title}.md`;
+				const title = str(params.title);
+				const content = str(params.content);
+				const folder = str(params.folder) || '/';
+				const path = folder === '/' ? `${title}.md` : `${folder}/${title}.md`;
 
 				// Ensure folder exists
 				try {
 					await this.app.vault.createFolder(folder);
 				} catch { /* folder may already exist */ }
 
-				const file = await this.app.vault.create(path, params.content || '');
+				const file = await this.app.vault.create(path, content);
 				return `Created note: ${file.path}`;
 			},
 		});
@@ -247,32 +264,37 @@ export class ToolRegistry {
 				old_content: { type: 'string', description: 'For replace action: the text to find and replace' },
 			},
 			execute: async (params) => {
-				const file = this.app.vault.getAbstractFileByPath(params.path);
-				if (!(file instanceof TFile)) return `Note not found: ${params.path}`;
+				const path = str(params.path);
+				const action = str(params.action);
+				const content = str(params.content);
+				const oldContent = str(params.old_content);
+
+				const file = this.app.vault.getAbstractFileByPath(path);
+				if (!(file instanceof TFile)) return `Note not found: ${path}`;
 
 				const existing = await this.app.vault.read(file);
 				let newContent: string;
 
-				switch (params.action) {
+				switch (action) {
 					case 'append':
-						newContent = existing + '\n\n' + params.content;
+						newContent = existing + '\n\n' + content;
 						break;
 					case 'prepend':
-						newContent = params.content + '\n\n' + existing;
+						newContent = content + '\n\n' + existing;
 						break;
 					case 'replace':
-						if (params.old_content) {
-							newContent = existing.replace(params.old_content, params.content);
+						if (oldContent) {
+							newContent = existing.replace(oldContent, content);
 						} else {
-							newContent = params.content;
+							newContent = content;
 						}
 						break;
 					default:
-						return `Unknown action: ${params.action}`;
+						return `Unknown action: ${action}`;
 				}
 
 				await this.app.vault.modify(file, newContent);
-				return `Note updated: ${params.path} (${params.action})`;
+				return `Note updated: ${path} (${action})`;
 			},
 		});
 
@@ -284,8 +306,8 @@ export class ToolRegistry {
 				max_results: { type: 'number', description: 'Maximum notes to list (default: 20)', default: 20 },
 			},
 			execute: async (params) => {
-				const folder = params.folder || '/';
-				const max = params.max_results || 20;
+				const folder = str(params.folder) || '/';
+				const max = num(params.max_results) || 20;
 				const files = this.app.vault.getMarkdownFiles()
 					.filter(f => folder === '/' || f.path.startsWith(folder))
 					.slice(0, max);
@@ -331,8 +353,9 @@ export class ToolRegistry {
 				path: { type: 'string', description: 'File path of the note', required: true },
 			},
 			execute: async (params) => {
-				const file = this.app.vault.getAbstractFileByPath(params.path);
-				if (!(file instanceof TFile)) return `Note not found: ${params.path}`;
+				const path = str(params.path);
+				const file = this.app.vault.getAbstractFileByPath(path);
+				if (!(file instanceof TFile)) return `Note not found: ${path}`;
 
 					const backlinks: string[] = [];
 					for (const [sourcePath, destMap] of Object.entries(this.app.metadataCache.resolvedLinks || {})) {
@@ -340,15 +363,15 @@ export class ToolRegistry {
 							backlinks.push(sourcePath);
 						}
 					}
-					const notes = backlinks.map(path => {
-						const linkedFile = this.app.vault.getAbstractFileByPath(path);
-						const name = linkedFile instanceof TFile ? linkedFile.basename : path;
-						return `- **${name}** (${path})`;
+					const notes = backlinks.map(srcPath => {
+						const linkedFile = this.app.vault.getAbstractFileByPath(srcPath);
+						const name = linkedFile instanceof TFile ? linkedFile.basename : srcPath;
+						return `- **${name}** (${srcPath})`;
 					});
 
 				return notes.length > 0
-					? `Backlinks for ${params.path} (${notes.length}):\n${notes.join('\n')}`
-					: `No backlinks found for ${params.path}`;
+					? `Backlinks for ${path} (${notes.length}):\n${notes.join('\n')}`
+					: `No backlinks found for ${path}`;
 			},
 		});
 

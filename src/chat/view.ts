@@ -232,12 +232,23 @@ export class ChatView extends ItemView {
 	/** Update the hint text to match the current enterKeyBehavior setting. */
 	refreshInputHint(): void {
 		if (!this.inputHintEl) return;
+		this.inputHintEl.empty();
 		if (this.plugin.settings.enterKeyBehavior === 'newline') {
-			this.inputHintEl.innerHTML =
-				'<kbd>Ctrl</kbd>+<kbd>Enter</kbd> send · <kbd>Enter</kbd> newline · <kbd>/</kbd> commands';
+			this.inputHintEl.createEl('kbd', { text: 'Ctrl' });
+			this.inputHintEl.appendText('+');
+			this.inputHintEl.createEl('kbd', { text: 'Enter' });
+			this.inputHintEl.appendText(' send · ');
+			this.inputHintEl.createEl('kbd', { text: 'Enter' });
+			this.inputHintEl.appendText(' newline · ');
+			this.inputHintEl.createEl('kbd', { text: '/' });
+			this.inputHintEl.appendText(' commands');
 		} else {
-			this.inputHintEl.innerHTML =
-				'<kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> newline · <kbd>/</kbd> commands';
+			this.inputHintEl.createEl('kbd', { text: 'Enter' });
+			this.inputHintEl.appendText(' send · ');
+			this.inputHintEl.createEl('kbd', { text: 'Shift+Enter' });
+			this.inputHintEl.appendText(' newline · ');
+			this.inputHintEl.createEl('kbd', { text: '/' });
+			this.inputHintEl.appendText(' commands');
 		}
 	}
 
@@ -252,14 +263,12 @@ export class ChatView extends ItemView {
 			const file = this.app.vault.getAbstractFileByPath(this.plugin.settings.chatWallpaperPath);
 			if (file instanceof TFile) {
 				const url = this.app.vault.getResourcePath(file);
-				layer.style.backgroundImage = `url("${url}")`;
+				layer.style.setProperty('--wallpaper-url', `url("${url}")`);
 				layer.addClass('has-wallpaper');
 			} else {
-				layer.style.backgroundImage = '';
 				layer.removeClass('has-wallpaper');
 			}
 		} else {
-			layer.style.backgroundImage = '';
 			layer.removeClass('has-wallpaper');
 		}
 		// No persistent watermark — the brand orb is rendered inside the
@@ -271,8 +280,7 @@ export class ChatView extends ItemView {
 		const inputArea = container.createDiv({ cls: 'ai-chat-input-area' });
 
 		// Pending image thumbnails (hidden until first attach).
-		this.imageStrip = inputArea.createDiv({ cls: 'ai-chat-image-strip' });
-		this.imageStrip.style.display = 'none';
+		this.imageStrip = inputArea.createDiv({ cls: 'ai-chat-image-strip is-hidden' });
 
 		// Input card + send button live as siblings in a flex row. The send
 		// button is OUTSIDE the textarea's focus halo so it never looks
@@ -291,7 +299,6 @@ export class ChatView extends ItemView {
 			type: 'file',
 			attr: { accept: 'image/*', multiple: 'multiple' },
 		});
-		fileInput.style.display = 'none';
 		this.attachBtn = attachCol.createEl('button', { cls: 'ai-chat-icon-btn ai-chat-attach-btn' });
 		setIcon(this.attachBtn, 'paperclip');
 		this.attachBtn.title = 'Attach image';
@@ -332,11 +339,10 @@ export class ChatView extends ItemView {
 		this.sendBtn.setAttribute('aria-label', 'Send');
 		this.sendBtn.addEventListener('click', () => this.sendMessage());
 
-		this.abortBtn = sendCol.createEl('button', { cls: 'ai-chat-abort-btn' });
+		this.abortBtn = sendCol.createEl('button', { cls: 'ai-chat-abort-btn is-hidden' });
 		setIcon(this.abortBtn, 'square');
 		this.abortBtn.title = 'Stop generating';
 		this.abortBtn.setAttribute('aria-label', 'Stop generating');
-		this.abortBtn.style.display = 'none';
 		this.abortBtn.addEventListener('click', () => this.abortGeneration());
 
 		const btnRow = inputArea.createDiv({ cls: 'ai-chat-btn-row' });
@@ -358,7 +364,7 @@ export class ChatView extends ItemView {
 		new ModelPickerModal(this.app, entries, activeKey, (providerId, modelId) => {
 			this.plugin.settings.activeProvider = providerId;
 			this.plugin.settings.activeModel = modelId;
-			this.plugin.saveSettings();
+			void this.plugin.saveSettings();
 			// Re-render header to reflect new model name on the button.
 			const btn = this.contentEl.querySelector('.ai-model-picker-btn');
 			if (btn instanceof HTMLElement) this.updateModelPickerButton(btn);
@@ -390,7 +396,7 @@ export class ChatView extends ItemView {
 
 	private handleInputKeydown(e: KeyboardEvent): void {
 		// Slash menu: ArrowUp/Down/Enter/Tab/Escape when visible
-		if (this.slashMenu && this.slashMenu.style.display !== 'none') {
+		if (this.slashMenu && !this.slashMenu.hasClass('is-hidden')) {
 			if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
 				e.preventDefault();
 				this.moveSlashSelection(e.key === 'ArrowDown' ? 1 : -1);
@@ -418,19 +424,19 @@ export class ChatView extends ItemView {
 		if (mode === 'newline') {
 			if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
 				e.preventDefault();
-				this.sendMessage();
+				void this.sendMessage();
 			}
 		} else {
 			if (e.key === 'Enter' && !e.shiftKey) {
 				e.preventDefault();
-				this.sendMessage();
+				void this.sendMessage();
 			}
 		}
 	}
 
 	private autoResizeInput(): void {
-		this.inputEl.style.height = 'auto';
-		this.inputEl.style.height = Math.min(this.inputEl.scrollHeight, 320) + 'px';
+		this.inputEl.setCssProps({ height: 'auto' });
+		this.inputEl.setCssProps({ height: `${Math.min(this.inputEl.scrollHeight, 320)}px` });
 	}
 
 	// --- Slash autocomplete ---------------------------------------------
@@ -460,19 +466,18 @@ export class ChatView extends ItemView {
 				this.inputEl.focus();
 			});
 		});
-		this.slashMenu!.style.display = '';
+		this.slashMenu!.removeClass('is-hidden');
 	}
 
 	private ensureSlashMenu(): void {
 		if (this.slashMenu) return;
 		const inputArea = this.contentEl.querySelector('.ai-chat-input-area');
 		if (!inputArea) return;
-		this.slashMenu = (inputArea as HTMLElement).createDiv({ cls: 'ai-slash-menu' });
-		this.slashMenu.style.display = 'none';
+		this.slashMenu = (inputArea as HTMLElement).createDiv({ cls: 'ai-slash-menu is-hidden' });
 	}
 
 	private hideSlashMenu(): void {
-		if (this.slashMenu) this.slashMenu.style.display = 'none';
+		if (this.slashMenu) this.slashMenu.addClass('is-hidden');
 	}
 
 	private moveSlashSelection(delta: number): void {
@@ -556,7 +561,7 @@ export class ChatView extends ItemView {
 				}
 			}
 		} else {
-			this.renderer.renderMessage(contentEl, msg.content);
+			void this.renderer.renderMessage(contentEl, msg.content);
 			// Attach hover actions on rendered assistant messages.
 			attachMessageActions({
 				app: this.app,
@@ -564,7 +569,7 @@ export class ChatView extends ItemView {
 				message: msg,
 				saveFolder: this.plugin.settings.noteSaveFolder,
 				callbacks: {
-					onRegenerate: (m) => this.regenerateMessage(m.id),
+					onRegenerate: (m) => void this.regenerateMessage(m.id),
 					onEditResend: (m) => this.editResendForAssistant(m.id),
 					onQuoteIntoInput: (m) => this.quoteMessageIntoInput(m),
 				},
@@ -650,10 +655,10 @@ export class ChatView extends ItemView {
 	private renderImageStrip(): void {
 		this.imageStrip.empty();
 		if (this.pendingImages.length === 0) {
-			this.imageStrip.style.display = 'none';
+			this.imageStrip.addClass('is-hidden');
 			return;
 		}
-		this.imageStrip.style.display = '';
+		this.imageStrip.removeClass('is-hidden');
 		for (let i = 0; i < this.pendingImages.length; i++) {
 			const img = this.pendingImages[i];
 			const tile = this.imageStrip.createDiv({ cls: 'ai-chat-image-tile' });
@@ -726,8 +731,7 @@ export class ChatView extends ItemView {
 
 		// Show generating state
 		this.isGenerating = true;
-		this.sendBtn.style.display = 'none';
-		this.abortBtn.style.display = '';
+		this.setGeneratingUI(true);
 		this.streamingContent = '';
 
 		// Create assistant message placeholder with role label + "Thinking…" state
@@ -822,8 +826,7 @@ export class ChatView extends ItemView {
 			}
 		} finally {
 			this.isGenerating = false;
-			this.sendBtn.style.display = '';
-			this.abortBtn.style.display = 'none';
+			this.setGeneratingUI(false);
 			this.abortController = null;
 			assistantWrapper.removeClass('ai-message-streaming');
 			assistantWrapper.removeClass('ai-message-thinking');
@@ -845,7 +848,7 @@ export class ChatView extends ItemView {
 						message: stored,
 						saveFolder: this.plugin.settings.noteSaveFolder,
 						callbacks: {
-							onRegenerate: (m) => this.regenerateMessage(m.id),
+							onRegenerate: (m) => void this.regenerateMessage(m.id),
 							onEditResend: (m) => this.editResendForAssistant(m.id),
 							onQuoteIntoInput: (m) => this.quoteMessageIntoInput(m),
 						},
@@ -871,7 +874,7 @@ export class ChatView extends ItemView {
 		const conv = this.store.getCurrentConversation();
 		if (!conv) return;
 		const msgs = conv.messages;
-		const assistant = msgs.at(-1);
+		const assistant: ConversationMessage | undefined = msgs[msgs.length - 1];
 		if (!assistant || assistant.role !== 'assistant') return;
 		let userIdx = msgs.length - 2;
 		while (userIdx >= 0 && msgs[userIdx].role !== 'user') userIdx--;
@@ -885,6 +888,18 @@ export class ChatView extends ItemView {
 	private abortGeneration(): void {
 		if (this.abortController) {
 			this.abortController.abort();
+		}
+	}
+
+	/** Toggle send/abort button visibility based on generation state. Uses
+	 *  class toggles instead of direct style writes (Obsidian lint rule). */
+	private setGeneratingUI(generating: boolean): void {
+		if (generating) {
+			this.sendBtn.addClass('is-hidden');
+			this.abortBtn.removeClass('is-hidden');
+		} else {
+			this.sendBtn.removeClass('is-hidden');
+			this.abortBtn.addClass('is-hidden');
 		}
 	}
 
@@ -1033,8 +1048,7 @@ export class ChatView extends ItemView {
 		currentSendHasImagesFlag = !!(lastUser?.images && lastUser.images.length > 0);
 
 		this.isGenerating = true;
-		this.sendBtn.style.display = 'none';
-		this.abortBtn.style.display = '';
+		this.setGeneratingUI(true);
 		this.streamingContent = '';
 
 		const assistantWrapper = this.messagesContainer.createDiv({
@@ -1111,8 +1125,7 @@ export class ChatView extends ItemView {
 			}
 		} finally {
 			this.isGenerating = false;
-			this.sendBtn.style.display = '';
-			this.abortBtn.style.display = 'none';
+			this.setGeneratingUI(false);
 			this.abortController = null;
 			assistantWrapper.removeClass('ai-message-streaming');
 			assistantWrapper.removeClass('ai-message-thinking');
@@ -1130,7 +1143,7 @@ export class ChatView extends ItemView {
 						message: stored,
 						saveFolder: this.plugin.settings.noteSaveFolder,
 						callbacks: {
-							onRegenerate: (m) => this.regenerateMessage(m.id),
+							onRegenerate: (m) => void this.regenerateMessage(m.id),
 							onEditResend: (m) => this.editResendForAssistant(m.id),
 							onQuoteIntoInput: (m) => this.quoteMessageIntoInput(m),
 						},
@@ -1176,7 +1189,7 @@ export class ChatView extends ItemView {
 	}
 
 	private scrollToBottom(): void {
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
 		});
 	}
@@ -1225,9 +1238,7 @@ export class ChatView extends ItemView {
 		// Position below anchor
 		const rect = anchor.getBoundingClientRect();
 		const containerRect = this.containerEl.getBoundingClientRect();
-		dropdown.style.position = 'absolute';
-		dropdown.style.top = `${rect.bottom - containerRect.top + 4}px`;
-		dropdown.style.right = '8px';
+		dropdown.setCssProps({ top: `${rect.bottom - containerRect.top + 4}px` });
 
 		// Close on outside click
 		const handler = (e: MouseEvent) => {
@@ -1236,6 +1247,6 @@ export class ChatView extends ItemView {
 				document.removeEventListener('click', handler);
 			}
 		};
-		setTimeout(() => document.addEventListener('click', handler), 10);
+		window.setTimeout(() => document.addEventListener('click', handler), 10);
 	}
 }

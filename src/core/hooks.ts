@@ -16,31 +16,31 @@
 //   settings:validate     — Validate/modify settings before save
 // ============================================================================
 
-type HookHandler<T = any, R = any> = (data: T, context: HookContext) => R | Promise<R>;
+type HookHandler<T = unknown, R = unknown> = (data: T, context: HookContext) => R | Promise<R>;
 
 export interface HookContext {
 	readonly hookName: string;
 	readonly provider?: string;
 	readonly model?: string;
 	readonly conversationId?: string;
-	metadata: Record<string, any>;
+	metadata: Record<string, unknown>;
+}
+
+interface HookAIMessage {
+	role: string;
+	content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
 }
 
 // Hook registry — typed by hook name
 export interface HookDefinitions {
-	'messages:before-send': AIMessage[];
+	'messages:before-send': HookAIMessage[];
 	'response:after-receive': string;
 	'system-prompt:build': string;
 	'context:build': Array<{ role: string; content: string }>;
 	'provider:request': RequestInit;
 	'provider:response': Response;
 	'chat:render-message': HTMLElement;
-	'settings:validate': Record<string, any>;
-}
-
-interface AIMessage {
-	role: string;
-	content: any;
+	'settings:validate': Record<string, unknown>;
 }
 
 export class HookSystem {
@@ -85,7 +85,7 @@ export class HookSystem {
 		if (!handlers || handlers.length === 0) return data;
 
 		const ctx: HookContext = {
-			hookName: hook as string,
+			hookName: hook,
 			metadata: {},
 			...context,
 		};

@@ -20,10 +20,21 @@
 
 import { Platform, requestUrl } from 'obsidian';
 import type { RequestUrlResponse } from 'obsidian';
-import type { AIProvider, StreamResponse, TokenUsage, StreamCallback, UsageCallback, ErrorCallback } from '../types';
+import type { AIProvider, StreamResponse, StreamCallback, UsageCallback, ErrorCallback } from '../types';
 import { streamResponseFromNode, streamResponseFromBuffer } from './stream-shim';
+import type { NodeIncomingMessage } from './stream-shim';
 
 export type TransportKind = 'node-https' | 'fetch' | 'requestUrl';
+
+/**
+ * Minimal shape of the Electron `window.require` we use to load Node's https
+ * module from inside the desktop renderer. Defined inline to avoid pulling
+ * in @types/node at runtime (mobile renderer has no Node globals).
+ */
+interface ElectronRequire {
+	(moduleName: 'https'): typeof import('https');
+	(moduleName: string): unknown;
+}
 
 export interface ChatStreamCallbacks {
 	onChunk?: StreamCallback;
@@ -50,7 +61,7 @@ function getNodeHttps(): typeof import('https') | undefined {
 	if (!Platform.isDesktopApp) return undefined;
 	try {
 		// window.require bypasses esbuild hoisting; https is externalized.
-		const req = (window as any).require;
+		const req = (window as unknown as { require?: ElectronRequire }).require;
 		if (typeof req !== 'function') return undefined;
 		return req('https');
 	} catch {
@@ -88,10 +99,8 @@ export async function chatStream(
 ): Promise<ChatStreamResult> {
 	const transport = pickTransport(options.stream);
 	let cancelImpl: () => void = () => {};
-	let doneImpl: () => void = () => {};
 
 	const done = new Promise<void>((resolve, reject) => {
-		doneImpl = () => resolve();
 		cancelImpl = () => resolve(); // cancel resolves (does not reject)
 		const onAbort = () => cancelImpl();
 		if (callbacks.signal) {
@@ -163,13 +172,15 @@ function runViaNodeHttps(
 	};
 
 	return new Promise<void>((resolve, reject) => {
-		const req = https.request(options, (res: any) => {
-			if (res.statusCode < 200 || res.statusCode >= 400) {
+		const req = https.request(options, (res) => {
+			const nodeRes = res as unknown as NodeIncomingMessage;
+			const status = nodeRes.statusCode ?? 0;
+			if (status < 200 || status >= 400) {
 				// Drain error body for a meaningful message
 				let errBody = '';
-				res.on('data', (c: Buffer) => (errBody += c.toString('utf8')));
-				res.on('end', () => {
-					reject(new Error(`${provider.name} API error (${res.statusCode}): ${errBody.slice(0, 500)}`));
+				nodeRes.on('data', (c: Buffer) => (errBody += c.toString('utf8')));
+				nodeRes.on('end', () => {
+					reject(new Error(`${provider.name} API error (${status}): ${errBody.slice(0, 500)}`));
 				});
 				return;
 			}
@@ -260,7 +271,8 @@ async function runViaFetch(
 	registerCancel(() => {
 		// fetch has no native cancel beyond AbortSignal (already wired above).
 		// response.body?.cancel() is a soft-cancel for the stream.
-		void (response.body as any)?.cancel?.();
+		const body = response.body as { cancel?: () => Promise<void> } | null;
+		void body?.cancel?.();
 	});
 }
 

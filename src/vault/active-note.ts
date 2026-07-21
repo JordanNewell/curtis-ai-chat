@@ -4,7 +4,7 @@
 // keyboard focus — which is the chat itself, not the note the user means.
 // Instead we walk every open markdown leaf and pick the best candidate:
 //   1. prefer leaves in the center/main area (getContainer() is WorkspaceRoot)
-//   2. among those, prefer the workspace's activeLeaf if it's a markdown view
+//   2. among those, prefer the workspace's activeEditor leaf if it's markdown
 //   3. otherwise take the first
 
 import { App, MarkdownView, TFile } from 'obsidian';
@@ -34,12 +34,9 @@ function fileFromLeaf(leaf: WorkspaceLeaf): TFile | null {
 export function getActiveNoteFile(app: App): TFile | null {
 	const workspace = app.workspace;
 
-	// Fast path: if the activeLeaf is a markdown view, that's authoritative.
-	const activeLeaf = workspace.activeLeaf;
-	if (activeLeaf) {
-		const f = fileFromLeaf(activeLeaf);
-		if (f) return f;
-	}
+	// Fast path: if there's an active editor with a file, that's authoritative.
+	const activeFile = workspace.activeEditor?.file;
+	if (activeFile) return activeFile;
 
 	const markdownLeaves = workspace.getLeavesOfType('markdown');
 	if (markdownLeaves.length === 0) return null;
@@ -48,10 +45,6 @@ export function getActiveNoteFile(app: App): TFile | null {
 	const centerLeaves = markdownLeaves.filter(isCenterLeaf);
 	const pool = centerLeaves.length > 0 ? centerLeaves : markdownLeaves;
 
-	// If activeLeaf is in the pool, use it; else take the first.
-	for (const leaf of pool) {
-		if (leaf === activeLeaf) return fileFromLeaf(leaf);
-	}
 	return fileFromLeaf(pool[0]);
 }
 

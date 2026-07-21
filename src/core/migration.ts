@@ -11,16 +11,30 @@
 //   3. The migration runs automatically on next plugin load
 // ============================================================================
 
+import type { ProviderConfig } from '../types';
+
 export const CURRENT_VERSION = 1;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type SettingsData = Record<string, any>;
+/**
+ * Settings data is an opaque bag of JSON. Migrations read/write specific known
+ * keys via the typed helpers below (getString / setString / getProviderConfigs).
+ */
+export type SettingsData = Record<string, unknown>;
 
 export interface Migration {
 	version: number;
 	description: string;
-	// Return the modified settings. Throw to abort migration.
 	migrate: (settings: SettingsData) => SettingsData;
+}
+
+function getString(settings: SettingsData, key: string): string | undefined {
+	const v = settings[key];
+	return typeof v === 'string' ? v : undefined;
+}
+
+function getProviderConfigs(settings: SettingsData): Record<string, ProviderConfig> {
+	const v = settings.providerConfigs;
+	return v && typeof v === 'object' ? v as Record<string, ProviderConfig> : {};
 }
 
 export const MIGRATIONS: Migration[] = [
@@ -29,20 +43,20 @@ export const MIGRATIONS: Migration[] = [
 		description: 'Migrate from legacy MultiProviderPluginSettings to CurtisSettings',
 		migrate: (settings: SettingsData): SettingsData => {
 			// Detect legacy format (has 'provider' as claude/glm/gemini string)
-			if (settings.provider && !settings.activeProvider) {
+			const legacyProvider = getString(settings, 'provider');
+			if (legacyProvider && !settings.activeProvider) {
 				const legacyMap: Record<string, string> = {
 					claude: 'anthropic',
 					glm: 'zai-glm',
 					gemini: 'google',
 				};
-				settings.activeProvider = legacyMap[settings.provider] || settings.provider;
-				settings.activeModel = settings[`${settings.provider}Model`] || settings.activeModel || '';
+				settings.activeProvider = legacyMap[legacyProvider] || legacyProvider;
+				settings.activeModel = getString(settings, `${legacyProvider}Model`) || getString(settings, 'activeModel') || '';
 			}
 
 			// Migrate API keys into providerConfigs
-			if (!settings.providerConfigs) {
-				settings.providerConfigs = {};
-			}
+			const providerConfigs = getProviderConfigs(settings);
+			settings.providerConfigs = providerConfigs;
 
 			const keyMap: Record<string, string> = {
 				claudeApiKey: 'anthropic',
@@ -57,24 +71,30 @@ export const MIGRATIONS: Migration[] = [
 				cohereApiKey: 'cohere',
 			};
 
-			for (const [legacyKey, providerId] of Object.entries(keyMap)) {
-				if (settings[legacyKey] && !settings.providerConfigs[providerId]) {
-					settings.providerConfigs[providerId] = {
+			for (const legacyKey of Object.keys(keyMap)) {
+				const providerId = keyMap[legacyKey];
+				const legacyValue = getString(settings, legacyKey);
+				if (!legacyValue) continue;
+				const existing = providerConfigs[providerId];
+				if (!existing) {
+					providerConfigs[providerId] = {
 						enabled: true,
-						apiKey: settings[legacyKey],
+						apiKey: legacyValue,
 					};
-				} else if (settings[legacyKey]) {
-					settings.providerConfigs[providerId].apiKey = settings[legacyKey];
-					settings.providerConfigs[providerId].enabled = true;
+				} else {
+					existing.apiKey = legacyValue;
+					existing.enabled = true;
 				}
 			}
 
 			// GLM endpoint migration
-			if (settings.glmEndpoint && !settings.providerConfigs['zai-glm']?.customEndpoint) {
-				if (!settings.providerConfigs['zai-glm']) {
-					settings.providerConfigs['zai-glm'] = { enabled: false, apiKey: '' };
+			const glmEndpoint = getString(settings, 'glmEndpoint');
+			const zaiGlm = providerConfigs['zai-glm'];
+			if (glmEndpoint && !zaiGlm?.customEndpoint) {
+				if (!zaiGlm) {
+					providerConfigs['zai-glm'] = { enabled: false, apiKey: '' };
 				}
-				settings.providerConfigs['zai-glm'].customEndpoint = settings.glmEndpoint;
+				providerConfigs['zai-glm'].customEndpoint = glmEndpoint;
 			}
 
 			// Clean up legacy keys
@@ -102,22 +122,19 @@ export const MIGRATIONS: Migration[] = [
  * Returns the migrated settings.
  */
 export function runMigrations(settings: SettingsData): SettingsData {
-	const currentVersion = settings._version || 0;
+	const currentVersion = (typeof settings._version === 'number' ? settings._version : 0);
 
 	if (currentVersion >= CURRENT_VERSION) {
 		return settings;
 	}
 
-	console.log(`[Curtis] Migrating settings from version ${currentVersion} to ${CURRENT_VERSION}`);
-
 	const pending = MIGRATIONS.filter(m => m.version > currentVersion);
 	pending.sort((a, b) => a.version - b.version);
 
-	let result = { ...settings };
+	let result: SettingsData = { ...settings };
 
 	for (const migration of pending) {
 		try {
-			console.log(`[Curtis] Running migration: v${migration.version} — ${migration.description}`);
 			result = migration.migrate(result);
 			result._version = migration.version;
 		} catch (err) {
