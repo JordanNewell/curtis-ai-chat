@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
+import { copyFileSync } from "fs";
 
 const banner =
 `/*
@@ -15,7 +16,7 @@ const context = await esbuild.context({
 	banner: {
 		js: banner,
 	},
-	entryPoints: ['main.ts'],
+	entryPoints: ['src/main.ts'],
 	bundle: true,
 	external: [
 		'obsidian',
@@ -33,12 +34,20 @@ const context = await esbuild.context({
 		'@lezer/lr',
 		...builtins],
 	format: 'cjs',
-	target: 'es2018',
+	target: 'es2022',
 	logLevel: "info",
 	sourcemap: prod ? false : 'inline',
 	treeShaking: true,
+	minify: prod,
 	outfile: 'main.js',
 });
+
+// Copy styles.css from src/ to root output
+try {
+	copyFileSync('src/styles.css', 'styles.css');
+} catch (e) {
+	console.warn('Warning: Could not copy styles.css');
+}
 
 if (prod) {
 	await context.rebuild();

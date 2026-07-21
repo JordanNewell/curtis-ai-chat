@@ -8,6 +8,13 @@ yarn-error.log
 main.js
 main.js.map
 *.bkp
+# Plugin-local state — may contain plaintext API keys on Obsidian < 1.11.4
+# (keychain migration is attempted on load, but never trust it).
+data.json
+# ZCode session artifacts (never commit — may contain live API keys)
+.zcode/
+# Reference plugin research (large, not part of source)
+_research/
 
 # IDE
 .vscode/

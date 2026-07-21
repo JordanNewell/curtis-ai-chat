@@ -1,0 +1,137 @@
+// Stream shim — adapts non-fetch sources to the StreamResponse shape that
+// AIProvider.parseStream / parseResponse expect.
+//
+// Three cases the transport layer needs to feed into provider parsers:
+//   1. Native fetch() Response — already satisfies StreamResponse; passthrough.
+//   2. Node `https.IncomingMessage` (desktop streaming via require('https')) —
+//      has `.on('data')` events, no `.getReader()`. Wrap with NodeIncomingReader.
+//   3. Obsidian requestUrl() buffered response — whole body already in memory;
+//      wrap as a single-chunk stream for parser compatibility.
+
+import type { StreamResponse, ReadableLike, ReadableReader } from '../types';
+
+/**
+ * Wrap a Node IncomingMessage (event-emitter style) as a WHATWG-style reader.
+ * Pulls data via `.on('data')`/`.on('end')`/`.on('error')` and fulfills `read()`
+ * promises against a buffered queue. Cancels via `destroy()` when the reader
+ * is cancelled (e.g. AbortSignal fires).
+ */
+export class NodeIncomingReader implements ReadableReader {
+	private chunks: Uint8Array[] = [];
+	private done = false;
+	private error: Error | null = null;
+	private waiters: Array<() => void> = [];
+	private locked = false;
+	private stream: any;
+
+	constructor(stream: any) {
+		this.stream = stream;
+		stream.on('data', (chunk: Buffer | Uint8Array) => {
+			this.chunks.push(chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk));
+			this.drainWaiters();
+		});
+		stream.on('end', () => {
+			this.done = true;
+			this.drainWaiters();
+		});
+		stream.on('error', (err: Error) => {
+			this.error = err;
+			this.done = true;
+			this.drainWaiters();
+		});
+	}
+
+	private drainWaiters(): void {
+		while (this.waiters.length > 0) {
+			const w = this.waiters.shift();
+			w?.();
+		}
+	}
+
+	async read(): Promise<{ done: true; value?: undefined } | { done: false; value: Uint8Array }> {
+		if (this.error) throw this.error;
+		if (this.chunks.length > 0) {
+			return { done: false, value: this.chunks.shift()! };
+		}
+		if (this.done) {
+			return { done: true, value: undefined };
+		}
+		// Wait for next data/end/error event
+		await new Promise<void>((resolve) => this.waiters.push(resolve));
+		return this.read();
+	}
+
+	releaseLock(): void {
+		this.locked = false;
+		// Best-effort cleanup of the underlying stream
+		try {
+			this.stream?.destroy?.();
+		} catch {
+			// ignore
+		}
+	}
+}
+
+/** ReadableLike wrapper for Node IncomingMessage. */
+export function wrapNodeStream(stream: any): ReadableLike {
+	return {
+		getReader: () => new NodeIncomingReader(stream),
+	};
+}
+
+/**
+ * Build a StreamResponse from a Node IncomingMessage (desktop https path).
+ * `status` is read from `statusCode`; body is wrapped for `getReader()`.
+ */
+export function streamResponseFromNode(stream: any): StreamResponse {
+	const textCache: { value: string | null } = { value: null };
+	return {
+		ok: stream.statusCode >= 200 && stream.statusCode < 400,
+		status: stream.statusCode,
+		body: wrapNodeStream(stream),
+		json: async () => JSON.parse(await readAllText(stream)),
+		text: async () => readAllText(stream),
+	};
+}
+
+/**
+ * Build a StreamResponse from a buffered body (requestUrl path, or
+ * a fetch() whose stream we already consumed). Emits one chunk on read().
+ */
+export function streamResponseFromBuffer(
+	status: number,
+	bodyText: string,
+	jsonCache?: any
+): StreamResponse {
+	let textAlreadyRead = false;
+	let readerReturned = false;
+	const reader: ReadableReader = {
+		read: async () => {
+			if (readerReturned) return { done: true, value: undefined };
+			if (textAlreadyRead) return { done: true, value: undefined };
+			textAlreadyRead = true;
+			// Encode the whole body as one chunk; parsers will split on \n themselves.
+			return { done: false, value: new TextEncoder().encode(bodyText) };
+		},
+		releaseLock: () => {
+			readerReturned = true;
+		},
+	};
+	return {
+		ok: status >= 200 && status < 400,
+		status,
+		body: { getReader: () => reader },
+		json: async () => (jsonCache !== undefined ? jsonCache : JSON.parse(bodyText)),
+		text: async () => bodyText,
+	};
+}
+
+/** Read the full body of a Node stream into a UTF-8 string. Used for error bodies. */
+function readAllText(stream: any): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const chunks: Buffer[] = [];
+		stream.on('data', (c: Buffer) => chunks.push(c));
+		stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+		stream.on('error', reject);
+	});
+}

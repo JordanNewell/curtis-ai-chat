@@ -1,10 +1,14 @@
 {
-	"id": "obsidian-multi-provider-ai",
-	"name": "Multi-Provider AI Assistant",
-	"version": "2.0.0",
-	"minAppVersion": "0.15.0",
-	"description": "Multi-provider AI plugin supporting Claude, GLM, and Gemini with streaming responses, code assistance, and intelligent content generation",
-	"author": "0xshash",
-	"authorUrl": "https://github.com/0xshash",
+	"id": "obsi-buddi",
+	"name": "ObsiBuddi",
+	"version": "3.0.0",
+	"minAppVersion": "1.11.4",
+	"description": "Agnostic AI chat for Obsidian — 30+ providers (Anthropic, OpenAI, Gemini, Ollama, and more), image attachments, long-term memory, slash commands, and inline selection actions.",
+	"author": "Jordan Newell",
+	"authorUrl": "https://github.com/jordannewell",
+	"fundingUrl": {
+		"Buy Me a Coffee": "https://www.buymeacoffee.com/jordannewell",
+		"GitHub Sponsors": "https://github.com/sponsors/jordannewell"
+	},
 	"isDesktopOnly": false
 }

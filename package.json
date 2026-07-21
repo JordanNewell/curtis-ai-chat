@@ -1,34 +1,40 @@
 {
-  "name": "obsidian-glm-plugin",
-  "version": "1.0.0",
-  "description": "Best-in-class GLM AI inference plugin for Obsidian",
-  "main": "main.js",
-  "scripts": {
-    "dev": "node esbuild.config.mjs",
-    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "version": "node version-bump.mjs && git add manifest.json versions.json"
-  },
-  "keywords": [
-    "obsidian",
-    "plugin",
-    "ai",
-    "glm",
-    "zhipu",
-    "llm",
-    "chatgpt-alternative"
-  ],
-  "author": "0xshash",
-  "license": "MIT",
-  "devDependencies": {
-    "@types/node": "^20.11.0",
-    "@typescript-eslint/eslint-plugin": "^6.19.0",
-    "@typescript-eslint/parser": "^6.19.0",
-    "builtin-modules": "^3.3.0",
-    "esbuild": "^0.19.11",
-    "eslint": "^8.56.0",
-    "obsidian": "latest",
-    "tslib": "^2.6.2",
-    "typescript": "^5.3.3"
-  },
-  "dependencies": {}
+	"name": "obsi-buddi",
+	"version": "3.0.0",
+	"description": "The best agnostic AI assistant for Obsidian — 13+ providers, sidebar chat, vault RAG, tool calling",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"version": "node version-bump.mjs && git add manifest.json versions.json"
+	},
+	"keywords": [
+		"obsidian",
+		"plugin",
+		"ai",
+		"chatgpt",
+		"claude",
+		"gemini",
+		"ollama",
+		"openai",
+		"llm",
+		"assistant",
+		"rag",
+		"agnostic",
+		"multi-provider"
+	],
+	"author": "Jordan Newell",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^20.11.0",
+		"@typescript-eslint/eslint-plugin": "^6.19.0",
+		"@typescript-eslint/parser": "^6.19.0",
+		"builtin-modules": "^3.3.0",
+		"esbuild": "^0.19.11",
+		"eslint": "^8.56.0",
+		"obsidian": "latest",
+		"tslib": "^2.6.2",
+		"typescript": "^5.3.3"
+	},
+	"dependencies": {}
 }

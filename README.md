@@ -1,225 +1,209 @@
-# 🤖 Multi-Provider AI Assistant for Obsidian
+<h1 align="center">ObsiBuddi</h1>
 
-A best-in-class multi-provider AI inference plugin for Obsidian supporting **Anthropic Claude**, **Z.ai GLM**, and **Google Gemini** with streaming responses, code assistance, and intelligent content generation.
+<p align="center">A genuinely agnostic AI chat for Obsidian. Thirty-plus providers, one sidebar. Local-first when you want it, cloud when you don't.</p>
 
-## ✨ Features
-
-- 💬 **Interactive Chat Interface** - Beautiful chat modal with streaming responses
-- 🎯 **Smart Commands** - Generate, summarize, explain, and refine text instantly
-- 🔍 **Code Assistant** - Code review and explanation powered by AI
-- 🎨 **Multiple Providers** - Switch between Claude, GLM, and Gemini seamlessly
-- 🔐 **OAuth Support** - Secure Google OAuth for Gemini authentication
-- ⚡ **Streaming Responses** - See responses generate in real-time
-- 🎛️ **Customizable** - Configure temperature, max tokens, system prompts, and more
-- 🌐 **OpenAI-Compatible** - GLM and Gemini use standard OpenAI format
-- 🧠 **Unified Memory** - Cross-tool context sharing with Claude Code memory system
-
-## 🧠 Memory Integration
-
-This plugin integrates with Claude Code's memory system for seamless context sharing across tools.
-
-### Features
-- **Bidirectional sync**: Conversations in Obsidian are captured to shared memory
-- **Context injection**: Relevant facts are automatically loaded when starting new chats
-- **Toggle control**: "🧠 Remember conversation" toggle in chat UI
-
-### How It Works
-1. Toggle "🧠 Remember conversation" in the chat UI (default: ON)
-2. Your messages are captured to working memory
-3. Claude Code's consolidation process extracts facts
-4. Future chats automatically load relevant context
-
-### Memory Storage
-- Working Memory: `<vault>/memory/working_memory/`
-- Consolidated Facts: `<vault>/memory/consolidation/facts.jsonl`
-
-## 🚀 Installation
-
-### Method 1: Manual Installation (Recommended for Personal Use)
-
-1. Download the latest release or clone this repository
-2. Build the plugin:
-   ```bash
-   npm install
-   npm run build
-   ```
-3. Copy the entire plugin folder to your Obsidian vault's plugins directory:
-   - **Windows**: `%APPDATA%/obsidian/plugins/`
-   - **Mac**: `~/Library/Application Support/obsidian/plugins/`
-   - **Linux**: `~/.config/obsidian/plugins/`
-4. Enable the plugin in Obsidian: **Settings** → **Community plugins** → Enable "Multi-Provider AI Assistant"
-
-### Method 2: From Source
-
-```bash
-# Clone the repository
-git clone https://github.com/0xshash/obsidian-multi-provider-ai.git
-cd obsidian-multi-provider-ai
-
-# Install dependencies
-npm install
-
-# Build the plugin
-npm run build
-```
-
-## ⚙️ Configuration
-
-### Provider Setup
-
-#### Anthropic Claude
-1. Visit [Anthropic Console](https://console.anthropic.com/)
-2. Generate an API key
-3. In Obsidian, go to **Settings → Multi-Provider AI**
-4. Select **Claude** as your provider
-5. Enter your API key
-6. Choose your preferred model (Sonnet 4.5, Opus 4.6, or Haiku 4.5)
-
-#### Z.ai GLM
-1. Visit [Z.ai Developer Portal](https://docs.z.ai/)
-2. Sign up for an account and generate an API key
-3. In Obsidian, go to **Settings → Multi-Provider AI**
-4. Select **GLM** as your provider
-5. Enter your API key
-6. Choose your preferred model (GLM-4.7, 4-Plus, 4-Air, 4-Flash, or 4-Long)
-
-#### Google Gemini (OAuth Only)
-1. Visit [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new OAuth 2.0 Client ID:
-   - Go to **APIs & Services** → **Credentials**
-   - Click **Create Credentials** → **OAuth client ID**
-   - Application type: **Desktop app**
-   - Authorized redirect URIs: `urn:ietf:wg:oauth:2.0:oob`
-3. Copy your Client ID and Client Secret
-4. In Obsidian, go to **Settings → Multi-Provider AI**
-5. Select **Gemini** as your provider
-6. Enter your OAuth Client ID and Secret
-7. Click **Connect with Google** and complete the OAuth flow
-8. Choose your preferred model (Gemini 3 Pro, 3 Flash, 2.5 Pro, or 2.5 Flash)
-
-### Plugin Settings (All Providers)
-
-In Obsidian, go to **Settings → Multi-Provider AI**:
-
-- **Provider**: Select your AI provider (Claude, GLM, or Gemini)
-- **Model**: Choose your preferred model from the selected provider
-- **Temperature**: Control response creativity (0.0 - 1.0)
-- **Max Tokens**: Maximum response length
-- **System Prompt**: Customize the AI's behavior
-- **Stream Response**: Enable real-time streaming
-- **Show Token Usage**: Display token usage notices
-
-## 📖 Usage
-
-### Chat Interface
-
-1. Click the bot icon in the ribbon or use the command palette (`Ctrl/Cmd + Shift + G`)
-2. Select your desired provider and model
-3. Type your message and press Enter
-4. Watch the AI respond in real-time!
-
-### Text Selection Commands
-
-Select any text in your notes and use these commands:
-
-| Command | Description |
-|---------|-------------|
-| **Generate** | Generate new content from your prompt |
-| **Summarize** | Get a concise summary of selected text |
-| **Explain** | Break down complex concepts simply |
-| **Refine** | Improve writing quality while preserving meaning |
-| **Code Review** | Review code for bugs and best practices |
-| **Explain Code** | Get detailed code explanations |
-
-### Keyboard Shortcuts
-
-- `Ctrl/Cmd + Shift + G` - Open AI Chat
-
-## 🎯 Available Models
-
-### Claude (Anthropic)
-| Model | Description | Context Length |
-|-------|-------------|----------------|
-| **Claude Opus 4.6** | Most capable for complex tasks | 200K tokens |
-| **Claude Sonnet 4.5** | Balanced performance | 200K tokens |
-| **Claude Haiku 4.5** | Fast and cost-effective | 200K tokens |
-
-### GLM (Z.ai)
-| Model | Description | Context Length |
-|-------|-------------|----------------|
-| **GLM-4.7** | Latest and most capable | 128K tokens |
-| **GLM-4 Plus** | Enhanced performance | 128K tokens |
-| **GLM-4 Air** | Balanced performance/cost | 128K tokens |
-| **GLM-4 Flash** | Fast responses | 128K tokens |
-| **GLM-4 Long** | Extended context | 1M tokens |
-
-### Gemini (Google)
-| Model | Description | Context Length |
-|-------|-------------|----------------|
-| **Gemini 3 Pro** | Latest, most advanced | 1M tokens |
-| **Gemini 3 Flash** | Fast, cost-effective | 1M tokens |
-| **Gemini 2.5 Pro** | General availability | 1M tokens |
-| **Gemini 2.5 Flash** | High-throughput | 1M tokens |
-| **Gemini 2.5 Flash Lite** | Lightweight | 1M tokens |
-
-## 🏗️ Architecture
-
-The plugin uses a provider abstraction pattern that allows seamless switching between AI services:
-
-```typescript
-interface AIProvider {
-  id: string;
-  name: string;
-  endpoint: string;
-  models: AIModel[];
-  formatRequest(messages, options): RequestInit;
-  parseResponse(response): Promise<AIResponse>;
-  isAuthenticated(): boolean;
-  authenticate(): Promise<void>;
-}
-```
-
-Each provider handles its specific API format and authentication method:
-
-- **Claude**: Uses `x-api-key` header with separate `system` parameter
-- **GLM**: OpenAI-compatible format with `Bearer` token
-- **Gemini**: OpenAI-compatible format with OAuth `Bearer` token
-
-## 🔧 Development
-
-```bash
-# Install dependencies
-npm install
-
-# Development build with watch mode
-npm run dev
-
-# Production build
-npm run build
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-MIT License - feel free to use this plugin personally or commercially.
-
-## 🙏 Acknowledgments
-
-- Built with [Obsidian API](https://github.com/obsidianmd/obsidian-api)
-- Powered by:
-  - [Anthropic Claude](https://www.anthropic.com/)
-  - [Z.ai GLM Models](https://docs.z.ai/)
-  - [Google Gemini](https://ai.google.dev/)
-
-## 📞 Support
-
-If you encounter any issues or have questions:
-- Open an issue on GitHub
-- Check existing discussions
+<p align="center">
+  <a href="#installation">Installation</a> ·
+  <a href="docs/PROVIDERS.md">Providers</a> ·
+  <a href="docs/SLASH_COMMANDS.md">Slash Commands</a> ·
+  <a href="docs/MEMORY.md">Memory</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
 ---
 
-Made with ❤️ by [0xshash](https://github.com/0xshash)
+> [!NOTE]
+> **v3.0.0** ships a redesigned chat panel, 30+ built-in providers, image attachments, a real memory system, and a slash-command language. The plugin was rewritten end-to-end from v2 — see [CHANGELOG.md](CHANGELOG.md).
+
+## What is this
+
+ObsiBuddi is an AI chat that lives in your Obsidian sidebar. Ask anything; the answer streams back into the panel. Right-click a selection in any note and improve, summarize, TL;DR, refactor, or convert it in place. Drag an image in and ask about it. The chat history, your preferences, and your attachments all stay in your vault.
+
+It works with **any provider you have a key for** — Anthropic, OpenAI, Gemini, Z.ai, Mistral, Groq, xAI, Perplexity, Cohere, DeepSeek, OpenRouter, and 18 more — plus **Ollama and LM Studio** for fully local, offline AI. Switch providers from the header; the chat keeps going.
+
+## Why ObsiBuddi
+
+- **Your data stays yours.** Conversations live in `localStorage`. Image attachments are saved as real files in your `attachments/` folder — visible, auditable, deletable. Memory is a markdown file you can read and edit. No telemetry. No tracking. No "phone home."
+- **No vendor lock-in.** Thirty providers ship built-in. Add any OpenAI-compatible endpoint as a custom provider in 30 seconds. Switch models mid-conversation.
+- **Local-first when you need it.** Enable Ollama and nothing ever leaves your machine. Useful for private notes, air-gapped machines, or when you just don't want to pay per token.
+- **Native Obsidian feel.** Settings use the real Obsidian setting components. Messages render through Obsidian's `MarkdownRenderer` so code blocks, wikilinks, and callouts look right. Themes are respected — light, dark, Things, Minimal, all of them.
+
+> [!IMPORTANT]
+> **API keys are stored in your OS keychain** (Windows Credential Manager, macOS Keychain, Linux Secret Service) on Obsidian 1.11.4+. Plaintext fallback only exists for older Obsidian versions and is never committed to git.
+
+## Features
+
+### Chat that gets out of your way
+
+- Streaming responses with a clean Telegram-style bubble layout
+- Model picker with capability pills (vision 👁, tools 🔧, context length)
+- Per-message hover actions: copy, quote-into-input, save-as-note, insert-into-active-note, regenerate, edit-and-resend
+- Conversation history with search
+
+### Image attachments
+
+- **Paste** (Ctrl+V), **drag-and-drop**, or **paperclip** — three ways to attach
+- Images save as real vault attachments (not base64 blobs in localStorage)
+- Vision-capable models see them automatically; non-vision models get a clear "switch to a vision model" notice
+- Transcripts via `/save-all` embed images as `![[wikilinks]]`
+
+### Inline selection actions
+
+Right-click any selection in a note for:
+
+- **Explain · ELI5 · Summarize · TL;DR · Improve · Fix grammar · Shorten**
+- **Translate · Extract key points · Extract wikilinks · Make a table · Pros & cons · Convert to callout**
+- **Code review · Explain code · Refactor · Add tests**
+
+Each writes the result directly back into the note — replace the selection or insert below.
+
+### Slash commands
+
+Type `/` in the chat input for an autocomplete menu:
+
+```
+/clear          /regen          /title <text>     /copy
+/note [name]    /save-all       /paste            /model <name>
+/provider <x>   /system <text>  /stats            /remember <fact>
+/forget <x>     /memory         /help
+```
+
+See [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md) for the full reference.
+
+### Long-term memory
+
+ObsiBuddi remembers durable facts about you across conversations — preferences, identity, projects, standing instructions. Facts live in a markdown file in your vault (`AI/ObsiBuddi Memory.md` by default) so you can read, edit, and correct them by hand.
+
+- **Auto-capture**: after each turn, a background model call extracts 0–3 durable facts as JSON
+- **Manual**: `/remember <fact>` or right-click any selection → **Save to memory**
+- **Recall**: every prompt includes a `## What you know about the user` block — full injection, no naive substring matching
+- **Manage**: `/memory` to list, `/memory open` to jump to the file, `/memory clear` to wipe
+
+See [docs/MEMORY.md](docs/MEMORY.md) for the design and file format.
+
+### Customizable
+
+- Chat panel position (left/right), width, background (theme default or a wallpaper image from your vault)
+- Configurable system prompt, temperature, max tokens
+- Enter-key behavior: Enter-to-send (default) or Enter-for-newline
+- Auto-save assistant responses to a folder of your choice
+- Show or hide token counts after each response
+
+## Installation
+
+> [!TIP]
+> ObsiBuddi isn't in the community plugin store yet. For now, install manually (below) or via [BRAT](https://github.com/TfTHacker/obsidian42-brat).
+
+### Manual install
+
+1. Download the [latest release](../../releases) `main.js`, `manifest.json`, and `styles.css`.
+2. In your vault, create `.obsidian/plugins/obsi-buddi/`.
+3. Copy the three files into that folder.
+4. Open **Settings → Community plugins**, refresh the list, and enable **ObsiBuddi**.
+
+### From source (developers)
+
+```bash
+git clone https://github.com/jordannewell/obsidian-buddi.git
+cd obsidian-buddi
+npm install
+npm run build
+```
+
+Copy `main.js`, `manifest.json`, `styles.css` into `<vault>/.obsidian/plugins/obsi-buddi/`.
+
+### First-run setup
+
+1. Open the chat panel via the **ribbon icon** (robot) or `Ctrl+Shift+G`.
+2. In **Settings → ObsiBuddi → Provider Configuration**, enable a provider and paste your API key.
+3. Pick a model from the header dropdown.
+4. Start typing.
+
+> [!TIP]
+> **Want fully private, free, offline AI?** Install [Ollama](https://ollama.com), run `ollama pull qwen2.5:7b-instruct`, then enable the **Ollama (Local)** provider in settings. No API key. Nothing leaves your machine.
+
+## Usage
+
+### Mobile
+
+ObsiBuddi works on iOS and Android with a few caveats:
+
+- Hover-only elements (per-message action toolbar, code-block copy buttons) are always visible on touch devices at reduced opacity. Tap them directly.
+- Touch targets are sized to Apple HIG minimums (44pt send button, 40pt header icons).
+- Wallpaper background is auto-disabled on phones for scroll performance — theme colors are used instead.
+- `/paste` may fail if the OS blocks clipboard read. Use regular paste (`Ctrl+V` / long-press → Paste) instead.
+- Streaming may degrade to buffered responses on some providers due to mobile CORS restrictions. The message still arrives — it just appears all at once instead of token-by-token.
+- Local providers (Ollama, LM Studio) work if you point at a LAN host via the custom endpoint field (e.g. `http://192.168.1.50:11434/v1/chat/completions`).
+
+### Basic chat
+
+Type a question. Press Enter (or `Ctrl+Enter` if you switched to newline mode). The response streams in. Hover any assistant message for actions.
+
+### Ask about an image
+
+Drag a PNG onto the chat panel → type *"what's in this?"* → send. The image is saved to `attachments/` and the model (if vision-capable) reads it.
+
+### Save a response as a note
+
+Hover an assistant message → click the **file-plus** icon → a new note opens in a split, with frontmatter recording the provider/model/timestamp.
+
+Or type `/save-all` to export the entire conversation as one structured note.
+
+### Ask about the active note
+
+Highlight a passage in any note → right-click → **Explain with AI** / **Summarize** / **Improve** / etc. The result writes back into the note at the cursor.
+
+## Providers
+
+**30+ built-in**: Anthropic Claude · OpenAI · Google Gemini · Z.ai GLM · Ollama · LM Studio · OpenRouter · Groq · Together AI · Fireworks · Mistral · DeepSeek · Cohere · Vercel AI Gateway · xAI Grok · Perplexity · Novita · DeepInfra · Hyperbolic · Chutes · Replicate · Lepton · Lambda · Hugging Face · Azure OpenAI · GitHub Models · fal.ai · Cerebras · SambaNova · Requesty
+
+Plus any OpenAI-compatible endpoint as a custom provider (LiteLLM, llama.cpp, Novita, Portkey, Helicone, self-hosted servers).
+
+See [docs/PROVIDERS.md](docs/PROVIDERS.md) for the full list with endpoints, auth, and per-provider setup notes.
+
+## Privacy
+
+- **Cloud providers** (Anthropic, OpenAI, Gemini, etc.) send your chat content to their servers. That's how they work.
+- **Local providers** (Ollama, LM Studio) run entirely on your machine. Nothing leaves.
+- **API keys** are stored in your OS keychain on Obsidian 1.11.4+.
+- **Conversations** are stored in `localStorage` under the plugin's key — same threat model as Obsidian itself.
+- **Image attachments** are saved as real files in your vault's `attachments/` folder — visible, auditable, deletable.
+- **Memory** is a markdown file in your vault — readable, editable, never sent anywhere except the active provider.
+
+> [!WARNING]
+> Memory injection is inherent to any AI memory feature. If you `/remember` malicious text (or import a malicious note that tricks you into saving it), it gets injected into every future prompt. Audit `AI/ObsiBuddi Memory.md` if you're unsure.
+
+## Roadmap
+
+- [ ] Inline-note AI mode (write at the cursor, response lands in the note)
+- [ ] Conversation branching UI
+- [ ] Per-provider OAuth flows (Gemini native, GitHub, etc.)
+- [ ] Plugin settings import/export
+
+See the [open issues](../../issues) for the live list.
+
+## Feedback & support
+
+- 🐛 [Report a bug](../../issues/new?template=bug.md)
+- 💡 [Request a feature](../../issues/new?template=feature.md)
+- 💬 [Discussions](../../discussions)
+
+## Contributing
+
+PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style, and the audit checklist all changes go through.
+
+## 🙏 Support ObsiBuddi
+
+If ObsiBuddi saves you time, consider sponsoring the project or buying me a coffee. Every contribution funds the servers, the late-night audits, and the next feature.
+
+- ☕ [Buy Me a Coffee](https://www.buymeacoffee.com/jordannewell)
+- 💛 [GitHub Sponsors](https://github.com/sponsors/jordannewell)
+
+The donate button is also available in **Settings → ObsiBuddi** inside Obsidian.
+
+> [!NOTE]
+> ObsiBuddi is and will remain **free and open source** under the MIT license. Every feature — 30+ providers, memory, image attachments, slash commands — works with your own API keys. Sponsorship is voluntary and appreciated, never required.
+
+## License
+
+[MIT](LICENSE) © Jordan Newell
