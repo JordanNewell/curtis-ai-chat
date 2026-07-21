@@ -1,9 +1,9 @@
 {
-	"id": "obsi-buddi",
-	"name": "ObsiBuddi",
+	"id": "curtis",
+	"name": "Curtis",
 	"version": "3.0.0",
 	"minAppVersion": "1.11.4",
-	"description": "Agnostic AI chat for Obsidian — 30+ providers (Anthropic, OpenAI, Gemini, Ollama, and more), image attachments, long-term memory, slash commands, and inline selection actions.",
+	"description": "Curtis — your polyglot AI chat for Obsidian. 30+ providers (Anthropic, OpenAI, Gemini, Ollama, and more), image attachments, long-term memory, slash commands, and inline selection actions.",
 	"author": "Jordan Newell",
 	"authorUrl": "https://github.com/jordannewell",
 	"fundingUrl": {

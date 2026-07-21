@@ -1,4 +1,4 @@
-// ObsiBuddi — Shared Types & Interfaces
+// Curtis — Shared Types & Interfaces
 
 // ============================================================================
 // PROVIDER TYPES
@@ -173,7 +173,7 @@ export interface ConversationStats {
 // SETTINGS TYPES
 // ============================================================================
 
-export interface ObsiBuddiSettings {
+export interface CurtisSettings {
 	// Active provider/model
 	activeProvider: string;
 	activeModel: string;

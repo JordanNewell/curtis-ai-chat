@@ -1,6 +1,6 @@
 # Providers
 
-ObsiBuddi ships with 30+ built-in providers and supports any OpenAI-compatible endpoint as a custom provider. This doc covers what's built-in, how each one authenticates, and per-provider setup quirks.
+Curtis ships with 30+ built-in providers and supports any OpenAI-compatible endpoint as a custom provider. This doc covers what's built-in, how each one authenticates, and per-provider setup quirks.
 
 > [!TIP]
 > Look for the **👁 vision** marker next to a model in the picker — that model can read images. Models without it will reject image attachments with a clear Notice.
@@ -42,7 +42,7 @@ ObsiBuddi ships with 30+ built-in providers and supports any OpenAI-compatible e
 
 ## Setting up a provider
 
-1. **Settings → ObsiBuddi → Provider Configuration**
+1. **Settings → Curtis → Provider Configuration**
 2. Find the provider, toggle **Enable**
 3. Paste your API key — it's stored in your OS keychain on Obsidian 1.11.4+
 4. (Optional) Click the **refresh icon** to auto-discover available models

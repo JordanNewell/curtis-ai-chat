@@ -82,7 +82,7 @@ export class EventBus {
 			try {
 				handler(data);
 			} catch (err) {
-				console.error(`[ObsiBuddi] Event handler error for "${event}":`, err);
+				console.error(`[Curtis] Event handler error for "${event}":`, err);
 			}
 		}
 	}

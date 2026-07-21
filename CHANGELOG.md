@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to ObsiBuddi are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
+All notable changes to Curtis are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [3.0.0] — 2026-07-20
 
@@ -12,7 +12,7 @@ Complete rewrite from v2. New chat panel, new providers, new features, new inter
 - **30+ built-in providers** (up from 3): Anthropic, OpenAI, Gemini, Z.ai, Ollama, LM Studio, OpenRouter, Groq, Together, Fireworks, Mistral, DeepSeek, Cohere, Vercel AI Gateway, xAI, Perplexity, Novita, DeepInfra, Hyperbolic, Chutes, Replicate, Lepton, Lambda, Hugging Face, Azure OpenAI, GitHub Models, fal.ai, Cerebras, SambaNova, Requesty
 - **Custom providers** — any OpenAI-compatible endpoint
 - **Image attachments** — paste (Ctrl+V), drag-and-drop, or paperclip. Saved as real vault files in `attachments/`. Vision-capable models read them; non-vision models get a clear error.
-- **Long-term memory** — markdown file in the vault (`AI/ObsiBuddi Memory.md`). Auto-capture via background LLM extraction + manual `/remember`. Full-injection recall.
+- **Long-term memory** — markdown file in the vault (`AI/Curtis Memory.md`). Auto-capture via background LLM extraction + manual `/remember`. Full-injection recall.
 - **Slash commands** — `/clear`, `/regen`, `/title`, `/copy`, `/note`, `/save-all`, `/paste`, `/model`, `/provider`, `/system`, `/stats`, `/remember`, `/forget`, `/memory`, `/help`
 - **Slash autocomplete** — type `/` for a fuzzy dropdown
 - **10 new selection actions** — fix-grammar, shorten, TL;DR, refactor, add-tests, convert-callout, extract-links, ELI5, table-from-text, pros-cons
@@ -25,7 +25,7 @@ Complete rewrite from v2. New chat panel, new providers, new features, new inter
 - **OS keychain storage** for API keys on Obsidian 1.11.4+ (Windows Credential Manager, macOS Keychain, Linux Secret Service)
 - **Auto model discovery** via `/v1/models`, `/api/tags` (Ollama), `/v1beta/models` (Gemini)
 - **Cost tracking** with per-model pricing in provider definitions
-- **Image-rejection auto-retry** — if a provider rejects an image, ObsiBuddi retries as text-only with a Notice
+- **Image-rejection auto-retry** — if a provider rejects an image, Curtis retries as text-only with a Notice
 
 ### Changed
 

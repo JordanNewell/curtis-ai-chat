@@ -1,6 +1,6 @@
 # Memory
 
-ObsiBuddi remembers durable facts about you across conversations. This doc explains what gets stored, where, how it's used, and how to manage it.
+Curtis remembers durable facts about you across conversations. This doc explains what gets stored, where, how it's used, and how to manage it.
 
 ## What memory is for
 
@@ -19,12 +19,12 @@ What it's **not** for:
 
 ## Where facts live
 
-By default: `AI/ObsiBuddi Memory.md` in your vault. Configurable in **Settings → Memory → Memory file path**.
+By default: `AI/Curtis Memory.md` in your vault. Configurable in **Settings → Memory → Memory file path**.
 
 The file is plain markdown — one bullet per fact, with hidden HTML-comment metadata for id + timestamp:
 
 ```markdown
-# ObsiBuddi Memory
+# Curtis Memory
 
 Long-term facts about the user, captured during chat and editable by hand.
 Delete a line to forget; edit a line to correct.
@@ -43,7 +43,7 @@ You can edit this file directly — add bullets, delete them, rewrite them. The 
 
 ### Auto-capture (default)
 
-After each assistant turn, ObsiBuddi fires a background call to the active model with a strict extraction prompt:
+After each assistant turn, Curtis fires a background call to the active model with a strict extraction prompt:
 
 > *"Extract 0-3 durable facts about the user from this chat turn. A durable fact is something true across future conversations: a preference, identity trait, long-lived project detail, or standing instruction. Do NOT capture ephemeral requests. Respond with ONLY a JSON array."*
 
@@ -93,7 +93,7 @@ Every prompt includes a `## What you know about the user` block appended to the 
 - Facts never leave your machine except via the active AI provider. No telemetry, no analytics.
 
 > [!WARNING]
-> Memory injection cuts both ways. If you `/remember` something malicious (or import a note that tricks you into saving it as a memory), it gets injected into every future prompt. Audit `AI/ObsiBuddi Memory.md` if you're unsure what's in there.
+> Memory injection cuts both ways. If you `/remember` something malicious (or import a note that tricks you into saving it as a memory), it gets injected into every future prompt. Audit `AI/Curtis Memory.md` if you're unsure what's in there.
 
 ## Design notes
 

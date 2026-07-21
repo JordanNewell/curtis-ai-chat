@@ -7,10 +7,13 @@
 // async half: called from onload() AFTER loadSettings + migrations.
 
 import type { App } from 'obsidian';
-import type { ProviderConfig, ObsiBuddiSettings } from '../types';
+import type { ProviderConfig, CurtisSettings } from '../types';
 
 /** Key prefix for all secrets we own in the keychain. */
-export const SECRET_PREFIX = 'obsibuddi-api-key-';
+export const SECRET_PREFIX = 'curtis-api-key-';
+
+/** Previous prefix used before the "Curtis" rebrand. */
+const OLD_PREFIX = 'obsibuddi-api-key-';
 
 /**
  * Feature-detect Obsidian's secretStorage (added in 1.11.4).
@@ -33,8 +36,8 @@ export function getSecretStorage(app: App): import('obsidian').SecretStorage | u
  */
 export async function migrateSecretsToKeychain(
 	app: App,
-	settings: ObsiBuddiSettings
-): Promise<{ settings: ObsiBuddiSettings; migrated: string[]; skipped: boolean }> {
+	settings: CurtisSettings
+): Promise<{ settings: CurtisSettings; migrated: string[]; skipped: boolean }> {
 	const ss = getSecretStorage(app);
 	if (!ss) {
 		// Feature unavailable — leave plaintext in place, no warning spam.
@@ -42,6 +45,27 @@ export async function migrateSecretsToKeychain(
 	}
 
 	const migrated: string[] = [];
+
+	// One-time: re-key any secrets stored under the old "obsibuddi" prefix.
+	try {
+		const secrets = await ss.listSecrets();
+		for (const key of secrets) {
+			if (key.startsWith(OLD_PREFIX)) {
+				const newKey = SECRET_PREFIX + key.slice(OLD_PREFIX.length);
+				const value = ss.getSecret(key);
+				if (value) {
+					ss.setSecret(newKey, value);
+					// Fix up apiKeyRef if it points at the old key
+					for (const cfg of Object.values(settings.providerConfigs)) {
+						if (cfg.apiKeyRef === key) cfg.apiKeyRef = newKey;
+					}
+				}
+			}
+		}
+	} catch (e) {
+		console.debug('[Curtis] Old-prefix secret migration failed (non-fatal):', e);
+	}
+
 	for (const [providerId, config] of Object.entries(settings.providerConfigs)) {
 		const plaintext = config.apiKey?.trim();
 		if (!plaintext) continue;
@@ -53,7 +77,7 @@ export async function migrateSecretsToKeychain(
 			config.apiKey = ''; // wipe plaintext; do NOT delete the key (keep shape stable)
 			migrated.push(providerId);
 		} catch (e) {
-			console.error(`[ObsiBuddi] Failed to migrate secret for ${providerId}:`, e);
+			console.error(`[Curtis] Failed to migrate secret for ${providerId}:`, e);
 		}
 	}
 

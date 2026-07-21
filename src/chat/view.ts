@@ -8,9 +8,9 @@ import { ModelPickerModal, buildModelPickerEntries } from '../ui/modals/model-pi
 import { attachMessageActions } from './message-actions';
 import { handleSlashCommand, slashSuggestions, type SlashContext } from './slash-commands';
 import { saveMessageAsNote, saveImageToVault } from '../vault/notes';
-import type ObsiBuddiPlugin from '../main';
+import type CurtisPlugin from '../main';
 
-export const CHAT_VIEW_TYPE = 'obsi-buddi-chat';
+export const CHAT_VIEW_TYPE = 'curtis-chat';
 
 /** Brand color per built-in provider id. Used for the role/picker dot.
  *  Custom providers fall back to --interactive-accent via CSS. */
@@ -121,7 +121,7 @@ function friendlyError(error: Error, hasImages = false): { message: string; caus
 let currentSendHasImagesFlag = false;
 
 export class ChatView extends ItemView {
-	plugin: ObsiBuddiPlugin;
+	plugin: CurtisPlugin;
 	private renderer: MessageRenderer;
 	private store: ConversationStore;
 	private messagesContainer!: HTMLElement;
@@ -160,7 +160,7 @@ export class ChatView extends ItemView {
 		this.inputEl.focus();
 	}
 
-	constructor(leaf: WorkspaceLeaf, plugin: ObsiBuddiPlugin) {
+	constructor(leaf: WorkspaceLeaf, plugin: CurtisPlugin) {
 		super(leaf);
 		this.plugin = plugin;
 		this.renderer = new MessageRenderer(plugin.app);
@@ -311,7 +311,7 @@ export class ChatView extends ItemView {
 		const wrap = row.createDiv({ cls: 'ai-chat-input-wrap' });
 		this.inputEl = wrap.createEl('textarea', {
 			cls: 'ai-chat-input',
-			placeholder: 'Message ObsiBuddi…',
+			placeholder: 'Message Curtis…',
 		});
 		this.inputEl.rows = 1;
 		this.inputEl.addEventListener('keydown', (e) => this.handleInputKeydown(e));
@@ -509,7 +509,7 @@ export class ChatView extends ItemView {
 		const empty = this.messagesContainer.createDiv({ cls: 'ai-chat-empty' });
 		const iconWrap = empty.createDiv({ cls: 'ai-chat-empty-icon' });
 		setIcon(iconWrap, 'bot');
-		empty.createDiv({ cls: 'ai-chat-empty-title', text: 'ObsiBuddi' });
+		empty.createDiv({ cls: 'ai-chat-empty-title', text: 'Curtis' });
 		empty.createDiv({ cls: 'ai-chat-empty-hint', text: 'Ask anything — type a message below to begin.' });
 	}
 
@@ -640,7 +640,7 @@ export class ChatView extends ItemView {
 				const thumbUrl = this.app.vault.getResourcePath(file);
 				this.pendingImages.push({ path: file.path, thumbUrl, name: f.name });
 			} catch (e) {
-				console.error('[ObsiBuddi] image save failed:', e);
+				console.error('[Curtis] image save failed:', e);
 				new Notice(`Failed to attach ${f.name}`);
 			}
 		}
@@ -795,7 +795,7 @@ export class ChatView extends ItemView {
 					}
 				},
 				onError: (error: Error) => {
-					console.error('[ObsiBuddi] Stream error:', error);
+					console.error('[Curtis] Stream error:', error);
 					const friendly = friendlyError(error, currentSendHasImagesFlag);
 					new Notice(friendly.message, 8000);
 					this.streamingContent += `\n\n*⚠️ ${friendly.message}*`;
@@ -817,7 +817,7 @@ export class ChatView extends ItemView {
 			}
 		} catch (e) {
 			if ((e as Error).name !== 'AbortError') {
-				console.error('[ObsiBuddi] AI call failed:', e);
+				console.error('[Curtis] AI call failed:', e);
 				new Notice('AI request failed. Check console for details.');
 			}
 		} finally {
@@ -854,7 +854,7 @@ export class ChatView extends ItemView {
 					if (this.plugin.settings.autoSaveAssistantResponses) {
 						const folder = this.plugin.settings.autoSaveFolder || this.plugin.settings.noteSaveFolder;
 						void saveMessageAsNote(this.app, stored, folder).catch((e) =>
-							console.error('[ObsiBuddi] auto-save failed:', e)
+							console.error('[Curtis] auto-save failed:', e)
 						);
 					}
 				}
@@ -878,7 +878,7 @@ export class ChatView extends ItemView {
 		if (userIdx < 0) return;
 		const userMsg = msgs[userIdx];
 		void this.plugin.extractAndStoreFacts(userMsg.content, assistant.content).catch((e) =>
-			console.debug('[ObsiBuddi] fact extraction failed:', e)
+			console.debug('[Curtis] fact extraction failed:', e)
 		);
 	}
 
@@ -941,7 +941,7 @@ export class ChatView extends ItemView {
 			const base64 = bytesToBase64(bytes);
 			return `data:${mime};base64,${base64}`;
 		} catch (e) {
-			console.error(`[ObsiBuddi] Failed to read image ${path}:`, e);
+			console.error(`[Curtis] Failed to read image ${path}:`, e);
 			return null;
 		}
 	}
@@ -1086,7 +1086,7 @@ export class ChatView extends ItemView {
 					}
 				},
 				onError: (error: Error) => {
-					console.error('[ObsiBuddi] Stream error:', error);
+					console.error('[Curtis] Stream error:', error);
 					const friendly = friendlyError(error, currentSendHasImagesFlag);
 					new Notice(friendly.message, 8000);
 					this.streamingContent += `\n\n*⚠️ ${friendly.message}*`;
@@ -1106,7 +1106,7 @@ export class ChatView extends ItemView {
 			}
 		} catch (e) {
 			if ((e as Error).name !== 'AbortError') {
-				console.error('[ObsiBuddi] Regenerate failed:', e);
+				console.error('[Curtis] Regenerate failed:', e);
 				new Notice('Regenerate failed');
 			}
 		} finally {
@@ -1138,7 +1138,7 @@ export class ChatView extends ItemView {
 					if (this.plugin.settings.autoSaveAssistantResponses) {
 						const folder = this.plugin.settings.autoSaveFolder || this.plugin.settings.noteSaveFolder;
 						void saveMessageAsNote(this.app, stored, folder).catch((e) =>
-							console.error('[ObsiBuddi] auto-save failed:', e)
+							console.error('[Curtis] auto-save failed:', e)
 						);
 					}
 				}

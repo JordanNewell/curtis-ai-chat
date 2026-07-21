@@ -6,7 +6,7 @@ import { App, Notice, TFile } from 'obsidian';
 import type { ConversationStore } from './conversation-store';
 import { createNote, renderConversationAsMarkdown, saveMessageAsNote } from '../vault/notes';
 import { SlashHelpModal } from '../ui/modals/slash-help-modal';
-import type ObsiBuddiPlugin from '../main';
+import type CurtisPlugin from '../main';
 
 export interface SlashCommand {
 	/** Command name without leading slash. Lowercase. */
@@ -19,7 +19,7 @@ export interface SlashCommand {
 }
 
 export interface SlashContext {
-	plugin: ObsiBuddiPlugin;
+	plugin: CurtisPlugin;
 	app: App;
 	/** The full input string including the slash. */
 	raw: string;
@@ -117,7 +117,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 			const folder = ctx.plugin.settings.noteSaveFolder;
 			const name = ctx.args.trim();
 			const file = name
-				? await createNote(ctx.app, folder, name, last.content, { open: true, frontmatter: { source: 'ObsiBuddi', provider: last.provider, model: last.model } })
+				? await createNote(ctx.app, folder, name, last.content, { open: true, frontmatter: { source: 'Curtis', provider: last.provider, model: last.model } })
 				: await saveMessageAsNote(ctx.app, last, folder, { open: true });
 			if (file instanceof TFile) new Notice(`Saved: ${file.basename}`);
 			return true;
@@ -354,7 +354,7 @@ export async function handleSlashCommand(raw: string, ctx: SlashContext): Promis
 	try {
 		return await cmd.run({ ...ctx, raw, args });
 	} catch (e) {
-		console.error(`[ObsiBuddi] /${name} failed:`, e);
+		console.error(`[Curtis] /${name} failed:`, e);
 		new Notice(`/${name} failed: ${(e as Error).message}`);
 		return true;
 	}

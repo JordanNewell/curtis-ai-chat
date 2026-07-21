@@ -8,7 +8,7 @@ Right-click any text selection in a note for AI-powered transformations. Each ac
 2. Highlight some text
 3. Right-click → **AI** menu items appear at the top of the context menu
 
-Or use the command palette (`Ctrl+P`) — every action is registered as a command with the prefix *"ObsiBuddi"*.
+Or use the command palette (`Ctrl+P`) — every action is registered as a command with the prefix *"Curtis"*.
 
 ## Writing actions
 
@@ -62,6 +62,6 @@ Then register a command in `src/commands/index.ts` and optionally add it to the 
 
 ## Tips
 
-- **Hotkeys** — bind any action via Obsidian's Hotkeys settings. Look for commands starting with *"ObsiBuddi: "*.
+- **Hotkeys** — bind any action via Obsidian's Hotkeys settings. Look for commands starting with *"Curtis: "*.
 - **Multiple selections** — Obsidian supports multiple cursors; each selection gets its own AI call when you trigger an action.
 - **Long selections** — there's no hard cap, but extremely long selections may exceed your model's context window. Chunk them.

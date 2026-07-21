@@ -1,15 +1,15 @@
-// ObsiBuddi Settings — defaults, settings tab UI
+// Curtis Settings — defaults, settings tab UI
 
 import { App, Notice, PluginSettingTab, Setting, requestUrl } from 'obsidian';
-import type { ObsiBuddiSettings, ProviderConfig, ProviderDefinition } from './types';
+import type { CurtisSettings, ProviderConfig, ProviderDefinition } from './types';
 import { PROVIDER_DEFINITIONS } from './providers/registry';
 import { CustomProviderModal } from './ui/modals/custom-provider-modal';
 import { FolderSuggestModal } from './ui/modals/folder-suggest-modal';
 import { ImageSuggestModal } from './ui/modals/image-suggest-modal';
 import { setApiKeyForProvider, getSecretStorage, resolveApiKey } from './core/secrets';
-import type ObsiBuddiPlugin from './main';
+import type CurtisPlugin from './main';
 
-export const DEFAULT_SETTINGS: ObsiBuddiSettings = {
+export const DEFAULT_SETTINGS: CurtisSettings = {
 	activeProvider: 'anthropic',
 	activeModel: 'claude-sonnet-4-5-20250929',
 
@@ -47,7 +47,7 @@ export const DEFAULT_SETTINGS: ObsiBuddiSettings = {
 
 	enableMemory: true,
 	memoryCaptureMode: 'auto',
-	memoryFilePath: 'AI/ObsiBuddi Memory.md',
+	memoryFilePath: 'AI/Curtis Memory.md',
 
 	enableDailyNotesAssistant: false,
 	dailyNotesFolder: 'Daily Notes',
@@ -67,10 +67,10 @@ export const DEFAULT_SETTINGS: ObsiBuddiSettings = {
 	},
 };
 
-export class ObsiBuddiSettingTab extends PluginSettingTab {
-	plugin: ObsiBuddiPlugin;
+export class CurtisSettingTab extends PluginSettingTab {
+	plugin: CurtisPlugin;
 
-	constructor(app: App, plugin: ObsiBuddiPlugin) {
+	constructor(app: App, plugin: CurtisPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -79,7 +79,7 @@ export class ObsiBuddiSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: 'ObsiBuddi Settings' });
+		containerEl.createEl('h2', { text: 'Curtis Settings' });
 
 		// ---- Active Provider & Model ----
 		containerEl.createEl('h3', { text: 'Active Provider' });
@@ -576,10 +576,10 @@ export class ObsiBuddiSettingTab extends PluginSettingTab {
 		.setName('Memory file path')
 		.setDesc('Markdown file where facts are stored. Editable by hand.')
 		.addText((text) => {
-			text.setPlaceholder('AI/ObsiBuddi Memory.md')
+			text.setPlaceholder('AI/Curtis Memory.md')
 				.setValue(this.plugin.settings.memoryFilePath)
 				.onChange(async (val) => {
-					this.plugin.settings.memoryFilePath = val.trim() || 'AI/ObsiBuddi Memory.md';
+					this.plugin.settings.memoryFilePath = val.trim() || 'AI/Curtis Memory.md';
 					await this.plugin.saveSettings();
 					await this.plugin.memoryStore.reload(this.plugin);
 				});
@@ -588,7 +588,7 @@ export class ObsiBuddiSettingTab extends PluginSettingTab {
 			btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
 				new FolderSuggestModal(this.app, async (path) => {
 					// FolderSuggestModal picks a folder; append default filename.
-					const fname = 'ObsiBuddi Memory.md';
+					const fname = 'Curtis Memory.md';
 					this.plugin.settings.memoryFilePath = path ? `${path}/${fname}` : fname;
 					await this.plugin.saveSettings();
 					await this.plugin.memoryStore.reload(this.plugin);
@@ -612,12 +612,12 @@ export class ObsiBuddiSettingTab extends PluginSettingTab {
 		});
 
 		// ---- Support ----
-		containerEl.createEl('h3', { text: '🙏 Support ObsiBuddi' });
+		containerEl.createEl('h3', { text: '🙏 Support Curtis' });
 		const supportBlurb = containerEl.createEl('p', {
 			cls: 'ai-setting-hint ai-support-blurb',
 		});
 		supportBlurb.setText(
-			'ObsiBuddi is free and open source. If it saves you time, consider buying me a coffee or sponsoring the project on GitHub. Every contribution funds the next feature.'
+			'Curtis is free and open source. If it saves you time, consider buying me a coffee or sponsoring the project on GitHub. Every contribution funds the next feature.'
 		);
 
 		new Setting(containerEl)

@@ -2,7 +2,7 @@
 //
 // Design (lifted from obsidian-copilot's user-memory layer, see _research/):
 //   - Facts live in a user-visible bullet-list markdown file in the vault
-//     (default "AI/ObsiBuddi Memory.md"). One bullet per fact, with hidden
+//     (default "AI/Curtis Memory.md"). One bullet per fact, with hidden
 //     HTML-comment metadata (id + updatedAt) so the file reads cleanly.
 //   - Capture is LLM-gated (auto mode) or user-driven (manual). Both go
 //     through the same addFact API.
@@ -13,13 +13,13 @@
 
 import { App, Notice, TFile } from 'obsidian';
 import type { MemoryFact } from '../types';
-import type ObsiBuddiPlugin from '../main';
+import type CurtisPlugin from '../main';
 
-const DEFAULT_MEMORY_PATH = 'AI/ObsiBuddi Memory.md';
+const DEFAULT_MEMORY_PATH = 'AI/Curtis Memory.md';
 
 export class MemoryStore {
 	private app: App;
-	private plugin!: ObsiBuddiPlugin;
+	private plugin!: CurtisPlugin;
 	private facts: MemoryFact[] = [];
 	/** Path of the markdown file — pulled from settings lazily to avoid cycle. */
 	private filePath: string = DEFAULT_MEMORY_PATH;
@@ -33,7 +33,7 @@ export class MemoryStore {
 		return this.plugin?.settings?.memoryFilePath?.trim() || DEFAULT_MEMORY_PATH;
 	}
 
-	async load(plugin: ObsiBuddiPlugin): Promise<void> {
+	async load(plugin: CurtisPlugin): Promise<void> {
 		this.plugin = plugin;
 		this.app = plugin.app || this.app;
 		this.filePath = this.resolvePath();
@@ -43,7 +43,7 @@ export class MemoryStore {
 	}
 
 	/** Re-read the file from disk and rebuild the in-memory cache. */
-	async reload(plugin?: ObsiBuddiPlugin): Promise<void> {
+	async reload(plugin?: CurtisPlugin): Promise<void> {
 		if (plugin) {
 			this.plugin = plugin;
 			this.app = plugin.app || this.app;
@@ -58,7 +58,7 @@ export class MemoryStore {
 			const raw = await this.app.vault.read(file);
 			this.facts = this.parseMarkdown(raw);
 		} catch (e) {
-			console.error('[ObsiBuddi] Memory reload failed:', e);
+			console.error('[Curtis] Memory reload failed:', e);
 			this.facts = [];
 		}
 	}
@@ -83,12 +83,12 @@ export class MemoryStore {
 		}
 		await this.app.vault.create(
 			this.filePath,
-			'# ObsiBuddi Memory\n\nLong-term facts about the user, captured during chat and editable by hand. Delete a line to forget; edit a line to correct.\n\n'
+			'# Curtis Memory\n\nLong-term facts about the user, captured during chat and editable by hand. Delete a line to forget; edit a line to correct.\n\n'
 		);
 	}
 
 	/** Backwards-compat with main.ts unload. */
-	async save(_plugin?: ObsiBuddiPlugin): Promise<void> {
+	async save(_plugin?: CurtisPlugin): Promise<void> {
 		// Storage is the markdown file; persist() handles writes. No-op here.
 	}
 
@@ -239,7 +239,7 @@ export class MemoryStore {
 		try {
 			await this.app.vault.modify(file, body);
 		} catch (e) {
-			console.error('[ObsiBuddi] Memory persist failed:', e);
+			console.error('[Curtis] Memory persist failed:', e);
 		} finally {
 			// Release on the next microtask so the modify event (which fires
 			// synchronously after vault.modify resolves) is caught by the guard.
@@ -248,7 +248,7 @@ export class MemoryStore {
 	}
 
 	private serializeMarkdown(): string {
-		const header = '# ObsiBuddi Memory\n\nLong-term facts about the user, captured during chat and editable by hand. Delete a line to forget; edit a line to correct.\n\n';
+		const header = '# Curtis Memory\n\nLong-term facts about the user, captured during chat and editable by hand. Delete a line to forget; edit a line to correct.\n\n';
 		if (this.facts.length === 0) return header;
 		const bullets = this.facts
 			.map((f) => {

@@ -429,7 +429,7 @@ export class ProviderRegistry {
 					this.providers.set(def.id, provider);
 				}
 			} catch (e) {
-				console.error(`[ObsiBuddi] Failed to create provider ${def.id}:`, e);
+				console.error(`[Curtis] Failed to create provider ${def.id}:`, e);
 			}
 		}
 
@@ -444,7 +444,7 @@ export class ProviderRegistry {
 					this.providers.set(def.id, provider);
 				}
 			} catch (e) {
-				console.error(`[ObsiBuddi] Failed to create custom provider ${def.id}:`, e);
+				console.error(`[Curtis] Failed to create custom provider ${def.id}:`, e);
 			}
 		}
 
@@ -469,7 +469,7 @@ export class ProviderRegistry {
 		// a provider with an empty endpoint (it would throw `Invalid URL` on
 		// the first request). The user sets the URL via the settings field.
 		if (!endpoint) {
-			console.warn(`[ObsiBuddi] Provider ${def.id} has no endpoint — set one in settings.`);
+			console.warn(`[Curtis] Provider ${def.id} has no endpoint — set one in settings.`);
 			return null;
 		}
 
@@ -527,7 +527,7 @@ export class ProviderRegistry {
 				throw: false,
 			});
 			if (resp.status >= 400) {
-				console.debug(`[ObsiBuddi] Discovery for ${def.id} returned ${resp.status}`);
+				console.debug(`[Curtis] Discovery for ${def.id} returned ${resp.status}`);
 				return [];
 			}
 
@@ -560,7 +560,7 @@ export class ProviderRegistry {
 			provider.setModels?.(merged);
 			return merged;
 		} catch (e) {
-			console.debug(`[ObsiBuddi] Model discovery failed for ${def.id}:`, e);
+			console.debug(`[Curtis] Model discovery failed for ${def.id}:`, e);
 			return [];
 		}
 	}
@@ -625,7 +625,7 @@ export class ProviderRegistry {
 				const provider = this.createProviderFromDefinition(def, config);
 				if (provider) this.providers.set(id, provider);
 			} catch (e) {
-				console.error(`[ObsiBuddi] Failed to update provider ${id}:`, e);
+				console.error(`[Curtis] Failed to update provider ${id}:`, e);
 			}
 		} else {
 			this.providers.delete(id);

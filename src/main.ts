@@ -1,8 +1,8 @@
-// ObsiBuddi — Main Plugin Entry Point
+// Curtis — Main Plugin Entry Point
 
 import { Editor, Notice, Plugin } from 'obsidian';
-import type { ObsiBuddiSettings, AIMessage, MessageContent, TokenUsage, AIProvider } from './types';
-import { DEFAULT_SETTINGS, ObsiBuddiSettingTab } from './settings';
+import type { CurtisSettings, AIMessage, MessageContent, TokenUsage, AIProvider } from './types';
+import { DEFAULT_SETTINGS, CurtisSettingTab } from './settings';
 import { ProviderRegistry } from './providers/registry';
 import { chatStream } from './providers/transport';
 import { EventBus } from './core/events';
@@ -18,8 +18,8 @@ import { registerCommands } from './commands';
 import { registerContextMenu } from './commands/context-menu';
 import { SELECTION_ACTIONS } from './commands/selection';
 
-export default class ObsiBuddiPlugin extends Plugin {
-	settings!: ObsiBuddiSettings;
+export default class CurtisPlugin extends Plugin {
+	settings!: CurtisSettings;
 	eventBus!: EventBus;
 	hookSystem!: HookSystem;
 	toolRegistry!: ToolRegistry;
@@ -36,10 +36,10 @@ export default class ObsiBuddiPlugin extends Plugin {
 		//    < 1.11.4 — keys stay in plaintext with a one-time warning).
 		const { migrated, skipped } = await migrateSecretsToKeychain(this.app, this.settings);
 		if (migrated.length > 0) {
-			console.log(`[ObsiBuddi] Migrated ${migrated.length} API key(s) to OS keychain: ${migrated.join(', ')}`);
+			console.log(`[Curtis] Migrated ${migrated.length} API key(s) to OS keychain: ${migrated.join(', ')}`);
 			await this.saveSettings();
 		} else if (skipped) {
-			console.warn('[ObsiBuddi] OS keychain unavailable (Obsidian < 1.11.4). API keys remain in plaintext data.json.');
+			console.warn('[Curtis] OS keychain unavailable (Obsidian < 1.11.4). API keys remain in plaintext data.json.');
 		}
 
 		// 3. Initialize core services
@@ -73,20 +73,20 @@ export default class ObsiBuddiPlugin extends Plugin {
 		registerContextMenu(this);
 
 		// 7. Settings tab
-		this.addSettingTab(new ObsiBuddiSettingTab(this.app, this));
+		this.addSettingTab(new CurtisSettingTab(this.app, this));
 
 		// 8. Ribbon icon
 		this.addRibbonIcon('bot', 'Open AI Chat', () => {
 			this.activateChatView();
 		});
 
-		console.log('[ObsiBuddi] Plugin loaded');
+		console.log('[Curtis] Plugin loaded');
 	}
 
 	onunload(): void {
 		this.conversationStore.save();
 		this.memoryStore.save(this);
-		console.log('[ObsiBuddi] Plugin unloaded');
+		console.log('[Curtis] Plugin unloaded');
 	}
 
 	async loadSettings(): Promise<void> {
@@ -199,7 +199,7 @@ export default class ObsiBuddiPlugin extends Plugin {
 				// omitting the case keeps the switch exhaustive over real values.
 			}
 		} catch (e) {
-			console.error('[ObsiBuddi] Selection processing failed:', e);
+			console.error('[Curtis] Selection processing failed:', e);
 			new Notice('AI request failed');
 		}
 	}
@@ -267,7 +267,7 @@ export default class ObsiBuddiPlugin extends Plugin {
 					usage.completionTokens
 				);
 				if (cost !== null && cost > 0) {
-					console.debug(`[ObsiBuddi] Cost: $${cost.toFixed(6)}`);
+					console.debug(`[Curtis] Cost: $${cost.toFixed(6)}`);
 				}
 			}
 		};
@@ -405,7 +405,7 @@ export default class ObsiBuddiPlugin extends Plugin {
 				}
 			}
 		} catch (e) {
-			console.debug('[ObsiBuddi] fact extraction failed (non-fatal):', e);
+			console.debug('[Curtis] fact extraction failed (non-fatal):', e);
 		}
 	}
 

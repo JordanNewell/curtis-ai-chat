@@ -26,7 +26,7 @@ export interface Migration {
 export const MIGRATIONS: Migration[] = [
 	{
 		version: 1,
-		description: 'Migrate from legacy MultiProviderPluginSettings to ObsiBuddiSettings',
+		description: 'Migrate from legacy MultiProviderPluginSettings to CurtisSettings',
 		migrate: (settings: SettingsData): SettingsData => {
 			// Detect legacy format (has 'provider' as claude/glm/gemini string)
 			if (settings.provider && !settings.activeProvider) {
@@ -108,7 +108,7 @@ export function runMigrations(settings: SettingsData): SettingsData {
 		return settings;
 	}
 
-	console.log(`[ObsiBuddi] Migrating settings from version ${currentVersion} to ${CURRENT_VERSION}`);
+	console.log(`[Curtis] Migrating settings from version ${currentVersion} to ${CURRENT_VERSION}`);
 
 	const pending = MIGRATIONS.filter(m => m.version > currentVersion);
 	pending.sort((a, b) => a.version - b.version);
@@ -117,11 +117,11 @@ export function runMigrations(settings: SettingsData): SettingsData {
 
 	for (const migration of pending) {
 		try {
-			console.log(`[ObsiBuddi] Running migration: v${migration.version} — ${migration.description}`);
+			console.log(`[Curtis] Running migration: v${migration.version} — ${migration.description}`);
 			result = migration.migrate(result);
 			result._version = migration.version;
 		} catch (err) {
-			console.error(`[ObsiBuddi] Migration v${migration.version} failed:`, err);
+			console.error(`[Curtis] Migration v${migration.version} failed:`, err);
 			// Don't abort — save what we have and continue
 		}
 	}

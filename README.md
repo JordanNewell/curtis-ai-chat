@@ -1,4 +1,4 @@
-<h1 align="center">ObsiBuddi</h1>
+<h1 align="center">Curtis</h1>
 
 <p align="center">A genuinely agnostic AI chat for Obsidian. Thirty-plus providers, one sidebar. Local-first when you want it, cloud when you don't.</p>
 
@@ -17,11 +17,11 @@
 
 ## What is this
 
-ObsiBuddi is an AI chat that lives in your Obsidian sidebar. Ask anything; the answer streams back into the panel. Right-click a selection in any note and improve, summarize, TL;DR, refactor, or convert it in place. Drag an image in and ask about it. The chat history, your preferences, and your attachments all stay in your vault.
+Curtis is an AI chat that lives in your Obsidian sidebar. Ask anything; the answer streams back into the panel. Right-click a selection in any note and improve, summarize, TL;DR, refactor, or convert it in place. Drag an image in and ask about it. The chat history, your preferences, and your attachments all stay in your vault.
 
 It works with **any provider you have a key for** — Anthropic, OpenAI, Gemini, Z.ai, Mistral, Groq, xAI, Perplexity, Cohere, DeepSeek, OpenRouter, and 18 more — plus **Ollama and LM Studio** for fully local, offline AI. Switch providers from the header; the chat keeps going.
 
-## Why ObsiBuddi
+## Why Curtis
 
 - **Your data stays yours.** Conversations live in `localStorage`. Image attachments are saved as real files in your `attachments/` folder — visible, auditable, deletable. Memory is a markdown file you can read and edit. No telemetry. No tracking. No "phone home."
 - **No vendor lock-in.** Thirty providers ship built-in. Add any OpenAI-compatible endpoint as a custom provider in 30 seconds. Switch models mid-conversation.
@@ -72,7 +72,7 @@ See [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md) for the full reference.
 
 ### Long-term memory
 
-ObsiBuddi remembers durable facts about you across conversations — preferences, identity, projects, standing instructions. Facts live in a markdown file in your vault (`AI/ObsiBuddi Memory.md` by default) so you can read, edit, and correct them by hand.
+Curtis remembers durable facts about you across conversations — preferences, identity, projects, standing instructions. Facts live in a markdown file in your vault (`AI/Curtis Memory.md` by default) so you can read, edit, and correct them by hand.
 
 - **Auto-capture**: after each turn, a background model call extracts 0–3 durable facts as JSON
 - **Manual**: `/remember <fact>` or right-click any selection → **Save to memory**
@@ -92,30 +92,30 @@ See [docs/MEMORY.md](docs/MEMORY.md) for the design and file format.
 ## Installation
 
 > [!TIP]
-> ObsiBuddi isn't in the community plugin store yet. For now, install manually (below) or via [BRAT](https://github.com/TfTHacker/obsidian42-brat).
+> Curtis isn't in the community plugin store yet. For now, install manually (below) or via [BRAT](https://github.com/TfTHacker/obsidian42-brat).
 
 ### Manual install
 
 1. Download the [latest release](../../releases) `main.js`, `manifest.json`, and `styles.css`.
-2. In your vault, create `.obsidian/plugins/obsi-buddi/`.
+2. In your vault, create `.obsidian/plugins/curtis/`.
 3. Copy the three files into that folder.
-4. Open **Settings → Community plugins**, refresh the list, and enable **ObsiBuddi**.
+4. Open **Settings → Community plugins**, refresh the list, and enable **Curtis**.
 
 ### From source (developers)
 
 ```bash
-git clone https://github.com/jordannewell/obsidian-buddi.git
-cd obsidian-buddi
+git clone https://github.com/JordanNewell/curtis-chat.git
+cd curtis
 npm install
 npm run build
 ```
 
-Copy `main.js`, `manifest.json`, `styles.css` into `<vault>/.obsidian/plugins/obsi-buddi/`.
+Copy `main.js`, `manifest.json`, `styles.css` into `<vault>/.obsidian/plugins/curtis/`.
 
 ### First-run setup
 
 1. Open the chat panel via the **ribbon icon** (robot) or `Ctrl+Shift+G`.
-2. In **Settings → ObsiBuddi → Provider Configuration**, enable a provider and paste your API key.
+2. In **Settings → Curtis → Provider Configuration**, enable a provider and paste your API key.
 3. Pick a model from the header dropdown.
 4. Start typing.
 
@@ -126,7 +126,7 @@ Copy `main.js`, `manifest.json`, `styles.css` into `<vault>/.obsidian/plugins/ob
 
 ### Mobile
 
-ObsiBuddi works on iOS and Android with a few caveats:
+Curtis works on iOS and Android with a few caveats:
 
 - Hover-only elements (per-message action toolbar, code-block copy buttons) are always visible on touch devices at reduced opacity. Tap them directly.
 - Touch targets are sized to Apple HIG minimums (44pt send button, 40pt header icons).
@@ -171,7 +171,7 @@ See [docs/PROVIDERS.md](docs/PROVIDERS.md) for the full list with endpoints, aut
 - **Memory** is a markdown file in your vault — readable, editable, never sent anywhere except the active provider.
 
 > [!WARNING]
-> Memory injection is inherent to any AI memory feature. If you `/remember` malicious text (or import a malicious note that tricks you into saving it), it gets injected into every future prompt. Audit `AI/ObsiBuddi Memory.md` if you're unsure.
+> Memory injection is inherent to any AI memory feature. If you `/remember` malicious text (or import a malicious note that tricks you into saving it), it gets injected into every future prompt. Audit `AI/Curtis Memory.md` if you're unsure.
 
 ## Roadmap
 
@@ -192,17 +192,17 @@ See the [open issues](../../issues) for the live list.
 
 PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style, and the audit checklist all changes go through.
 
-## 🙏 Support ObsiBuddi
+## 🙏 Support Curtis
 
-If ObsiBuddi saves you time, consider sponsoring the project or buying me a coffee. Every contribution funds the servers, the late-night audits, and the next feature.
+If Curtis saves you time, consider sponsoring the project or buying me a coffee. Every contribution funds the servers, the late-night audits, and the next feature.
 
 - ☕ [Buy Me a Coffee](https://www.buymeacoffee.com/jordannewell)
 - 💛 [GitHub Sponsors](https://github.com/sponsors/jordannewell)
 
-The donate button is also available in **Settings → ObsiBuddi** inside Obsidian.
+The donate button is also available in **Settings → Curtis** inside Obsidian.
 
 > [!NOTE]
-> ObsiBuddi is and will remain **free and open source** under the MIT license. Every feature — 30+ providers, memory, image attachments, slash commands — works with your own API keys. Sponsorship is voluntary and appreciated, never required.
+> Curtis is and will remain **free and open source** under the MIT license. Every feature — 30+ providers, memory, image attachments, slash commands — works with your own API keys. Sponsorship is voluntary and appreciated, never required.
 
 ## License
 

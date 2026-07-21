@@ -95,7 +95,7 @@ export class HookSystem {
 			try {
 				result = (await handler(result, ctx)) as HookDefinitions[K];
 			} catch (err) {
-				console.error(`[ObsiBuddi] Hook error in "${hook}":`, err);
+				console.error(`[Curtis] Hook error in "${hook}":`, err);
 				// Continue pipeline even if one hook fails
 			}
 		}

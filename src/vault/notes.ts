@@ -93,7 +93,7 @@ export async function saveImageToVault(
 		const file = await app.vault.createBinary(path, bytes as unknown as ArrayBuffer);
 		return file;
 	} catch (e) {
-		console.error('[ObsiBuddi] saveImageToVault failed:', e);
+		console.error('[Curtis] saveImageToVault failed:', e);
 		new Notice(`Failed to save image: ${(e as Error).message}`);
 		return null;
 	}
@@ -160,7 +160,7 @@ export async function createNote(
 		}
 		return file;
 	} catch (e) {
-		console.error('[ObsiBuddi] createNote failed:', e);
+		console.error('[Curtis] createNote failed:', e);
 		new Notice(`Failed to create note: ${(e as Error).message}`);
 		return null;
 	}
@@ -184,7 +184,7 @@ export async function saveMessageAsNote(
 		.slice(0, 19);
 	const basename = deriveNoteBasename(msg.content, `AI Response ${stamp}`);
 	const frontmatter = {
-		source: 'ObsiBuddi',
+		source: 'Curtis',
 		provider: msg.provider || '',
 		model: msg.model || '',
 		created: new Date(msg.timestamp).toISOString(),

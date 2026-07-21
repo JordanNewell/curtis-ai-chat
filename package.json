@@ -1,7 +1,7 @@
 {
-	"name": "obsi-buddi",
+	"name": "curtis",
 	"version": "3.0.0",
-	"description": "The best agnostic AI assistant for Obsidian — 13+ providers, sidebar chat, vault RAG, tool calling",
+	"description": "Curtis — your polyglot AI chat for Obsidian. 30+ providers, image attachments, memory, slash commands.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",

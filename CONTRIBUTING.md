@@ -7,8 +7,8 @@ PRs welcome. This doc covers dev setup, code style, and the audit every change g
 Requirements: Node 20+, Obsidian 1.11.4+, a vault for testing.
 
 ```bash
-git clone https://github.com/jordannewell/obsidian-buddi.git
-cd obsidian-buddi
+git clone https://github.com/JordanNewell/curtis-chat.git
+cd curtis
 npm install
 ```
 
@@ -19,10 +19,10 @@ npm run build      # type-check + production bundle
 npm run dev        # watch mode (rebuilds on save)
 ```
 
-The build writes `main.js`, `styles.css` to the repo root. Copy them (plus `manifest.json`) into your vault's `.obsidian/plugins/obsi-buddi/` folder to test:
+The build writes `main.js`, `styles.css` to the repo root. Copy them (plus `manifest.json`) into your vault's `.obsidian/plugins/curtis/` folder to test:
 
 ```bash
-cp main.js manifest.json styles.css /path/to/vault/.obsidian/plugins/obsi-buddi/
+cp main.js manifest.json styles.css /path/to/vault/.obsidian/plugins/curtis/
 ```
 
 Then reload the plugin in Obsidian (Settings → Community plugins → toggle off/on).
@@ -30,9 +30,9 @@ Then reload the plugin in Obsidian (Settings → Community plugins → toggle of
 ### Recommended: symlink for fast iteration
 
 ```bash
-ln -s /path/to/repo/main.js /path/to/vault/.obsidian/plugins/obsi-buddi/main.js
-ln -s /path/to/repo/manifest.json /path/to/vault/.obsidian/plugins/obsi-buddi/manifest.json
-ln -s /path/to/repo/styles.css /path/to/vault/.obsidian/plugins/obsi-buddi/styles.css
+ln -s /path/to/repo/main.js /path/to/vault/.obsidian/plugins/curtis/main.js
+ln -s /path/to/repo/manifest.json /path/to/vault/.obsidian/plugins/curtis/manifest.json
+ln -s /path/to/repo/styles.css /path/to/vault/.obsidian/plugins/curtis/styles.css
 ```
 
 Now `npm run dev` rebuilds straight into the vault. Reload plugin to pick up changes.
@@ -42,7 +42,7 @@ Now `npm run dev` rebuilds straight into the vault. Reload plugin to pick up cha
 ```
 src/
 ├── main.ts                # Plugin entry — onload/onunload, callAI, extractAndStoreFacts
-├── settings.ts            # DEFAULT_SETTINGS + ObsiBuddiSettingTab
+├── settings.ts            # DEFAULT_SETTINGS + CurtisSettingTab
 ├── types.ts               # Shared TypeScript interfaces
 ├── chat/
 │   ├── view.ts            # ChatView (the sidebar ItemView)
@@ -90,7 +90,7 @@ Every PR goes through a line-by-line audit before merge. Run through this list y
 - [ ] No `eval`, `new Function`, or `innerHTML` with user input
 - [ ] No new plaintext-secret storage (use `setApiKeyForProvider`)
 - [ ] No new network endpoints (or document them in `docs/PROVIDERS.md`)
-- [ ] No orphan settings — every new field in `ObsiBuddiSettings` has a UI control AND a consumer
+- [ ] No orphan settings — every new field in `CurtisSettings` has a UI control AND a consumer
 - [ ] No orphan CSS classes — every new class has a matching DOM element
 - [ ] Streaming paths handle errors via `onError` (not just try/catch)
 - [ ] Image content always has a text fallback (no empty `content` strings)

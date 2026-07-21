@@ -1,7 +1,7 @@
 import { Plugin, Editor, MarkdownView } from 'obsidian';
-import type ObsiBuddiPlugin from '../main';
+import type CurtisPlugin from '../main';
 
-export function registerCommands(plugin: ObsiBuddiPlugin): void {
+export function registerCommands(plugin: CurtisPlugin): void {
 	// ── Chat Commands ──
 	plugin.addCommand({
 		id: 'open-chat',

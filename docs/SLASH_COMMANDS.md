@@ -39,7 +39,7 @@ Save the last assistant response as a new note in your configured Note save fold
 - Without a name: the basename is derived from the first line of the response
 - With a name: uses what you provide
 - Opens the note in a new split
-- Frontmatter records `source: ObsiBuddi`, `provider`, `model`, `created`
+- Frontmatter records `source: Curtis`, `provider`, `model`, `created`
 - Embeds any attached images as `![[filename.png]]`
 
 ```
@@ -108,7 +108,7 @@ Set the system prompt for the session. Without an argument, resets to the defaul
 
 ### `/remember <fact>`
 
-Manually save a durable fact to long-term memory. The fact is added to `AI/ObsiBuddi Memory.md` and injected into every future prompt.
+Manually save a durable fact to long-term memory. The fact is added to `AI/Curtis Memory.md` and injected into every future prompt.
 
 ```
 /remember I prefer concise answers without preamble

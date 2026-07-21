@@ -1,5 +1,5 @@
 import { Menu, Editor, MarkdownView, Notice } from 'obsidian';
-import type ObsiBuddiPlugin from '../main';
+import type CurtisPlugin from '../main';
 
 interface ContextAction {
 	id: string;
@@ -29,7 +29,7 @@ const CONTEXT_ACTIONS: ContextAction[] = [
 	{ id: 'ai-chat', label: 'Ask AI about selection', action: 'chat', section: 'ai-bottom' },
 ];
 
-export function registerContextMenu(plugin: ObsiBuddiPlugin): void {
+export function registerContextMenu(plugin: CurtisPlugin): void {
 	// Register workspace menu event
 	plugin.registerEvent(
 		plugin.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {

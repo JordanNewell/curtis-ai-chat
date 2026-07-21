@@ -15,7 +15,7 @@ export class ConversationStore {
 			const entries: [string, Conversation][] = JSON.parse(raw);
 			this.conversations = new Map(entries);
 		} catch (e) {
-			console.error('[ObsiBuddi] Failed to load conversations:', e);
+			console.error('[Curtis] Failed to load conversations:', e);
 			this.conversations = new Map();
 		}
 	}
@@ -25,7 +25,7 @@ export class ConversationStore {
 			const entries = Array.from(this.conversations.entries());
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 		} catch (e) {
-			console.error('[ObsiBuddi] Failed to save conversations:', e);
+			console.error('[Curtis] Failed to save conversations:', e);
 		}
 	}
 
