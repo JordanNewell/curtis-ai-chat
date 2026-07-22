@@ -1,6 +1,11 @@
-<h1 align="center">Curtis</h1>
-
-<p align="center">A genuinely agnostic AI chat for Obsidian. Thirty-plus providers, one sidebar. Local-first when you want it, cloud when you don't.</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/JordanNewell/curtis-chat/master/assets/hero.png" alt="Curtis — A genuinely agnostic AI chat for Obsidian. Thirty-plus providers, one sidebar." width="100%">
+  <br>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://github.com/JordanNewell/curtis-chat/releases"><img src="https://img.shields.io/github/v/release/JordanNewell/curtis-chat?display_name=tag&include_prereleases" alt="latest release"></a>
+  <img src="https://img.shields.io/badge/providers-30%2B-purple" alt="providers">
+  <img src="https://img.shields.io/badge/platform-Obsidian-violet" alt="platform">
+</p>
 
 <p align="center">
   <a href="#installation">Installation</a> ·

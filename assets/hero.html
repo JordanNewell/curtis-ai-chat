@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: #14101f; }
+  html, body { width: 1280px; height: 400px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(ellipse at top right, rgba(168, 85, 247, 0.15), transparent 60%),
+      linear-gradient(135deg, #14101f 0%, #1a1429 60%, #08050f 100%);
+    color: #e6edf3;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    display: flex;
+    align-items: center;
+    padding: 0 80px;
+    position: relative;
+  }
+  body::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(168, 85, 247, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(168, 85, 247, 0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+  }
+  .sidebar {
+    position: absolute;
+    right: 64px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.5;
+    width: 280px;
+    background: rgba(20, 16, 31, 0.7);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #b1bac4;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+  .sidebar .sb-head {
+    color: #a855f7;
+    font-weight: 600;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .sidebar .msg { margin-bottom: 10px; }
+  .sidebar .you { color: #7d8590; font-size: 10px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .sidebar .ai { color: #a855f7; font-size: 10px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .sidebar .body { color: #e6edf3; font-size: 12px; }
+  .sidebar .ai .body { color: #d2a8ff; }
+  .sidebar .typing { color: #7d8590; font-style: italic; font-size: 11px; }
+  .sidebar .typing::after {
+    content: '●●●';
+    color: #a855f7;
+    letter-spacing: 2px;
+    margin-left: 4px;
+  }
+  .content {
+    position: relative;
+    z-index: 2;
+    max-width: 740px;
+  }
+  .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 22px;
+  }
+  .logo {
+    width: 56px;
+    height: 64px;
+    filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.6));
+  }
+  .eyebrow {
+    font-family: Consolas, 'Cascadia Code', monospace;
+    color: #a855f7;
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  h1 {
+    font-size: 76px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1;
+    margin-bottom: 14px;
+    background: linear-gradient(180deg, #ffffff 0%, #b1bac4 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .tagline {
+    color: #b1bac4;
+    font-size: 19px;
+    line-height: 1.5;
+    margin-bottom: 30px;
+    max-width: 600px;
+  }
+  .chips {
+    display: flex;
+    gap: 10px;
+  }
+  .chip {
+    font-family: Consolas, 'Cascadia Code', monospace;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 7px 14px;
+    border: 1px solid rgba(168, 85, 247, 0.4);
+    border-radius: 4px;
+    background: rgba(168, 85, 247, 0.08);
+    color: #e6edf3;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.05em;
+  }
+  .chip::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #a855f7;
+    box-shadow: 0 0 6px #a855f7;
+  }
+</style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="sb-head"><span>Curtis</span><span style="color:#7d8590">Claude 4.6</span></div>
+    <div class="msg">
+      <div class="you">You</div>
+      <div class="body">Summarize my meeting notes from yesterday</div>
+    </div>
+    <div class="msg">
+      <div class="ai">Curtis</div>
+      <div class="body">Three decisions: ship v3.0.1 by Friday, defer the memory rewrite to next sprint, and chase down the Linear OAuth scope bug. Full notes in <span style="color:#a855f7;text-decoration:underline;">2026-07-21-standup.md</span></div>
+    </div>
+    <div class="msg">
+      <div class="you">You</div>
+      <div class="body">Draft a follow-up to the team</div>
+    </div>
+    <div class="msg">
+      <div class="ai">Curtis</div>
+      <div class="body typing">Drafting</div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="logo-row">
+      <svg class="logo" viewBox="0 0 56 64" fill="none">
+        <path d="M8 14 C8 10 11 8 14 8 L42 8 C46 8 48 11 48 14 L48 36 C48 40 45 42 42 42 L22 42 L12 52 L14 42 C10 42 8 39 8 36 Z"
+              stroke="#a855f7" stroke-width="2.5" fill="rgba(168, 85, 247, 0.12)"/>
+        <circle cx="20" cy="25" r="2.5" fill="#a855f7"/>
+        <circle cx="28" cy="25" r="2.5" fill="#a855f7"/>
+        <circle cx="36" cy="25" r="2.5" fill="#a855f7"/>
+      </svg>
+      <div class="eyebrow">Open-source · MIT · v3.0.1</div>
+    </div>
+    <h1>Curtis</h1>
+    <p class="tagline">A genuinely agnostic AI chat for Obsidian. Thirty-plus providers, one sidebar. Local-first when you want it, cloud when you don't.</p>
+    <div class="chips">
+      <span class="chip">30+ providers</span>
+      <span class="chip">Ollama + cloud</span>
+      <span class="chip">local-first</span>
+    </div>
+  </div>
+</body>
+</html>
