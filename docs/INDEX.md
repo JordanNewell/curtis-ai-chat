@@ -34,6 +34,7 @@ Reference documentation for every feature. Start here, follow links to the detai
 | 📝 **[CHANGELOG](../CHANGELOG.md)** | All notable changes per release. Keep-a-Changelog format. |
 | 🛠️ **[CONTRIBUTING](../CONTRIBUTING.md)** | Dev setup, project structure, code style, audit checklist, how to add providers/tools/commands. |
 | 💸 **[MONETIZATION](MONETIZATION.md)** | Strategy: plugin stays free, adjacent products fund the line. Triggers, timeline, what charges. |
+| 🚀 **[Launch playbook](launch-playbooks/v1.0.0/)** | v1.0.0 launch playbook — curated release notes, submission steps, draft community posts. Maintainer-facing; template for future releases. |
 | ⚖️ **[LICENSE](../LICENSE)** | MIT. |
 
 ## By use case
