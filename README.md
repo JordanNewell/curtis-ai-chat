@@ -90,7 +90,7 @@ Select text in any note → `Ctrl+Shift+R` (or right-click → **Rewrite with AI
 
 - Cursor-style review workflow
 - Reuses your active provider and model
-- Word-level diff and inline editor decorations planned for v4.1.0
+- Word-level diff and inline editor decorations planned for v1.1
 
 → [docs/DIFF_REWRITE.md](docs/DIFF_REWRITE.md)
 
@@ -265,8 +265,8 @@ Curtis AI Chat works on iOS and Android with a few caveats:
 
 ## Roadmap
 
-- [ ] Curtis Agent: Anthropic, Gemini, and Ollama provider support (v4.1.0)
-- [ ] Inline diff rewrite: word-level diff and inline editor decorations (v4.1.0)
+- [ ] Curtis Agent: Anthropic, Gemini, and Ollama provider support (v1.1)
+- [ ] Inline diff rewrite: word-level diff and inline editor decorations (v1.1)
 - [ ] Voice: streaming TTS, wake-word detection
 - [ ] Conversation branching UI
 - [ ] Plugin settings import/export
