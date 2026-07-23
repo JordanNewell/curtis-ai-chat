@@ -32,6 +32,7 @@ Reference documentation for every feature. Start here, follow links to the detai
 | 📦 **[README](../README.md)** | Overview, install, quick start, feature summary, mobile notes. |
 | 📝 **[CHANGELOG](../CHANGELOG.md)** | All notable changes per release. Keep-a-Changelog format. |
 | 🛠️ **[CONTRIBUTING](../CONTRIBUTING.md)** | Dev setup, project structure, code style, audit checklist, how to add providers/tools/commands. |
+| 💸 **[MONETIZATION](MONETIZATION.md)** | Strategy: plugin stays free, adjacent products fund the line. Triggers, timeline, what charges. |
 | ⚖️ **[LICENSE](../LICENSE)** | MIT. |
 
 ## By use case
