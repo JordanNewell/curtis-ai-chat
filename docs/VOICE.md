@@ -2,7 +2,7 @@
 
 > Talk to Curtis. Listen to Curtis. Hands-free.
 
-Two voice features shipped in v4.0.0:
+Two voice features shipped in v1.0:
 
 - **Speech-to-text (STT)** — click the mic button, talk, transcribed text lands in the chat input. Powered by OpenAI Whisper.
 - **Text-to-speech (TTS)** — click the speaker button on any assistant message to hear it read aloud. Uses your browser's built-in `speechSynthesis`. No API key required.
@@ -72,7 +72,7 @@ Before synthesis, the plugin strips markdown so the voice reads naturally instea
 > [!WARNING]
 > **STT sends your audio to OpenAI.** The recording is uploaded to `api.openai.com` for transcription. Don't dictate sensitive content you wouldn't put in a chat message. TTS is fully local — no text leaves your machine.
 
-For fully private voice, there's no in-plugin local Whisper integration yet. Run [whisper.cpp](https://github.com/ggerganov/whisper.cpp) locally and configure a custom OpenAI-compatible STT endpoint when v4.1.0 adds that setting.
+For fully private voice, there's no in-plugin local Whisper integration yet. Run [whisper.cpp](https://github.com/ggerganov/whisper.cpp) locally and configure a custom OpenAI-compatible STT endpoint when v1.1 adds that setting.
 
 ## Mobile considerations
 

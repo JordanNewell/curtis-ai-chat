@@ -22,7 +22,7 @@ Once enabled, the model picker will show a 🔧 **Tools** pill next to function-
 
 ## Provider compatibility
 
-The agent uses OpenAI-style function calling. For v4.0.0, only **OpenAI-compatible providers** are supported.
+The agent uses OpenAI-style function calling. For v1.0, only **OpenAI-compatible providers** are supported.
 
 | Provider | Agent support |
 |---|---|
@@ -34,16 +34,16 @@ The agent uses OpenAI-style function calling. For v4.0.0, only **OpenAI-compatib
 | DeepSeek | ✅ |
 | Cohere | ✅ |
 | Custom OpenAI-compat endpoints | ✅ |
-| **Anthropic** | ⚠️ v4.1.0 |
-| **Google Gemini** | ⚠️ v4.1.0 |
-| **Ollama / LM Studio** | ⚠️ v4.1.0 |
+| **Anthropic** | ⚠️ v1.1 |
+| **Google Gemini** | ⚠️ v1.1 |
+| **Ollama / LM Studio** | ⚠️ v1.1 |
 
 > [!NOTE]
-> Anthropic, Gemini, and Ollama use different function-calling shapes. Wiring them in is tracked for v4.1.0. For now, route through OpenRouter if you need Claude/Gemini with tools.
+> Anthropic, Gemini, and Ollama use different function-calling shapes. Wiring them in is tracked for v1.1. For now, route through OpenRouter if you need Claude/Gemini with tools.
 
 ## Built-in tools
 
-Nine tools ship with the plugin. All are read/write against your vault — there are no network tools (web search, URL fetch) yet.
+Nine tools ship with the plugin, all read/write against your vault. Two additional **web tools** (`web_search`, `read_url`) are available but opt-in — see [Web tools](#web-tools) below.
 
 | Tool | Description | Parameters |
 |---|---|---|
@@ -56,6 +56,17 @@ Nine tools ship with the plugin. All are read/write against your vault — there
 | `get_backlinks` | Get notes that link to a given note | `path` (required) |
 | `get_current_note` | Get content + metadata of the note open in the editor | (none) |
 | `calculator` | Evaluate a math expression | `expression` (string, required) |
+
+## Web tools
+
+Two network tools let the AI look things up outside your vault. **Off by default** — Curtis is vault-first. Opt in at **Settings → Curtis AI Chat → Agent → Enable web tools**. The toggle hot-reloads; no Obsidian restart needed.
+
+| Tool | Description | Parameters |
+|---|---|---|
+| `web_search` | Search the web via DuckDuckGo (free, no API key) | `query` (string, required), `max_results` (number, default 5) |
+| `read_url` | Fetch a URL's main content as clean text via the Jina reader proxy | `url` (string, required) |
+
+**Privacy:** `web_search` queries DuckDuckGo. `read_url` proxies through `r.jina.ai` to extract article content. Both leak the query/URL to those services. Vault contents are never sent — only the query string the model decides to issue.
 
 ## Example use cases
 
@@ -99,7 +110,7 @@ Toggle it off at **Settings → Agent → Enable**. When disabled, the plugin ne
 - **Tool calls go to your AI provider.** The model sees the tool definitions (name, description, parameter schema) as part of the request. When a tool executes, the result string is sent back to the provider in the next turn.
 - **Vault contents are sent when read.** If the model calls `read_note("Projects/Aurora.md")`, the contents of that note leave your machine (on a cloud provider).
 - **Tool definitions themselves are not sensitive** — they're standard schema descriptions, no user data.
-- For fully offline agent use, switch to Ollama once v4.1.0 lands. Until then, the agent requires a cloud OpenAI-compatible provider.
+- For fully offline agent use, switch to Ollama once v1.1 lands. Until then, the agent requires a cloud OpenAI-compatible provider.
 
 ## Adding custom tools
 
@@ -131,7 +142,7 @@ There's no conflict resolution — the model just sees more context. If attachme
 
 ## Roadmap
 
-- Anthropic, Gemini, Ollama provider support (v4.1.0)
+- Anthropic, Gemini, Ollama provider support (v1.1)
 - Web search tool
 - URL fetch tool
 - Per-call confirmation mode (opt-in human-in-the-loop)

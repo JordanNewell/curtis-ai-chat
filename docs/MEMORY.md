@@ -1,6 +1,6 @@
 # Memory
 
-Curtis AI Chat remembers durable facts about you across conversations. This doc explains what gets stored, where, how it's used, how to manage it, and the editing UI new in v4.0.0.
+Curtis AI Chat remembers durable facts about you across conversations. This doc explains what gets stored, where, how it's used, how to manage it, and the editing UI new in v1.0.
 
 ## What memory is for
 
@@ -82,18 +82,18 @@ Every prompt includes a `## What you know about the user` block appended to the 
 | Open the file | `/memory open` or Settings → Memory → Open |
 | Forget one fact | `/forget <substring>` |
 | Clear everything | `/memory clear` or Settings → Memory → Clear |
-| **Edit a fact** | **Settings → Memory → fact list → Edit (new in v4.0.0)** |
-| **Delete a fact** | **Settings → Memory → fact list → Delete (new in v4.0.0)** |
+| **Edit a fact** | **Settings → Memory → fact list → Edit (new in v1.0)** |
+| **Delete a fact** | **Settings → Memory → fact list → Delete (new in v1.0)** |
 | Add a fact by hand | Open the file and add a new bullet, or use `/remember` |
 
-## Memory editing UI (new in v4.0.0)
+## Memory editing UI (new in v1.0)
 
-Before v4.0.0, the only ways to fix an incorrect fact were:
+Before v1.0, the only ways to fix an incorrect fact were:
 
 - Edit the markdown file by hand
 - `/forget` then `/remember` (two steps, loses the original timestamp)
 
-v4.0.0 adds an **edit/delete UI** directly in Settings → Memory. Every fact in the memory file renders as a row with two buttons:
+v1.0 adds an **edit/delete UI** directly in Settings → Memory. Every fact in the memory file renders as a row with two buttons:
 
 - **Edit** — opens a modal with the fact's content and category. Change either, click Save. The fact's `id` is preserved; only `content`, `category`, and `updated` timestamp change.
 - **Delete** — removes the fact immediately (with a confirmation prompt for safety).
@@ -136,6 +136,6 @@ The memory system is modeled on obsidian-copilot's user-memory layer (see the de
 - **LLM-gated capture over regex** — the model decides what's durable, so recall can be trivial (full injection)
 - **Full injection over retrieval** — at the scale of personal facts (tens, not thousands), retrieval adds complexity for no benefit
 - **Categories as enum** — `preference | identity | project | instruction | other`. Keeps the file parseable even with hand-edits.
-- **Edit UI over file-only** — added in v4.0.0 because the file-only workflow made correcting facts needlessly high-friction.
+- **Edit UI over file-only** — added in v1.0 because the file-only workflow made correcting facts needlessly high-friction.
 
 See the codebase (`src/memory/memory.ts`) for implementation details.

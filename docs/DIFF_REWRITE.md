@@ -36,12 +36,12 @@ The rewrite uses your **currently active model and provider** — whatever's sel
 
 ## Custom prompts
 
-For v4.0.0, the rewrite uses a single built-in system prompt tuned for "improve clarity, fix grammar, preserve meaning." There's no UI to customize it yet.
+For v1.0, the rewrite uses a single built-in system prompt tuned for "improve clarity, fix grammar, preserve meaning." There's no UI to customize it yet.
 
 If you want a custom rewrite prompt:
 
 - Use a regular [selection action](SELECTION_ACTIONS.md#adding-custom-actions) — those are fully customizable but write directly back without a diff review
-- Or wait for v4.1.0, which adds a settings field for the diff-rewrite system prompt
+- Or wait for v1.1, which adds a settings field for the diff-rewrite system prompt
 
 ## Diff algorithm
 
@@ -51,7 +51,7 @@ For very large selections, the diff still works but may take a moment to compute
 
 ## Future work
 
-Planned for v4.1.0 and beyond:
+Planned for v1.1 and beyond:
 
 - **Word-level diff** — currently diff is line-granular. A word-level mode would show intra-line changes (like GitHub's split diff).
 - **Inline editor decorations** — show the diff directly in the editor (like Cursor or GitLens inline blame) instead of a modal. Faster review loop for small changes.

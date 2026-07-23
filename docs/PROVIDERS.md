@@ -9,12 +9,12 @@ Curtis AI Chat ships with 30+ built-in providers and supports any OpenAI-compati
 
 | Provider | Auth | Auto-discovery | Agent (tools) | Notes |
 |---|---|---|---|---|
-| **Anthropic Claude** | `x-api-key` | No | ⚠️ v4.1.0 | Native Anthropic message format (auto-converted). Vision on Opus/Sonnet/Haiku. |
+| **Anthropic Claude** | `x-api-key` | No | ⚠️ v1.1 | Native Anthropic message format (auto-converted). Vision on Opus/Sonnet/Haiku. |
 | **OpenAI** | Bearer | Yes (`/v1/models`) | ✅ | Full GPT-5 family. Vision on most models. |
-| **Google Gemini** | Bearer | Yes (`/v1beta/models`) | ⚠️ v4.1.0 | Gemini's OpenAI-compat endpoint. Vision on Pro/Flash. |
-| **Z.ai GLM** | Bearer | Yes | ⚠️ v4.1.0 | Coding plan endpoint — text-only on the coding endpoint even for vision models. |
-| **Ollama (Local)** | None | Yes (`/api/tags`) | ⚠️ v4.1.0 | Set a custom endpoint if your Ollama lives elsewhere. |
-| **LM Studio (Local)** | None | Yes | ⚠️ v4.1.0 | Same as Ollama — custom endpoint supported. |
+| **Google Gemini** | Bearer | Yes (`/v1beta/models`) | ⚠️ v1.1 | Gemini's OpenAI-compat endpoint. Vision on Pro/Flash. |
+| **Z.ai GLM** | Bearer | Yes | ⚠️ v1.1 | Coding plan endpoint — text-only on the coding endpoint even for vision models. |
+| **Ollama (Local)** | None | Yes (`/api/tags`) | ⚠️ v1.1 | Set a custom endpoint if your Ollama lives elsewhere. |
+| **LM Studio (Local)** | None | Yes | ⚠️ v1.1 | Same as Ollama — custom endpoint supported. |
 | **OpenRouter** | Bearer | Yes | ✅ | 400+ models via one key. Model IDs are namespaced (`openai/gpt-5`, `anthropic/claude-...`). |
 | **Groq** | Bearer | Yes | ✅ | Fastest inference available. Llama 3.3, GPT-OSS, etc. |
 | **Together AI** | Bearer | Yes | ✅ | Llama, Qwen, DeepSeek hosted. |
@@ -43,7 +43,7 @@ Curtis AI Chat ships with 30+ built-in providers and supports any OpenAI-compati
 ### Agent compatibility legend
 
 - ✅ — supports OpenAI-style function calling. Works with the [Curtis Agent](AGENT.md) today.
-- ⚠️ v4.1.0 — uses a different function-calling shape. Agent support tracked for v4.1.0. Route through OpenRouter in the meantime if you need agent + Claude/Gemini.
+- ⚠️ v1.1 — uses a different function-calling shape. Agent support tracked for v1.1. Route through OpenRouter in the meantime if you need agent + Claude/Gemini.
 
 ## Setting up a provider
 
@@ -120,6 +120,6 @@ Every assistant message records which provider and model produced it. Hover an a
 
 **"Provider is having issues (5xx)"** — the provider is down. Try again or switch providers.
 
-**"Tool calls not working"** — the [agent](AGENT.md) only works with OpenAI-compatible providers in v4.0.0. Anthropic/Gemini/Ollama agent support lands in v4.1.0. Use OpenRouter to route Claude/Gemini through an OpenAI-compat shape.
+**"Tool calls not working"** — the [agent](AGENT.md) only works with OpenAI-compatible providers in v1.0. Anthropic/Gemini/Ollama agent support lands in v1.1. Use OpenRouter to route Claude/Gemini through an OpenAI-compat shape.
 
 **Discovery returns no models** — the `/models` endpoint may require a different auth header or path. File an issue with the provider name + endpoint.

@@ -2,7 +2,7 @@
 
 > Type `@` in chat → fuzzy-search your vault → attach note content as context.
 
-The `@`-mention feature was [deferred from v3.0.0](../CHANGELOG.md) and finally shipped in v4.0.0. It's the fastest way to give the AI specific vault context without copy-pasting.
+The `@`-mention feature was [deferred from v3.0.0](../CHANGELOG.md) and finally shipped in v1.0. It's the fastest way to give the AI specific vault context without copy-pasting.
 
 ## What it does
 

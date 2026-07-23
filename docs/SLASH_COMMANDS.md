@@ -14,7 +14,7 @@ Unknown commands (e.g. `/typo hello`) fall through and get sent as a literal use
 | `/copy` | — | Copy the last assistant response to clipboard. |
 | `/note` | `[name]` | Save the last assistant response as a new note. |
 | `/save-all` | `[name]` | Export the entire conversation as one structured markdown note in your vault. |
-| `/export` | — | Download the current conversation as a `.md` file to your downloads folder. *(new in v4.0.0)* |
+| `/export` | — | Download the current conversation as a `.md` file to your downloads folder. *(new in v1.0)* |
 | `/paste` | — | Paste from system clipboard into the chat input. |
 | `/model` | `<query>` | Switch the active model via fuzzy match. |
 | `/provider` | `<query>` | Switch the active provider via fuzzy match. |
@@ -186,7 +186,7 @@ With arguments:
 - `/memory open` — open the memory file in Obsidian
 - `/memory clear` — wipe all facts
 
-See [MEMORY.md](MEMORY.md) for how memory works and how to edit individual facts from the settings UI (new in v4.0.0).
+See [MEMORY.md](MEMORY.md) for how memory works and how to edit individual facts from the settings UI (new in v1.0).
 
 ## Reference
 
