@@ -28,8 +28,8 @@ export class DiffRewriteModal extends Modal {
 		for (const line of diff) {
 			const row = diffContainer.createDiv({ cls: `ai-diff-line ai-diff-${line.type}` });
 			const prefix = line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' ';
-			row.createEl('span', { cls: 'ai-diff-prefix', text: prefix });
-			row.createEl('span', { cls: 'ai-diff-text', text: line.text || ' ' });
+			row.createSpan({ cls: 'ai-diff-prefix', text: prefix });
+			row.createSpan({ cls: 'ai-diff-text', text: line.text || ' ' });
 		}
 
 		new Setting(contentEl)

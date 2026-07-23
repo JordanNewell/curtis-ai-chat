@@ -6,7 +6,7 @@ import { MessageRenderer } from './message-renderer';
 import { ConversationStore } from './conversation-store';
 import { ModelPickerModal, buildModelPickerEntries } from '../ui/modals/model-picker-modal';
 import { ArenaModelPickerModal } from '../ui/modals/arena-model-picker-modal';
-import type { ArenaSelection } from '../ui/modals/arena-model-picker-modal';
+import type { ArenaSelection, ArenaModelEntry } from '../ui/modals/arena-model-picker-modal';
 import { attachMessageActions, attachUserMessageActions } from './message-actions';
 import { handleSlashCommand, slashSuggestions, type SlashContext } from './slash-commands';
 import { downloadConversationMarkdown } from './export';
@@ -2124,8 +2124,8 @@ export class ChatView extends ItemView {
 			if (btn instanceof HTMLElement) btn.removeClass('is-active');
 			return;
 		}
-		const entries = enabled.flatMap(({ id, provider }) =>
-			provider.models.map((model) => ({
+		const entries: ArenaModelEntry[] = enabled.flatMap(({ id, provider }) =>
+			provider.models.map((model): ArenaModelEntry => ({
 				providerId: id,
 				providerName: provider.name,
 				model,

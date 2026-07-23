@@ -17,7 +17,7 @@ import type { StreamResponse, ReadableLike, ReadableReader } from '../types';
  */
 export interface NodeIncomingMessage {
 	statusCode?: number;
-	on(event: 'data', listener: (chunk: Buffer | Uint8Array) => void): unknown;
+	on(event: 'data', listener: (chunk: Uint8Array) => void): unknown;
 	on(event: 'end', listener: () => void): unknown;
 	on(event: 'error', listener: (err: Error) => void): unknown;
 	destroy?(error?: Error): unknown;
@@ -39,7 +39,7 @@ export class NodeIncomingReader implements ReadableReader {
 
 	constructor(stream: NodeIncomingMessage) {
 		this.stream = stream;
-		stream.on('data', (chunk: Buffer | Uint8Array) => {
+		stream.on('data', (chunk: Uint8Array) => {
 			this.chunks.push(chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk));
 			this.drainWaiters();
 		});
@@ -142,9 +142,15 @@ export function streamResponseFromBuffer(
 /** Read the full body of a Node stream into a UTF-8 string. Used for error bodies. */
 function readAllText(stream: NodeIncomingMessage): Promise<string> {
 	return new Promise((resolve, reject) => {
-		const chunks: Buffer[] = [];
-		stream.on('data', (c: Buffer) => chunks.push(c));
-		stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+		const chunks: Uint8Array[] = [];
+		stream.on('data', (c: Uint8Array) => chunks.push(c));
+		stream.on('end', () => {
+			const total = chunks.reduce((sum, c) => sum + c.length, 0);
+			const merged = new Uint8Array(total);
+			let offset = 0;
+			for (const c of chunks) { merged.set(c, offset); offset += c.length; }
+			resolve(new TextDecoder('utf8').decode(merged));
+		});
 		stream.on('error', (err: Error) => reject(err));
 	});
 }

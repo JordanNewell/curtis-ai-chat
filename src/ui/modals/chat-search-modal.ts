@@ -68,7 +68,7 @@ export class ChatSearchModal extends FuzzySuggestModal<ChatSearchResult> {
 		el.createDiv({ cls: 'ai-chat-search-title', text: conversation.title });
 		const body = el.createDiv({ cls: 'ai-chat-search-snippet' });
 		const roleLabel = message.role === 'user' ? 'You' : 'AI';
-		body.createEl('span', { cls: 'ai-chat-search-role', text: roleLabel });
+		body.createSpan({ cls: 'ai-chat-search-role', text: roleLabel });
 		body.appendText(snippet);
 	}
 

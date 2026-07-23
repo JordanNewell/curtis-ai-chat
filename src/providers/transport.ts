@@ -217,7 +217,7 @@ function runViaNodeHttps(
 		method: requestInit.method || 'POST',
 		headers: {
 			...headers,
-			'Content-Length': Buffer.byteLength(body),
+			'Content-Length': new TextEncoder().encode(body).length,
 		},
 	};
 
@@ -227,7 +227,7 @@ function runViaNodeHttps(
 			if (status < 200 || status >= 400) {
 				// Drain error body for a meaningful message
 				let errBody = '';
-				res.on('data', (c: Buffer) => (errBody += c.toString('utf8')));
+				res.on('data', (c: Uint8Array) => (errBody += new TextDecoder('utf8').decode(c)));
 				res.on('end', () => {
 					reject(new Error(`${provider.name} API error (${status}): ${errBody.slice(0, 500)}`));
 				});

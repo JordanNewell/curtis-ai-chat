@@ -15,16 +15,17 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 	activeProvider: 'anthropic',
 	activeModel: 'claude-sonnet-4-5-20250929',
 
-	providerConfigs: Object.fromEntries(
-		PROVIDER_DEFINITIONS.map((def) => [
-			def.id,
-			{
+	providerConfigs: (() => {
+		const configs: Record<string, ProviderConfig> = {};
+		for (const def of PROVIDER_DEFINITIONS) {
+			configs[def.id] = {
 				enabled: def.id === 'anthropic',
 				apiKey: '',
 				defaultModel: def.models[0]?.id,
-			},
-		])
-	),
+			};
+		}
+		return configs;
+	})(),
 
 	customProviders: [],
 
