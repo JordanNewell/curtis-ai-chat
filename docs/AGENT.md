@@ -55,6 +55,7 @@ Nine tools ship with the plugin, all read/write against your vault. Two addition
 | `get_tags` | List all tags in the vault, sorted by frequency | (none) |
 | `get_backlinks` | Get notes that link to a given note | `path` (required) |
 | `get_current_note` | Get content + metadata of the note open in the editor | (none) |
+| `get_current_date` | Get the current date, day of week, and time in the user's timezone | (none) |
 | `calculator` | Evaluate a math expression | `expression` (string, required) |
 
 ## Web tools

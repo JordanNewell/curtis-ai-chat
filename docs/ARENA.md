@@ -32,6 +32,15 @@ When you find a column whose response you like, click **Promote to chat** at the
 
 This is the fastest way to find the right model for a task: arena a representative prompt across candidates, promote the winner, keep working.
 
+## Cancelling mid-stream
+
+Each arena column streams independently. If one column is stuck or you've already seen enough, you can stop it without affecting the others:
+
+- A **Stop** button replaces the **Send** button while any column is streaming. Click it to abort all in-flight columns.
+- Individual abort per column isn't exposed in the UI yet — coming in v1.1. Today the abort is all-or-nothing.
+
+Under the hood, each column has its own `AbortController` keyed by `${providerId}:${modelId}`. The controller is released in the response's `finally` block so arena rounds don't accumulate stale references.
+
 ## Mobile
 
 On phones, the arena stacks columns vertically rather than side-by-side. You'll scroll to compare responses. The layout is usable but desktop is the natural home for this feature.

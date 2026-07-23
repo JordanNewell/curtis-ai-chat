@@ -12,8 +12,9 @@ Reference documentation for every feature. Start here, follow links to the detai
 | 🤖 **[AGENT.md](AGENT.md)** | Curtis Agent — AI tools that read, create, edit vault notes. Nine built-in tools, OpenAI-compat providers. |
 | ⚔️ **[ARENA.md](ARENA.md)** | Multi-model arena — stream one prompt to 2–5 models in parallel. Promote-to-chat workflow. |
 | 🎨 **[DIFF_REWRITE.md](DIFF_REWRITE.md)** | Inline diff rewrite — Cursor-style Accept/Reject diff modal. `Ctrl+Shift+R`. |
-| 🎙️ **[VOICE.md](VOICE.md)** | Voice I/O — Whisper STT + browser TTS. Auto-speak toggle. |
+| 🎙️ **[VOICE.md](VOICE.md)** | Voice I/O — Whisper STT + browser TTS. Player controls: skip ±1 sentence, rate cycle, auto-speak. |
 | @ **[MENTIONS.md](MENTIONS.md)** | `@`-mention vault notes — fuzzy-search, attach as context. Active-note pill. |
+| 🔍 **[SEARCH.md](SEARCH.md)** | Cross-conversation search — `Ctrl+Shift+F` fuzzy search across all conversations + messages. |
 | 🖼️ **[IMAGES.md](IMAGES.md)** | Image attachments — paste, drag, or paperclip. Vision-capable models. |
 | 🧠 **[MEMORY.md](MEMORY.md)** | Long-term memory — markdown-file-backed. Auto-capture, manual recall, edit UI. |
 | ✂️ **[SELECTION_ACTIONS.md](SELECTION_ACTIONS.md)** | Inline note transformations — explain, summarize, refactor, etc. Right-click in any note. |

@@ -41,6 +41,29 @@ None. `speechSynthesis` is built into every modern browser and Electron.
 - **One message** — hover any assistant message and click the **speaker icon** 🔊
 - **Auto-speak** — click the **auto-speak toggle** in the chat header. Every new assistant response is read aloud automatically. Toggle off to stop.
 
+### Player controls
+
+Clicking the speaker icon opens an inline **TTS player bar** below the assistant message. The plugin splits the response into sentences and plays each one as a separate utterance, which gives you seek-style controls the browser's native `speechSynthesis` doesn't provide on its own.
+
+The player has these controls, left to right:
+
+| Control | What it does |
+|---|---|
+| **▶ / ⏸** | Pause or resume playback |
+| **⏪** | Skip back one sentence |
+| **⏩** | Skip forward one sentence |
+| **`n / N`** | Position indicator (current sentence / total) |
+| **`1x`** | Cycle playback speed. Steps through `1 → 1.25 → 1.5 → 1.75 → 2 → 1` |
+| **×** | Stop playback and close the player |
+
+While the player is open:
+
+- The speaker icon on the message stays highlighted, indicating active audio.
+- Only one TTS session can run at a time. Starting playback on another message stops the first.
+- Closing the player or starting a new send tears down the controller and cancels any queued utterances.
+
+Sentence boundaries are decided by a regex split on `.`, `!`, `?` followed by whitespace. Abbreviations and decimal numbers can throw this off — you'll occasionally hear a sentence broken mid-thought. Skipping forward is the fastest recovery.
+
 ### Voice selection
 
 The plugin picks a voice in this order:
