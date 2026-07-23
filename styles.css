@@ -1900,11 +1900,13 @@ pre:hover .ai-code-copy-btn {
 
 /* --- System prompt: read-only CORE display --------------------------- */
 /* Greys out the non-editable Curtis identity textarea so users see the
- * architecture: this is who Curtis IS, the lower box is what they're adding. */
-.ai-system-prompt-core textarea,
-textarea.ai-system-prompt-core {
-	background: var(--background-modifier-hover) !important;
-	color: var(--text-muted) !important;
+ * architecture: this is who Curtis IS, the lower box is what they're adding.
+ * Doubled selector raises specificity above Obsidian's base textarea rule
+ * without resorting to !important. */
+.ai-system-prompt-core textarea.ai-system-prompt-core,
+textarea.ai-system-prompt-core.ai-system-prompt-core {
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
 	font-family: var(--font-monospace);
 	font-size: var(--font-size-smaller);
 	cursor: default;

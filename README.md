@@ -223,6 +223,22 @@ No file contents are sent to AI providers except message text, attached images, 
 > [!IMPORTANT]
 > Tool calls go to your AI provider. Vault contents read by agent tools are sent to the provider as part of the conversation. If you're on a cloud provider, that content leaves your machine. Switch to Ollama for fully offline operation.
 
+### Network access
+
+Curtis is vault-first — no background telemetry, no analytics, no auto-update checks. Every outbound request is user-initiated. The plugin may contact these domains:
+
+| When | Domain | Why |
+|------|--------|-----|
+| You send a message (cloud providers) | Your provider's API (e.g. `api.anthropic.com`, `api.openai.com`, `generativelanguage.googleapis.com`) | Chat completion / streaming |
+| You send a message (Ollama / LM Studio) | `localhost` / your custom endpoint | Local model inference |
+| You click "Test connection" or "Refresh models" | Your provider's API | Auth + reachability check, model list |
+| You use voice transcription | `api.openai.com` | Whisper API (only when voice input is on) |
+| The agent calls `web_search` (opt-in) | `html.duckduckgo.com` | DuckDuckGo search |
+| The agent calls `read_url` (opt-in) | `r.jina.ai` | URL → markdown reader |
+| You click a sponsor link | `buymeacoffee.com`, `github.com` | Opens in your browser, off the plugin |
+
+The two web tools (`web_search`, `read_url`) and voice transcription are off by default. Without them, the only external calls are to whichever AI provider you configured — or none, if you're on Ollama.
+
 ---
 
 ## Installation

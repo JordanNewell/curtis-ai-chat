@@ -13,6 +13,7 @@
 
 import { requestUrl } from 'obsidian';
 import type { ToolDefinition } from './tools';
+import { isRecord } from './types/json-helpers';
 
 const DDG_ENDPOINT = 'https://html.duckduckgo.com/html/';
 const JINA_ENDPOINT = 'https://r.jina.ai/';
@@ -137,11 +138,18 @@ export const READ_URL_TOOL: ToolDefinition = {
 			const contentType = resp.headers?.['content-type'] || '';
 			if (contentType.includes('application/json')) {
 				try {
-					const data = JSON.parse(resp.text);
-					const content = data?.data?.content || data?.content || '';
-					const title = data?.data?.title || data?.title || '';
-					if (!content) return `No readable content at ${url}`;
-					return title ? `# ${title}\n\n${content}` : content;
+					// Narrow at the boundary: JSON.parse yields unknown; run it
+					// through isRecord before touching any field so the value
+					// never enters typed code as `any`.
+					const parsed: unknown = JSON.parse(resp.text);
+					if (isRecord(parsed)) {
+						// Jina nests under `data` (newer API) or at the root (older).
+						const nested = isRecord(parsed.data) ? parsed.data : parsed;
+						const content = typeof nested.content === 'string' ? nested.content : '';
+						const title = typeof nested.title === 'string' ? nested.title : '';
+						if (content) return title ? `# ${title}\n\n${content}` : content;
+					}
+					return `No readable content at ${url}`;
 				} catch {
 					// Fall through to treating as plain text.
 				}
