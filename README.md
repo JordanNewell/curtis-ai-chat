@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/JordanNewell/curtis-chat/master/assets/hero.png" alt="Curtis AI Chat — polyglot AI chat for Obsidian. 30+ providers, one sidebar." width="100%">
+  <img src="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/hero.png" alt="Curtis AI Chat — polyglot AI chat for Obsidian. 30+ providers, one sidebar." width="100%">
 </p>
 
 <p align="center">
@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/JordanNewell/curtis-chat/releases"><img src="https://img.shields.io/github/v/release/JordanNewell/curtis-chat?display_name=tag&include_prereleases&color=blue" alt="Latest release"></a>
+  <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/github/v/release/JordanNewell/curtis-ai-chat?display_name=tag&include_prereleases&color=blue" alt="Latest release"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Obsidian-1.13%2B-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian 1.13+">
   <img src="https://img.shields.io/badge/providers-30%2B-8B5CF6" alt="30+ providers">
@@ -43,9 +43,9 @@
 
 ---
 
-## What's new in v4.0.0
+## Highlights
 
-Eight flagship features shipped in this release. Full details in [CHANGELOG.md](CHANGELOG.md) and the per-feature docs.
+Eight flagship features in this initial release. Full details in [CHANGELOG.md](CHANGELOG.md) and the per-feature docs.
 
 | | Feature | What it does |
 |---|---|---|
@@ -58,10 +58,7 @@ Eight flagship features shipped in this release. Full details in [CHANGELOG.md](
 | 📝 | **Markdown export** | Download any conversation as `.md`. `/export` slash command or download icon. |
 | 🧠 | **Memory editing UI** | Edit/delete individual memory facts from Settings → Memory. No more append-only. |
 
-Plus a full type-safety pass: every AI provider response shape is now strictly typed, with type-guard narrowing at every JSON boundary. Zero lint warnings on `npm run build`.
-
-> [!IMPORTANT]
-> **v4.0.0 changes the plugin ID** from `curtis` to `curtis-ai-chat`. Existing installs need to reinstall — the plugin ID change is not auto-migratable. Conversation history in `localStorage` will need to be re-keyed manually if you want to preserve it.
+Plus a full type-safety pass: every AI provider response shape is strictly typed, with type-guard narrowing at every JSON boundary. Zero lint warnings on `npm run build`.
 
 ---
 
@@ -71,7 +68,7 @@ Plus a full type-safety pass: every AI provider response shape is now strictly t
 
 The AI can now call tools to modify your vault. Nine built-in tools: `read_note`, `search_notes`, `create_note`, `edit_note`, `list_notes`, `get_tags`, `get_backlinks`, `get_current_note`, `calculator`.
 
-- **OpenAI-compat providers only** for v4.0.0 (Anthropic / Gemini / Ollama agent support lands in v4.1.0)
+- **OpenAI-compat providers only** for v1.0 (Anthropic / Gemini / Ollama agent support lands in v1.1)
 - **`agentMaxTurns` safety cap** (default 5) prevents runaway tool loops
 - **Opt-in** via Settings → Agent → Enable
 
@@ -145,7 +142,7 @@ Curtis remembers durable facts about you across conversations — preferences, i
 
 - **Auto-capture**: background LLM extraction after each turn (0–3 facts)
 - **Manual**: `/remember <fact>` or right-click selection → **Save to memory**
-- **Edit UI**: edit/delete individual facts from Settings → Memory (new in v4.0.0)
+- **Edit UI**: edit/delete individual facts from Settings → Memory
 - **Recall**: every prompt includes a `## What you know about the user` block
 
 → [docs/MEMORY.md](docs/MEMORY.md)
@@ -182,7 +179,7 @@ Curtis AI Chat is the **agent layer for Obsidian**. Where other plugins focus on
 | **Native Obsidian rendering** | ✅ `MarkdownRenderer` | Partial | ❌ | Partial |
 
 > [!NOTE]
-> Comparison reflects v4.0.0 capabilities as of 2026-07-22. Other plugins may have added features since. Not a knock on them — Smart Connections is the gold standard for RAG, Text Generator excels at template-driven writing. Curtis aims to be the agent layer that ties chat, tools, and memory together.
+> Comparison reflects v1.0 capabilities as of 2026-07-23. Other plugins may have added features since. Not a knock on them — Smart Connections is the gold standard for RAG, Text Generator excels at template-driven writing. Curtis aims to be the agent layer that ties chat, tools, and memory together.
 
 ### Principles
 
@@ -231,7 +228,7 @@ No file contents are sent to AI providers except message text, attached images, 
 ## Installation
 
 > [!TIP]
-> Curtis AI Chat isn't in the community plugin store yet. Install manually (below) or via [BRAT](https://github.com/TfTHacker/obsidian42-brat).
+> Curtis AI Chat is in the [community plugin directory](https://community.obsidian.md/plugins/curtis-ai-chat) (awaiting v1.0 review). Install from there, manually (below), or via [BRAT](https://github.com/TfTHacker/obsidian42-brat) for beta-channel updates.
 
 ### Manual install
 
@@ -243,8 +240,8 @@ No file contents are sent to AI providers except message text, attached images, 
 ### From source (developers)
 
 ```bash
-git clone https://github.com/JordanNewell/curtis-chat.git
-cd curtis-chat
+git clone https://github.com/JordanNewell/curtis-ai-chat.git
+cd curtis-ai-chat
 npm install
 npm run build
 ```

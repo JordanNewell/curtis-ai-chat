@@ -61,8 +61,8 @@ Contributions are welcome — bug reports, feature requests, and (once v4 stabil
 Requirements: **Node 20+**, Obsidian 1.13+, a vault for testing.
 
 ```bash
-git clone https://github.com/JordanNewell/curtis-chat.git
-cd curtis-chat
+git clone https://github.com/JordanNewell/curtis-ai-chat.git
+cd curtis-ai-chat
 npm install
 ```
 

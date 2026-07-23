@@ -444,7 +444,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Enable agent mode')
-			.setDesc('Let the AI call tools to read/create/modify your vault notes. Only OpenAI-compatible providers support this in v4.0.0 (Anthropic/Gemini/Ollama silently skip tools).')
+			.setDesc('Let the AI call tools to read/create/modify your vault notes. Only OpenAI-compatible providers support this in v1.0 (Anthropic/Gemini/Ollama silently skip tools).')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.enableAgent);
 				toggle.onChange(async (val) => {
