@@ -214,7 +214,8 @@ export class MemoryStore {
 			if (metaMatch) {
 				id = metaMatch[1];
 				updated = parseInt(metaMatch[2], 10);
-				body = body.slice(0, metaMatch.index).trimEnd();
+				const idx = metaMatch.index ?? 0;
+				body = body.slice(0, idx).trimEnd();
 			}
 			// 2. Bullet marker.
 			const bulletMatch = body.match(/^\s*[-*]\s+(.+)$/);

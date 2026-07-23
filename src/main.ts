@@ -4,7 +4,7 @@ import { Editor, Notice, Plugin, requestUrl } from 'obsidian';
 import type { CurtisSettings, AIMessage, TokenUsage, AIProvider, ToolCall, ToolDefinition } from './types';
 import { DEFAULT_SETTINGS, CurtisSettingTab } from './settings';
 import { ProviderRegistry } from './providers/registry';
-import { chatStream } from './providers/transport';
+import { chatStream, flattenHeaders } from './providers/transport';
 import { EventBus } from './core/events';
 import { HookSystem } from './core/hooks';
 import { ToolRegistry } from './core/tools';
@@ -568,10 +568,7 @@ export default class CurtisPlugin extends Plugin {
 		const requestInit = provider.formatRequest(messages, options);
 		const finalRequest = await this.hookSystem.runPipeline('provider:request', requestInit, {});
 
-		const headers: Record<string, string> = {};
-		for (const [k, v] of Object.entries(finalRequest.headers || {})) {
-			headers[k] = String(v);
-		}
+		const headers: Record<string, string> = flattenHeaders(finalRequest.headers);
 
 		try {
 			const resp = await requestUrl({

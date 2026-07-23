@@ -32,8 +32,27 @@ export type TransportKind = 'node-https' | 'fetch' | 'requestUrl';
  * module from inside the desktop renderer. Defined inline to avoid pulling
  * in @types/node at runtime (mobile renderer has no Node globals).
  */
+/**
+ * Minimal surface of Node's `https` module that we consume. Defined inline
+ * (instead of `typeof import('https')`) so the type resolves without
+ * @types/node in the scanner's environment.
+ */
+interface NodeHttpsModule {
+	request(
+		options: Record<string, unknown>,
+		callback: (res: NodeIncomingMessage) => void
+	): NodeClientRequest;
+}
+
+interface NodeClientRequest {
+	write(data: string): void;
+	end(): void;
+	on(event: 'error', listener: (err: Error) => void): unknown;
+	destroy(): void;
+}
+
 interface ElectronRequire {
-	(moduleName: 'https'): typeof import('https');
+	(moduleName: 'https'): NodeHttpsModule;
 	(moduleName: string): unknown;
 }
 
@@ -58,7 +77,7 @@ export interface ChatStreamResult {
  * Lazy accessor for Node's https module. Returns undefined on mobile or if
  * Node integration is unavailable for any reason. Never throws.
  */
-function getNodeHttps(): typeof import('https') | undefined {
+function getNodeHttps(): NodeHttpsModule | undefined {
 	if (!Platform.isDesktopApp) return undefined;
 	try {
 		// window.require bypasses esbuild hoisting; https is externalized.
@@ -86,6 +105,34 @@ export function pickTransport(stream: boolean): TransportKind {
 	}
 	// requestUrl always available; safe fallback.
 	return 'requestUrl';
+}
+
+/**
+ * Flatten a HeadersInit (Record, array of pairs, or Headers) into a plain
+ * Record<string, string>. Avoids Object.entries() which widens to `any`.
+ */
+export function flattenHeaders(init: HeadersInit | undefined | null): Record<string, string> {
+	const out: Record<string, string> = {};
+	if (!init) return out;
+	if (init instanceof Headers) {
+		init.forEach((v, k) => { out[k] = v; });
+		return out;
+	}
+	if (Array.isArray(init)) {
+		for (const pair of init) {
+			if (Array.isArray(pair) && pair.length >= 2) {
+				const k = String(pair[0]);
+				const v = String(pair[1]);
+				if (k) out[k] = v;
+			}
+		}
+		return out;
+	}
+	// Record<string, string>
+	for (const k of Object.keys(init)) {
+		out[k] = String(init[k]);
+	}
+	return out;
 }
 
 /**
@@ -160,10 +207,7 @@ function runViaNodeHttps(
 
 	const url = new URL(provider.endpoint);
 	const body = (requestInit.body as string) ?? '';
-	const headers: Record<string, string> = {};
-	for (const [k, v] of Object.entries(requestInit.headers || {})) {
-		headers[k] = String(v);
-	}
+	const headers: Record<string, string> = flattenHeaders(requestInit.headers);
 
 	const options = {
 		protocol: url.protocol,
@@ -178,14 +222,13 @@ function runViaNodeHttps(
 	};
 
 	return new Promise<void>((resolve, reject) => {
-		const req = https.request(options, (res) => {
-			const nodeRes = res as unknown as NodeIncomingMessage;
-			const status = nodeRes.statusCode ?? 0;
+		const req = https.request(options, (res: NodeIncomingMessage) => {
+			const status = res.statusCode ?? 0;
 			if (status < 200 || status >= 400) {
 				// Drain error body for a meaningful message
 				let errBody = '';
-				nodeRes.on('data', (c: Buffer) => (errBody += c.toString('utf8')));
-				nodeRes.on('end', () => {
+				res.on('data', (c: Buffer) => (errBody += c.toString('utf8')));
+				res.on('end', () => {
 					reject(new Error(`${provider.name} API error (${status}): ${errBody.slice(0, 500)}`));
 				});
 				return;
@@ -296,10 +339,7 @@ async function runViaRequestUrl(
 	requestInit: RequestInit,
 	callbacks: ChatStreamCallbacks
 ): Promise<void> {
-	const headers: Record<string, string> = {};
-	for (const [k, v] of Object.entries(requestInit.headers || {})) {
-		headers[k] = String(v);
-	}
+	const headers: Record<string, string> = flattenHeaders(requestInit.headers);
 
 	let urlResp: RequestUrlResponse;
 	try {

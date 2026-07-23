@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import { asStringArray } from './types/json-helpers';
+import { asStringArray, isRecord } from './types/json-helpers';
 import { getActiveNoteFile } from '../vault/active-note';
 import { WEB_SEARCH_TOOL, READ_URL_TOOL } from './web-tools';
 
@@ -131,7 +131,9 @@ export class ToolRegistry {
 
 		try {
 			// Validate required parameters
-			for (const [key, param] of Object.entries(tool.parameters)) {
+			const params = tool.parameters;
+			for (const key of Object.keys(params)) {
+				const param: ToolParameter = params[key];
 				if (param.required && call.arguments[key] === undefined) {
 					return {
 						tool_call_id: call.id,
@@ -166,7 +168,8 @@ export class ToolRegistry {
 		return this.getAllTools().map(tool => {
 			const properties: Record<string, Record<string, unknown>> = {};
 			const required: string[] = [];
-			for (const [key, param] of Object.entries(tool.parameters)) {
+			for (const key of Object.keys(tool.parameters)) {
+				const param: ToolParameter = tool.parameters[key];
 				const schema: Record<string, unknown> = {
 					type: param.type,
 					description: param.description,
@@ -222,7 +225,8 @@ export class ToolRegistry {
 				for (const file of files) {
 					if (file.path.toLowerCase().includes(query) || file.basename.toLowerCase().includes(query)) {
 						const cache = this.app.metadataCache.getFileCache(file);
-						const tags: string[] = asStringArray(cache?.frontmatter?.tags);
+						const fm: unknown = cache?.frontmatter;
+						const tags: string[] = isRecord(fm) ? asStringArray(fm.tags) : [];
 						results.push(`- **${file.basename}** (${file.path}) [${tags.length ? '#' + tags.join(' #') : 'no tags'}]`);
 						if (results.length >= max) break;
 					}
@@ -338,7 +342,8 @@ export class ToolRegistry {
 
 				return files.map(f => {
 					const cache = this.app.metadataCache.getFileCache(f);
-					const tags: string[] = asStringArray(cache?.frontmatter?.tags);
+					const fm: unknown = cache?.frontmatter;
+					const tags: string[] = isRecord(fm) ? asStringArray(fm.tags) : [];
 					const mtime = new Date(f.stat.mtime).toLocaleDateString();
 					return `- **${f.basename}** (${f.path}) [${mtime}]${tags.length ? ' #' + tags.join(' #') : ''}`;
 				}).join('\n');
@@ -354,13 +359,15 @@ export class ToolRegistry {
 				for (const file of this.app.vault.getMarkdownFiles()) {
 					const cache = this.app.metadataCache.getFileCache(file);
 					const fileTags: string[] = cache?.tags?.map(t => t.tag.replace('#', '')) || [];
-					const fmTags: string[] = asStringArray(cache?.frontmatter?.tags);
+					const fm: unknown = cache?.frontmatter;
+					const fmTags: string[] = isRecord(fm) ? asStringArray(fm.tags) : [];
 					const all = [...fileTags, ...fmTags].filter(Boolean);
 					for (const tag of all) {
 						tags[tag] = (tags[tag] || 0) + 1;
 					}
 				}
-				return Object.entries(tags)
+				return Object.keys(tags)
+					.map((tag): [string, number] => [tag, tags[tag]])
 					.sort((a, b) => b[1] - a[1])
 					.slice(0, 50)
 					.map(([tag, count]) => `- #${tag} (${count})`)
@@ -380,7 +387,9 @@ export class ToolRegistry {
 				if (!(file instanceof TFile)) return `Note not found: ${path}`;
 
 					const backlinks: string[] = [];
-					for (const [sourcePath, destMap] of Object.entries(this.app.metadataCache.resolvedLinks || {})) {
+					const links: Record<string, Record<string, number>> = this.app.metadataCache.resolvedLinks || {};
+					for (const sourcePath of Object.keys(links)) {
+						const destMap: Record<string, number> = links[sourcePath];
 						if (file.path in destMap) {
 							backlinks.push(sourcePath);
 						}
@@ -411,7 +420,7 @@ export class ToolRegistry {
 
 				const content = await this.app.vault.read(activeFile);
 				const cache = this.app.metadataCache.getFileCache(activeFile);
-				const frontmatter = cache?.frontmatter || {};
+				const frontmatter = (cache?.frontmatter ?? {}) as Record<string, unknown>;
 
 				return `Current note: **${activeFile.basename}** (${activeFile.path})\n\nFrontmatter: ${JSON.stringify(frontmatter, null, 2)}\n\nContent:\n${content}`;
 			},

@@ -56,7 +56,8 @@ export async function migrateSecretsToKeychain(
 				if (value) {
 					ss.setSecret(newKey, value);
 					// Fix up apiKeyRef if it points at the old key
-					for (const cfg of Object.values(settings.providerConfigs)) {
+					for (const cfgId of Object.keys(settings.providerConfigs)) {
+						const cfg: ProviderConfig = settings.providerConfigs[cfgId];
 						if (cfg.apiKeyRef === key) cfg.apiKeyRef = newKey;
 					}
 				}
@@ -66,7 +67,8 @@ export async function migrateSecretsToKeychain(
 		console.debug('[Curtis] Old-prefix secret migration failed (non-fatal):', e);
 	}
 
-	for (const [providerId, config] of Object.entries(settings.providerConfigs)) {
+	for (const providerId of Object.keys(settings.providerConfigs)) {
+		const config: ProviderConfig = settings.providerConfigs[providerId];
 		const plaintext = config.apiKey?.trim();
 		if (!plaintext) continue;
 

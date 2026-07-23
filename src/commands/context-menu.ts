@@ -46,7 +46,8 @@ export function registerContextMenu(plugin: CurtisPlugin): void {
 				'bottom': CONTEXT_ACTIONS.filter(a => a.section === 'ai-bottom'),
 			};
 
-			for (const [group, actions] of Object.entries(groups)) {
+			for (const group of Object.keys(groups)) {
+				const actions: ContextAction[] = groups[group];
 				for (const action of actions) {
 					menu.addItem((item) => {
 						item.setTitle(action.label);

@@ -145,6 +145,6 @@ function readAllText(stream: NodeIncomingMessage): Promise<string> {
 		const chunks: Buffer[] = [];
 		stream.on('data', (c: Buffer) => chunks.push(c));
 		stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-		stream.on('error', reject);
+		stream.on('error', (err: Error) => reject(err));
 	});
 }

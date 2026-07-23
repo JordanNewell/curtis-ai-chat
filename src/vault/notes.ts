@@ -145,8 +145,9 @@ export async function createNote(
 	}
 
 	const body = opts.frontmatter
-		? `---\n${Object.entries(opts.frontmatter)
-				.map(([k, v]) => {
+		? `---\n${Object.keys(opts.frontmatter)
+				.map((k) => {
+					const v: unknown = opts.frontmatter![k];
 					const value = typeof v === 'string' ? v : JSON.stringify(v);
 					return `${k}: ${value}`;
 				})
