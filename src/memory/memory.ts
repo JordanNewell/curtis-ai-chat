@@ -209,15 +209,16 @@ export class MemoryStore {
 			//    regex doesn't have to deal with it.
 			let id: string | undefined;
 			let updated: number = Date.now();
-			let body = line;
-			const metaMatch = body.match(/<!--\s*id:([^\s]+)\s+updated:(\d+)\s*-->\s*$/);
+			let body: string = String(line);
+			const metaMatch: RegExpMatchArray | null = body.match(/<!--\s*id:([^\s]+)\s+updated:(\d+)\s*-->\s*$/);
 			if (metaMatch) {
-				const groups: string[] = metaMatch;
+				const groups: string[] = Array.from(metaMatch);
 				id = groups[1] ?? '';
 				updated = parseInt(groups[2] ?? '0', 10);
 				const matchIndex = metaMatch.index;
 				const idx: number = typeof matchIndex === 'number' ? matchIndex : 0;
-				body = body.slice(0, idx).trimEnd();
+				const sliced: string = body.slice(0, idx);
+				body = sliced.trimEnd();
 			}
 			// 2. Bullet marker.
 			const bulletMatch = body.match(/^\s*[-*]\s+(.+)$/);
