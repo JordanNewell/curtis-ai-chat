@@ -2,6 +2,21 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.2] — 2026-07-23
+
+Clears the remaining scorecard warnings flagged by the Obsidian plugin directory's automated review. Local lint now reproduces the scanner ruleset exactly (`npm run lint` → 0 problems).
+
+### Fixed
+
+- **Default hotkeys removed** — `search-conversations` and `rewrite-with-ai` no longer bind `Ctrl+Shift+F` / `Ctrl+Shift+R` by default, per the Obsidian guideline against default hotkeys that conflict with user bindings. Both are still assignable under Settings → Hotkeys. Docs updated.
+- **Unnecessary type assertions** — removed redundant `as` casts in `registry.ts` (3), `events.ts` (1), and `settings.ts` (1) that the scanner flagged as no-ops.
+- **`display()` → `update()`** — all 13 settings-tab refresh calls now use `update()` instead of the deprecated `display()`.
+- **ESLint toolchain upgraded** — migrated to ESLint 9 flat config (`eslint.config.mjs`) with `eslint-plugin-obsidianmd`. `npm run lint` now matches the directory's review ruleset, so scorecard issues are catchable locally before release.
+
+### Notes
+
+- The earlier scorecard scans reflected a stale build; this release ships a clean artifact verified against the matching ruleset. The `document.createElement`, `no-unsafe-*` clusters, and `eslint-disable` flags from prior scans were already gone from source — this release confirms it in the artifact the directory scans.
+
 ## [1.0.1] — 2026-07-23
 
 Scorecard-hardening release. Closes the remaining issues surfaced by the Obsidian plugin directory's automated review of 1.0.0.

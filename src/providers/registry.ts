@@ -607,7 +607,11 @@ export class ProviderRegistry {
 		}
 	}
 
-	/** Parse three known /models response shapes into a unified AIModel[] list. */
+	/**
+	 * Parse three known /models response shapes into a unified AIModel[] list.
+	 * Accepts the already-narrowed `ModelsResponse` union; each branch guards
+	 * on a discriminant field so TS narrows to the right member.
+	 */
 	private parseModelsResponse(providerId: string, data: ModelsResponse): AIModel[] {
 		// OpenAI-compat: { data: [{ id, context_length? }] }
 		if ('data' in data && Array.isArray(data.data)) {
@@ -621,7 +625,7 @@ export class ProviderRegistry {
 		}
 		// Ollama: { models: [{ name, ... }] } — names often have :tag suffix
 		if ('models' in data && Array.isArray(data.models) && providerId === 'ollama') {
-			const ollama = data as OllamaModelsResponse;
+			const ollama: OllamaModelsResponse = data;
 			return (ollama.models ?? []).map((m) => ({
 				id: m.name || m.model || '',
 				name: m.name || m.model || '',
@@ -632,7 +636,7 @@ export class ProviderRegistry {
 		}
 		// Gemini: { models: [{ name: "models/gemini-...", supportedGenerationMethods }] }
 		if ('models' in data && Array.isArray(data.models) && providerId === 'google') {
-			const gemini = data as GeminiModelsResponse;
+			const gemini: GeminiModelsResponse = data;
 			return (gemini.models ?? [])
 				.filter((m) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
 				.map((m) => {
@@ -649,7 +653,7 @@ export class ProviderRegistry {
 		}
 		// Generic fallback: try data.models
 		if ('models' in data && Array.isArray(data.models)) {
-			const generic = data as GenericModelsResponse;
+			const generic: GenericModelsResponse = data;
 			return (generic.models ?? []).map((m) => ({
 				id: m.id || m.name || '',
 				name: m.name || m.id || '',

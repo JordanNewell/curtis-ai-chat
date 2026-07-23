@@ -16,7 +16,7 @@ Three entry points:
 
 | Method | How |
 |---|---|
-| **Hotkey** | `Ctrl+Shift+R` (default; rebindable under Settings → Hotkeys → "Curtis AI Chat: Rewrite with AI (diff)") |
+| **Hotkey** | Assignable under Settings → Hotkeys → "Curtis AI Chat: Rewrite with AI (diff)" (no default, to avoid conflicts) |
 | **Context menu** | Right-click a selection → **Rewrite with AI (diff)** |
 | **Command palette** | `Ctrl+P` → "Curtis AI Chat: Rewrite with AI (diff)" |
 

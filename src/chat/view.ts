@@ -344,7 +344,7 @@ export class ChatView extends ItemView {
 		exportBtn.setAttribute('aria-label', 'Export conversation');
 		exportBtn.addEventListener('click', () => this.exportCurrentConversation());
 
-		// Search — fuzzy-search across ALL conversations (Ctrl+Shift+F)
+		// Search — fuzzy-search across ALL conversations (assignable hotkey)
 		const searchBtn = header.createEl('button', { cls: 'ai-chat-icon-btn' });
 		setIcon(searchBtn, 'search');
 		searchBtn.title = 'Search conversations';

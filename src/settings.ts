@@ -24,7 +24,7 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 				defaultModel: def.models[0]?.id,
 			},
 		])
-	) as Record<string, ProviderConfig>,
+	),
 
 	customProviders: [],
 
@@ -114,7 +114,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 						this.plugin.settings.activeModel = config.defaultModel;
 					}
 					await this.plugin.saveSettings();
-					this.display();
+					this.update();
 				});
 			});
 
@@ -165,7 +165,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 						config.enabled = val;
 						await this.plugin.saveSettings();
 						this.plugin.providerRegistry.updateConfig(def.id, config);
-						this.display();
+						this.update();
 					});
 				});
 
@@ -260,7 +260,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 									const discovered = await this.plugin.providerRegistry.discoverModels(def);
 									if (discovered.length > 0) {
 										new Notice(`${def.name}: ${discovered.length} models available`);
-										this.display();
+										this.update();
 									} else {
 										new Notice(`${def.name}: no models discovered. Check API key.`);
 									}
@@ -304,7 +304,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 						config.enabled = val;
 						await this.plugin.saveSettings();
 						this.plugin.providerRegistry.updateConfig(def.id, config);
-						this.display();
+						this.update();
 					});
 				});
 
@@ -337,7 +337,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 							this.plugin.settings.customProviders = this.plugin.settings.customProviders.filter((p) => p.id !== def.id);
 							delete this.plugin.settings.providerConfigs[def.id];
 							await this.plugin.saveSettings();
-							this.display();
+							this.update();
 							new Notice(`Deleted ${def.name}`);
 						});
 				});
@@ -413,7 +413,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 					.onClick(async () => {
 						this.plugin.settings.systemPrompt = '';
 						await this.plugin.saveSettings();
-						this.display();
+						this.update();
 					});
 			});
 
@@ -558,7 +558,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 					void (async () => {
 						this.plugin.settings.noteSaveFolder = path;
 						await this.plugin.saveSettings();
-						this.display();
+						this.update();
 					})();
 				}).open();
 			});
@@ -592,7 +592,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 					void (async () => {
 						this.plugin.settings.autoSaveFolder = path;
 						await this.plugin.saveSettings();
-						this.display();
+						this.update();
 					})();
 				}).open();
 			});
@@ -634,7 +634,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 						this.plugin.settings.chatWallpaperPath = path;
 						this.plugin.settings.chatBackground = 'wallpaper';
 						await this.plugin.saveSettings();
-						this.display();
+						this.update();
 						this.plugin.refreshAllChatViews();
 					})();
 				}).open();
@@ -689,7 +689,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 						this.plugin.settings.memoryFilePath = path ? `${path}/${fname}` : fname;
 						await this.plugin.saveSettings();
 						await this.plugin.memoryStore.reload(this.plugin);
-						this.display();
+						this.update();
 					})();
 				}).open();
 			});
@@ -727,13 +727,13 @@ export class CurtisSettingTab extends PluginSettingTab {
 						new EditFactModal(this.app, fact, (content, category) => {
 							void (async () => {
 								await this.plugin.memoryStore.updateFact(fact.id, content, category || undefined);
-								this.display();
+								this.update();
 							})();
 						}).open();
 					}))
 					.addButton((btn) => btn.setButtonText('Delete').setDestructive().onClick(async () => {
 						await this.plugin.memoryStore.deleteFact(fact.id);
-						this.display();
+						this.update();
 					}));
 			}
 		}
@@ -787,7 +787,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 					// Recreate the registry with new config
 					this.plugin.providerRegistry.addCustomProvider(definition);
 					this.plugin.providerRegistry.updateConfig(definition.id, config);
-					this.display();
+					this.update();
 					new Notice(`Saved ${definition.name}`);
 				})();
 			},

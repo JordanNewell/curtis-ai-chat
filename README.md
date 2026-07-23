@@ -51,10 +51,10 @@ Eight flagship features in this initial release. Full details in [CHANGELOG.md](
 |---|---|---|
 | 🤖 | **[Curtis Agent](docs/AGENT.md)** | AI calls tools to read, create, and edit your vault notes. Nine built-in tools. |
 | ⚔️ | **[Multi-model arena](docs/ARENA.md)** | Stream one prompt to 2–5 models in parallel, side-by-side. Pick a winner, promote to chat. |
-| 🎨 | **[Inline diff rewrite](docs/DIFF_REWRITE.md)** | Cursor-style rewrite with an Accept/Reject diff modal. `Ctrl+Shift+R`. |
+| 🎨 | **[Inline diff rewrite](docs/DIFF_REWRITE.md)** | Cursor-style rewrite with an Accept/Reject diff modal. Assignable hotkey. |
 | @ | **[@-mention vault notes](docs/MENTIONS.md)** | Type `@` in chat → fuzzy-search your vault → attach note content as context. |
 | 🎙️ | **[Voice I/O](docs/VOICE.md)** | Whisper speech-to-text on the mic button. Browser TTS on every assistant message. |
-| 🔍 | **Cross-conversation search** | `Ctrl+Shift+F` opens a fuzzy-matched picker across all conversations and messages. |
+| 🔍 | **Cross-conversation search** | Assignable hotkey opens a fuzzy-matched picker across all conversations and messages. |
 | 📝 | **Markdown export** | Download any conversation as `.md`. `/export` slash command or download icon. |
 | 🧠 | **Memory editing UI** | Edit/delete individual memory facts from Settings → Memory. No more append-only. |
 
@@ -86,7 +86,7 @@ Pick 2–5 models, send one prompt, watch responses stream side-by-side. Click *
 
 ### 🎨 Inline diff rewrite
 
-Select text in any note → `Ctrl+Shift+R` (or right-click → **Rewrite with AI (diff)**). The AI generates an improved version and a modal shows line-by-line green/red diff. Accept or reject.
+Select text in any note → right-click → **Rewrite with AI (diff)** (or assign a hotkey under Settings → Hotkeys). The AI generates an improved version and a modal shows line-by-line green/red diff. Accept or reject.
 
 - Cursor-style review workflow
 - Reuses your active provider and model
@@ -119,7 +119,7 @@ Type `@` in the chat input → fuzzy-search your vault → click a result to att
 - Model picker with capability pills (vision 👁, tools 🔧, context length)
 - Per-message hover actions: copy, quote-into-input, save-as-note, insert-into-active-note, regenerate, edit-and-resend
 - Conversation history dropdown
-- `Ctrl+Shift+F` for cross-conversation search
+- Cross-conversation search (assignable hotkey)
 
 ### 🖼️ Image attachments
 

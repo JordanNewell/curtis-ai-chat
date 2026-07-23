@@ -18,7 +18,6 @@ export function registerCommands(plugin: CurtisPlugin): void {
 	plugin.addCommand({
 		id: 'search-conversations',
 		name: 'Search conversations',
-		hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'f' }],
 		callback: () => {
 			void plugin.openChatSearch();
 		},
@@ -85,7 +84,6 @@ export function registerCommands(plugin: CurtisPlugin): void {
 			}
 			void plugin.runDiffRewrite(editor, selection);
 		},
-		hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'r' }],
 	});
 
 	// ── Extended Selection Commands ──

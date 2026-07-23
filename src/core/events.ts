@@ -78,7 +78,7 @@ export class EventBus {
 	}
 
 	off<K extends keyof EventBusEvents>(event: K, handler: EventHandler<EventBusEvents[K]>): void {
-		this.handlers.get(event)?.delete(handler as EventHandler);
+		this.handlers.get(event)?.delete(handler);
 	}
 
 	emit<K extends keyof EventBusEvents>(event: K, data: EventBusEvents[K]): void {
