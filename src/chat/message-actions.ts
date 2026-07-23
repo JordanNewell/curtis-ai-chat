@@ -119,14 +119,14 @@ export function attachUserMessageActions(
 
 	const bar = wrapper.createDiv({ cls: 'ai-user-actions' });
 
-	const addAction = (icon: string, title: string, onClick: () => void): void => {
+	const addAction = (icon: string, title: string, onClick: () => void | Promise<void>): void => {
 		const btn = bar.createEl('button', { cls: 'ai-message-action-btn' });
 		setIcon(btn, icon);
 		btn.title = title;
 		btn.setAttribute('aria-label', title);
 		btn.addEventListener('click', (e) => {
 			e.stopPropagation();
-			onClick();
+			void onClick();
 		});
 	};
 

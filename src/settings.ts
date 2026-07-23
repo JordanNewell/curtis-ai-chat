@@ -22,7 +22,7 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 				enabled: def.id === 'anthropic',
 				apiKey: '',
 				defaultModel: def.models[0]?.id,
-			} as ProviderConfig,
+			},
 		])
 	) as Record<string, ProviderConfig>,
 

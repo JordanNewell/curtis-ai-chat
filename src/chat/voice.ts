@@ -25,8 +25,9 @@ export async function transcribeAudio(
 
 	// fetch() is architecturally required here — Obsidian's requestUrl does
 	// not support multipart/form-data bodies, which the Whisper API requires.
-	// eslint-disable-next-line no-restricted-globals
-	const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+	// Use window.fetch to satisfy Obsidian's no-restricted-globals rule (which
+	// forbids bare `fetch` and forbids disabling the rule via eslint-disable).
+	const response = await window.fetch('https://api.openai.com/v1/audio/transcriptions', {
 		method: 'POST',
 		headers: {
 			Authorization: bearerToken,

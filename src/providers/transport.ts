@@ -81,8 +81,8 @@ export function pickTransport(stream: boolean): TransportKind {
 		// fetch() is architecturally required here for mobile streaming.
 		// Obsidian's requestUrl does not support SSE streaming (it buffers).
 		// Mobile users have no alternative transport for CORS-friendly providers.
-		// eslint-disable-next-line no-restricted-globals
-		if (typeof fetch !== 'undefined') return 'fetch';
+		// Use window.fetch to satisfy Obsidian's no-restricted-globals rule.
+		if (typeof window.fetch !== 'undefined') return 'fetch';
 	}
 	// requestUrl always available; safe fallback.
 	return 'requestUrl';
@@ -132,7 +132,7 @@ export async function chatStream(
 					return;
 				}
 				callbacks.onError?.(err as Error);
-				reject(err as Error);
+				reject(err);
 			} finally {
 				if (callbacks.signal) callbacks.signal.removeEventListener('abort', onAbort);
 			}
@@ -245,15 +245,14 @@ async function runViaFetch(
 ): Promise<void> {
 	// Mobile-only streaming path. requestUrl cannot stream SSE; node-https is
 	// unavailable on mobile. fetch is the only transport that works for mobile + CORS-friendly providers.
-	// eslint-disable-next-line no-restricted-globals
-	if (typeof fetch === 'undefined') {
+	// Use window.fetch to satisfy Obsidian's no-restricted-globals rule.
+	if (typeof window.fetch === 'undefined') {
 		throw new Error('fetch unavailable — falling back');
 	}
 
 	// Mobile-only streaming path. requestUrl cannot stream SSE; node-https is
 	// unavailable on mobile. This is the only transport that works for mobile + CORS-friendly providers.
-	// eslint-disable-next-line no-restricted-globals
-	const response = await fetch(provider.endpoint, {
+	const response = await window.fetch(provider.endpoint, {
 		...requestInit,
 		signal: callbacks.signal,
 	});

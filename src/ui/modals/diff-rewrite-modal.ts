@@ -12,9 +12,9 @@ export class DiffRewriteModal extends Modal {
 		this.modified = modified;
 		this.onAccept = onAccept;
 		this.setTitle('AI rewrite — review changes');
-		// Make modal wide
-		this.modalEl.style.width = '700px';
-		this.modalEl.style.maxHeight = '80vh';
+		// Size the modal via CSS class (avoids direct style assignment per
+		// Obsidian lint rule obsidianmd/no-static-style-assignment).
+		this.modalEl.addClass('ai-diff-rewrite-modal');
 	}
 
 	onOpen(): void {

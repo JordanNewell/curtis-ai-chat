@@ -1717,6 +1717,12 @@ pre:hover .ai-code-copy-btn {
    DIFF REWRITE MODAL — Cursor-style inline rewrite review
    ============================================================================ */
 
+/* Diff rewrite modal — widen + cap height so long rewrites stay scrollable. */
+.ai-diff-rewrite-modal {
+	width: 700px;
+	max-height: 80vh;
+}
+
 .ai-diff-container {
 	font-family: var(--font-monospace);
 	font-size: var(--font-size-sm);
