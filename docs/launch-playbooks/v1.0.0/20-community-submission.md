@@ -32,6 +32,28 @@ Polyglot AI chat with 30+ providers (Anthropic, OpenAI, Gemini, Ollama, OpenRout
 
 ---
 
+## Long description (plugin page body, ~940 chars)
+
+Polyglot AI chat in your sidebar. Thirty-plus providers — Anthropic, OpenAI, Gemini, Ollama, OpenRouter, Groq, and more — one consistent interface. Your API keys, your vault, your data.
+
+**Agent mode** — AI calls tools to read, create, edit your notes (search, create, edit, get_tags, get_backlinks, calculator). Opt-in.
+
+**Multi-model arena** — stream one prompt to 2–5 models side-by-side. Compare quality, latency, cost live.
+
+**Inline diff rewrite** — select text, AI generates an improved version, Accept/Reject diff.
+
+**Voice I/O** — Whisper STT on the mic, browser TTS on assistant messages, auto-speak toggle.
+
+**@-mention vault notes** — fuzzy-search and attach as invisible context.
+
+**Cross-conversation search** — Ctrl+Shift+F across every message in every conversation.
+
+**Memory** — markdown-file-backed, edit/delete facts from Settings.
+
+API keys in OS keychain. MIT, no telemetry, attested per release.
+
+---
+
 ## Submission cover letter (paste into the submission form body)
 
 Hi Obsidian team,
