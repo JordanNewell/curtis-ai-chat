@@ -14,7 +14,7 @@
 
 **Author:** Jordan Newell ([@JordanNewell](https://github.com/JordanNewell))
 
-**Manifest version:** 1.0.0
+**Manifest version:** 1.0.2
 
 **minAppVersion:** 1.13.0
 
@@ -46,7 +46,7 @@ Polyglot AI chat in your sidebar. Thirty-plus providers — Anthropic, OpenAI, G
 
 **@-mention vault notes** — fuzzy-search and attach as invisible context.
 
-**Cross-conversation search** — Ctrl+Shift+F across every message in every conversation.
+**Cross-conversation search** — assignable hotkey across every message in every conversation.
 
 **Memory** — markdown-file-backed, edit/delete facts from Settings.
 
@@ -64,10 +64,10 @@ Submitting **Curtis AI Chat** for directory review. This is a rebrand of my exis
 
 - Curtis Agent — AI calls nine built-in tools to read/create/edit vault notes (opt-in)
 - Multi-model arena — stream one prompt to 2–5 models side-by-side
-- Inline diff rewrite — select text → Ctrl+Shift+R → AI rewrite with Accept/Reject diff modal
+- Inline diff rewrite — select text → right-click → Rewrite with AI (diff), or assign a hotkey → AI rewrite with Accept/Reject diff modal
 - @-mention vault notes — fuzzy-search and attach note content as context
 - Voice I/O — Whisper speech-to-text on the mic button, browser TTS on every assistant message
-- Cross-conversation search — Ctrl+Shift+F fuzzy picker
+- Cross-conversation search — assignable hotkey fuzzy picker
 - Markdown export — `/export` slash or header download icon
 - Memory editing UI — edit/delete individual memory facts from Settings → Memory
 
