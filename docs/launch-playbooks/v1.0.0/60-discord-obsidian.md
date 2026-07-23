@@ -12,7 +12,7 @@ Hey all — sharing v1.0.0 of my plugin Curtis AI Chat, just shipped today.
 
 **Repo:** https://github.com/JordanNewell/curtis-ai-chat
 **License:** MIT, no telemetry
-**Install:** community directory (v4 review pending), manual, or BRAT (`JordanNewell/curtis-ai-chat`)
+**Install:** community directory (v1 review pending), manual, or BRAT (`JordanNewell/curtis-ai-chat`)
 
 It's a polyglot AI chat sidebar — 30+ providers built in (Anthropic, OpenAI, Gemini, Ollama, OpenRouter, Groq, Together, DeepSeek, Cerebras, SambaNova, plus ~20 more OpenAI-compat endpoints). Any custom OpenAI-compat endpoint also works.
 

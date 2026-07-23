@@ -150,18 +150,18 @@
 </head>
 <body>
   <div class="sidebar">
-    <div class="sb-head"><span>Curtis AI Chat</span><span style="color:#7d8590">Claude 4.6</span></div>
+    <div class="sb-head"><span>Curtis AI Chat</span><span style="color:#7d8590">Claude Opus 4.7</span></div>
     <div class="msg">
       <div class="you">You</div>
       <div class="body">Summarize my meeting notes from yesterday</div>
     </div>
     <div class="msg">
       <div class="ai">Curtis</div>
-      <div class="body">Three decisions: ship v3.0.1 by Friday, defer the memory rewrite to next sprint, and chase down the Linear OAuth scope bug. Full notes in <span style="color:#a855f7;text-decoration:underline;">2026-07-21-standup.md</span></div>
+      <div class="body">Three decisions: tag <span style="color:#a855f7;">v1.0</span> by Friday, finish the agent tool registry before the arena ships, and chase the Anthropic streaming regression. Full notes in <span style="color:#a855f7;text-decoration:underline;">2026-07-22-standup.md</span></div>
     </div>
     <div class="msg">
       <div class="you">You</div>
-      <div class="body">Draft a follow-up to the team</div>
+      <div class="body">@2026-07-22-standup — draft a follow-up to the team</div>
     </div>
     <div class="msg">
       <div class="ai">Curtis</div>
@@ -170,21 +170,38 @@
   </div>
   <div class="content">
     <div class="logo-row">
-      <svg class="logo" viewBox="0 0 56 64" fill="none">
-        <path d="M8 14 C8 10 11 8 14 8 L42 8 C46 8 48 11 48 14 L48 36 C48 40 45 42 42 42 L22 42 L12 52 L14 42 C10 42 8 39 8 36 Z"
-              stroke="#a855f7" stroke-width="2.5" fill="rgba(168, 85, 247, 0.12)"/>
-        <circle cx="20" cy="25" r="2.5" fill="#a855f7"/>
-        <circle cx="28" cy="25" r="2.5" fill="#a855f7"/>
-        <circle cx="36" cy="25" r="2.5" fill="#a855f7"/>
+      <svg class="logo" viewBox="0 0 80 80" fill="none">
+        <defs>
+          <linearGradient id="cGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#A78BFA"/>
+            <stop offset="100%" stop-color="#6D28D9"/>
+          </linearGradient>
+          <linearGradient id="bubbleGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#4ADE80"/>
+            <stop offset="100%" stop-color="#10B981"/>
+          </linearGradient>
+          <linearGradient id="bubbleSheen" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.3"/>
+            <stop offset="60%" stop-color="#FFFFFF" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="M 58 16 A 28 28 0 1 0 58 64" stroke="url(#cGrad)" stroke-width="14" fill="none" stroke-linecap="round"/>
+        <g transform="translate(42 40)">
+          <path d="M -8 -8 H 6 Q 10 -8 10 -4 V 2 Q 10 6 6 6 H -2 L -8 12 L -6 6 H -8 Q -12 6 -12 2 V -4 Q -12 -8 -8 -8 Z" fill="url(#bubbleGrad)"/>
+          <path d="M -8 -8 H 6 Q 10 -8 10 -4 V 2 Q 10 6 6 6 H -2 L -8 12 L -6 6 H -8 Q -12 6 -12 2 V -4 Q -12 -8 -8 -8 Z" fill="url(#bubbleSheen)"/>
+          <circle cx="-3" cy="-1" r="1.4" fill="#09090B" opacity="0.85"/>
+          <circle cx="1"  cy="-1" r="1.4" fill="#09090B" opacity="0.85"/>
+          <circle cx="5"  cy="-1" r="1.4" fill="#09090B" opacity="0.85"/>
+        </g>
       </svg>
-      <div class="eyebrow">Open-source · MIT · v1.0.0</div>
+      <div class="eyebrow">Open-source · MIT · v1.0</div>
     </div>
     <h1>Curtis</h1>
     <div class="subtitle">AI Chat</div>
-    <p class="tagline">A genuinely agnostic AI chat for Obsidian. Thirty-plus providers, one sidebar. Local-first when you want it, cloud when you don't.</p>
+    <p class="tagline">Polyglot AI chat for Obsidian. Thirty-plus providers, one sidebar. Your data stays in your vault.</p>
     <div class="chips">
       <span class="chip">30+ providers</span>
-      <span class="chip">Ollama + cloud</span>
+      <span class="chip">agent · arena · voice</span>
       <span class="chip">local-first</span>
     </div>
   </div>

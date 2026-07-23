@@ -297,7 +297,7 @@ See the [open issues](../../issues) for the live list.
 PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style, and the audit checklist every change goes through before merge.
 
 > [!NOTE]
-> Not accepting external PRs yet while the v4 line stabilizes. Bug reports and feature requests via [Issues](../../issues) are very welcome.
+> Not accepting external PRs yet while the v1 line stabilizes. Bug reports and feature requests via [Issues](../../issues) are very welcome.
 
 ## License
 

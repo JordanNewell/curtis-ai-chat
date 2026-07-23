@@ -11,7 +11,7 @@ State at start: master is 3 commits ahead of origin (v1.0.0 release commit `659d
 - [ ] `cd E:/dev/projects/curtis-ai-chat && git status` — clean tree, on master
 - [ ] `npm run build` — exit 0, `main.js` written
 - [ ] `npx eslint src --ext .ts` — zero warnings
-- [ ] `git log --oneline origin/master..HEAD` — shows 3 commits (the v4 work)
+- [ ] `git log --oneline origin/master..HEAD` — shows 3 commits (the v1 work)
 - [ ] `cat manifest.json | grep version` — `1.0.0`
 - [ ] `git tag --list "4.*"` — empty (no 1.0.0 tag yet)
 - [ ] Reload Obsidian test vault, smoke-test: open chat, send to 1 provider, run agent tool, arena, diff rewrite, slash command `/export`
@@ -84,7 +84,7 @@ Space these out by ~15–30 min so you can engage with early replies on each, no
 ## Phase I — Internal handoff (10 min)
 
 - [ ] Update `e:/vaults/claude.code.xyz/COLLAB.md` — new session entry at top: "curtis-ai-chat v1.0.0 SHIPPED to directory"
-- [ ] Update memory: `~/.claude/projects/C--Users-jrnew/memory/project_curtis-ai-chat-v4-shipped-2026-07-22.md` — flip status from "test vault only" to "released". Update MEMORY.md quick-link one-liner.
+- [ ] Update memory: `~/.claude/projects/C--Users-jrnew/memory/project_curtis-ai-chat-v1-shipped-2026-07-22.md` — flip status from "test vault only" to "released". Update MEMORY.md quick-link one-liner.
 - [ ] Optional: post in personal Discord/Slack channels, link in email signature
 
 ## Phase J — Watch the first 48 hours

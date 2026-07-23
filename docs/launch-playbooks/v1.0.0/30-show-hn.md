@@ -47,14 +47,14 @@ The v1.0.0 release ships eight features I needed and couldn't get from a single 
 
 **Build provenance:** release assets (`main.js`, `manifest.json`, `styles.css`) each get a Sigstore attestation from GitHub Actions. `gh attestation verify main.js --repo JordanNewell/curtis-ai-chat` confirms what you install was built from public source.
 
-**Install:** community plugin directory (review pending for v4), manual download from releases, or via BRAT for beta channel. README has the recipes.
+**Install:** community plugin directory (review pending for v1), manual download from releases, or via BRAT for beta channel. README has the recipes.
 
 **Honest tradeoffs:**
 
 - v1.0.0 changes the plugin ID from `curtis` to `curtis-ai-chat`. Existing v3 installs need to reinstall; conversation history is keyed under the old ID and will not carry over. I took the breaking change rather than ship two more years of legacy.
-- Agent mode is OpenAI-compatible providers only for v1.0.0. Anthropic/Gemini/Ollama agent support is written but needs more soak time — lands in v4.1.0.
+- Agent mode is OpenAI-compatible providers only for v1.0.0. Anthropic/Gemini/Ollama agent support is written but needs more soak time — lands in v1.1.
 - No semantic RAG. Memory is plain markdown facts (durable, editable, portable). SQLite-vec retrieval is on the roadmap once memory exceeds ~150 facts per user.
-- Not accepting external PRs yet while v4 stabilizes. Bug reports and feature requests welcome.
+- Not accepting external PRs yet while v1 stabilizes. Bug reports and feature requests welcome.
 
 MIT, no telemetry, no account, no SaaS. Source: https://github.com/JordanNewell/curtis-ai-chat
 

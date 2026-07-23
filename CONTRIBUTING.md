@@ -1,9 +1,9 @@
 # Contributing
 
-Contributions are welcome — bug reports, feature requests, and (once v4 stabilizes) pull requests. This doc covers dev setup, project structure, code style, the audit checklist every change goes through, and recipes for the most common contributions.
+Contributions are welcome — bug reports, feature requests, and (once v1 stabilizes) pull requests. This doc covers dev setup, project structure, code style, the audit checklist every change goes through, and recipes for the most common contributions.
 
 > [!NOTE]
-> **Not accepting external PRs yet** while the v4 line stabilizes. Issues and feature requests via [GitHub Issues](../../issues) are very welcome. This doc exists so the contribution path is documented the day that policy flips.
+> **Not accepting external PRs yet** while the v1 line stabilizes. Issues and feature requests via [GitHub Issues](../../issues) are very welcome. This doc exists so the contribution path is documented the day that policy flips.
 
 ## Project structure
 
@@ -47,7 +47,7 @@ Contributions are welcome — bug reports, feature requests, and (once v4 stabil
     ├── core/
     │   ├── tools.ts               # Curtis Agent tool registry + built-ins
     │   ├── secrets.ts             # OS keychain storage
-    │   ├── migration.ts           # v3 → v4 system prompt migration
+    │   ├── migration.ts           # legacy Curtis Chat → v1 system prompt migration
     │   ├── events.ts              # EventBus
     │   ├── hooks.ts               # lifecycle hooks
     │   └── types/json-helpers.ts  # Type-guard utilities for JSON boundaries

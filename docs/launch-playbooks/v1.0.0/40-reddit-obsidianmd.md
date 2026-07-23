@@ -18,7 +18,7 @@ Hey r/ObsidianMD — author here. Just shipped v1.0.0 of Curtis AI Chat and want
 
 **Repo:** https://github.com/JordanNewell/curtis-ai-chat
 **License:** MIT, no telemetry, no SaaS, no account
-**Install:** community plugin directory (v4 review pending), manual, or BRAT
+**Install:** community plugin directory (v1 review pending), manual, or BRAT
 
 # What Curtis AI Chat is
 

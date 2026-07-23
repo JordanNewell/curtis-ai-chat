@@ -36,7 +36,7 @@ The flagship: Curtis Agent.
 
 The AI calls nine tools to read, create, and edit notes in your vault — read_note, search_notes, create_note, edit_note, list_notes, get_tags, get_backlinks, get_current_note, calculator.
 
-Opt-in. OpenAI-compat providers now, Anthropic/Gemini/Ollama in v4.1.
+Opt-in. OpenAI-compat providers now, Anthropic/Gemini/Ollama in v1.1.
 
 2/6
 ```
@@ -80,7 +80,7 @@ Your data stays yours.
 
 ```
 Install:
-- Community plugin directory (v4 review pending)
+- Community plugin directory (v1 review pending)
 - BRAT beta channel: JordanNewell/curtis-ai-chat
 - Manual: download main.js + manifest.json + styles.css from latest release
 
