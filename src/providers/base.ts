@@ -11,33 +11,21 @@ import type {
 	ErrorCallback,
 	AuthType,
 	StreamResponse,
+	ToolCall,
+	ToolDefinition,
 } from '../types';
+import { isOpenAIChatCompletion, isOpenAIChunk, OpenAIToolCall } from './types/openai-responses';
 
 /**
- * OpenAI-compatible /v1/chat/completions non-streaming response shape.
- * Only the fields consumed in `parseResponse` are typed.
+ * Discriminated tag for the protocol family a provider speaks. Informational
+ * for now — AIProvider doesn't require it. Lets downstream code branch on
+ * transport shape without ad-hoc string matching on `id`.
  */
-interface OpenAIChatResponse {
-	choices?: Array<{ message?: { content?: string } }>;
-	usage?: {
-		prompt_tokens?: number;
-		completion_tokens?: number;
-		total_tokens?: number;
-	};
-}
-
-/**
- * OpenAI-compatible streaming chunk shape. Only fields consumed in
- * `parseStream` are typed.
- */
-interface OpenAIChatChunk {
-	choices?: Array<{ delta?: { content?: string } }>;
-	usage?: {
-		prompt_tokens?: number;
-		completion_tokens?: number;
-		total_tokens?: number;
-	};
-}
+export type ProviderFamily =
+	| 'openai-compat'
+	| 'anthropic'
+	| 'gemini'
+	| 'ollama';
 
 export abstract class BaseProvider implements AIProvider {
 	abstract readonly id: string;
@@ -49,29 +37,79 @@ export abstract class BaseProvider implements AIProvider {
 	readonly supportsStreaming = true;
 	readonly supportsVision = true;
 
+	/** Family tag — defaults to openai-compat for BaseProvider subclasses.
+	 *  AnthropicProvider overrides this to 'anthropic'. Used by supportsToolCalls(). */
+	readonly family: ProviderFamily = 'openai-compat';
+
 	protected abstract getAuthHeaders(): Record<string, string>;
 
+	/**
+	 * True when this provider speaks the OpenAI tool-calling dialect.
+	 * v1 agent mode is gated on this — Anthropic/Gemini/Ollama shapes differ
+	 * and are not yet wired in.
+	 */
+	supportsToolCalls(): boolean {
+		return this.family === 'openai-compat';
+	}
+
 	formatRequest(messages: AIMessage[], options: AIRequestOptions): RequestInit {
+		// Normalize our flat internal ToolCall shape {id, name, arguments} back
+		// to the OpenAI wire format {id, type: 'function', function: {...}} on
+		// assistant messages. Without this, providers that strictly enforce the
+		// spec (Z.ai GLM, etc.) reject the second turn of an agent loop with
+		// "Tool type cannot be empty".
+		const wireMessages = messages.map((m) => {
+			if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0) {
+				return {
+					...m,
+					tool_calls: m.tool_calls.map((tc) => ({
+						id: tc.id,
+						type: 'function' as const,
+						function: {
+							name: tc.name,
+							arguments: JSON.stringify(tc.arguments ?? {}),
+						},
+					})),
+				};
+			}
+			return m;
+		});
+
+		const body: Record<string, unknown> = {
+			model: options.model,
+			messages: wireMessages,
+			temperature: options.temperature,
+			max_tokens: options.maxTokens,
+			stream: options.stream ?? false,
+		};
+
+		// Tool advertisement — only when the caller provided tools AND this
+		// provider speaks the OpenAI function-calling dialect. Other families
+		// silently drop the tools and behave as plain chat.
+		if (options.tools && options.tools.length > 0 && this.supportsToolCalls()) {
+			body.tools = options.tools.map((t) => toolDefToOpenAI(t));
+			body.tool_choice = 'auto';
+		}
+
 		return {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
 				...this.getAuthHeaders(),
 			},
-			body: JSON.stringify({
-				model: options.model,
-				messages,
-				temperature: options.temperature,
-				max_tokens: options.maxTokens,
-				stream: options.stream ?? false,
-			}),
+			body: JSON.stringify(body),
 		};
 	}
 
 	async parseResponse(response: StreamResponse): Promise<AIResponse> {
-		const data = (await response.json()) as OpenAIChatResponse;
-		const content = data?.choices?.[0]?.message?.content || '';
-		const u = data?.usage;
+		const raw: unknown = await response.json();
+		if (!isOpenAIChatCompletion(raw)) {
+			throw new Error(`${this.name}: unexpected response shape`);
+		}
+		const data = raw;
+		const choice = data.choices[0];
+		const content = choice?.message?.content || '';
+		const u = data.usage;
 		const usage = u
 			? {
 					promptTokens: u.prompt_tokens || 0,
@@ -79,7 +117,8 @@ export abstract class BaseProvider implements AIProvider {
 					totalTokens: u.total_tokens || 0,
 				}
 			: undefined;
-		return { content, usage };
+		const toolCalls = parseOpenAIToolCalls(choice?.message?.tool_calls);
+		return { content, usage, tool_calls: toolCalls };
 	}
 
 	async parseStream(
@@ -109,8 +148,9 @@ export abstract class BaseProvider implements AIProvider {
 					if (data === '[DONE]') continue;
 
 					try {
-						const parsed = JSON.parse(data) as OpenAIChatChunk;
-						const delta = parsed.choices?.[0]?.delta?.content || '';
+						const parsed: unknown = JSON.parse(data);
+						if (!isOpenAIChunk(parsed)) continue;
+						const delta = parsed.choices[0]?.delta?.content || '';
 						if (delta) onChunk(delta);
 
 						if (parsed.usage && onUsage) {
@@ -178,4 +218,57 @@ export class OpenAICompatibleProvider extends BaseProvider {
 		if (!model || model.inputPrice === undefined || model.outputPrice === undefined) return null;
 		return { inputPrice: model.inputPrice, outputPrice: model.outputPrice };
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Tool-call helpers
+// ---------------------------------------------------------------------------
+
+/** Convert our ToolDefinition to the OpenAI tools[] entry shape. */
+function toolDefToOpenAI(t: ToolDefinition): { type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } } {
+	const properties: Record<string, Record<string, unknown>> = {};
+	const required: string[] = [];
+	for (const [key, param] of Object.entries(t.parameters)) {
+		const schema: Record<string, unknown> = {
+			type: param.type,
+			description: param.description,
+		};
+		if (param.enum) schema.enum = param.enum;
+		if (param.default !== undefined) schema.default = param.default;
+		properties[key] = schema;
+		if (param.required) required.push(key);
+	}
+	return {
+		type: 'function',
+		function: {
+			name: t.name,
+			description: t.description,
+			parameters: { type: 'object', properties, required },
+		},
+	};
+}
+
+/**
+ * Parse the OpenAI `message.tool_calls` array into our canonical ToolCall[].
+ * Returns undefined when absent or empty. Arguments arrive as a JSON string
+ * that we parse into a record; malformed JSON yields an empty record and the
+ * tool's own required-param check surfaces the error.
+ */
+function parseOpenAIToolCalls(raw: OpenAIToolCall[] | undefined): ToolCall[] | undefined {
+	if (!raw || !Array.isArray(raw) || raw.length === 0) return undefined;
+	const out: ToolCall[] = [];
+	for (const tc of raw) {
+		if (!tc || typeof tc.id !== 'string' || !tc.function) continue;
+		let args: Record<string, unknown> = {};
+		try {
+			const parsed: unknown = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
+			if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+				args = parsed as Record<string, unknown>;
+			}
+		} catch {
+			args = {};
+		}
+		out.push({ id: tc.id, name: tc.function.name, arguments: args });
+	}
+	return out.length > 0 ? out : undefined;
 }

@@ -6,6 +6,8 @@ import { PROVIDER_DEFINITIONS } from './providers/registry';
 import { CustomProviderModal } from './ui/modals/custom-provider-modal';
 import { FolderSuggestModal } from './ui/modals/folder-suggest-modal';
 import { ImageSuggestModal } from './ui/modals/image-suggest-modal';
+import { EditFactModal } from './ui/modals/edit-fact-modal';
+import { CORE_SYSTEM_PROMPT } from './core/system-prompt';
 import { setApiKeyForProvider, getSecretStorage, resolveApiKey } from './core/secrets';
 import type CurtisPlugin from './main';
 
@@ -28,7 +30,12 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 
 	temperature: 0.7,
 	maxTokens: 4096,
-	systemPrompt: 'You are a helpful AI assistant integrated into Obsidian. Help the user with writing, analysis, coding, and knowledge management.',
+	// User-defined extension to the CORE_SYSTEM_PROMPT (now hardcoded in
+	// src/core/system-prompt.ts and composed at send time). Empty by default —
+	// fresh installs get just the core. Users can add custom context here
+	// (project specifics, tone preferences, domain knowledge) which is
+	// appended below a `---` separator after the core.
+	systemPrompt: '',
 	streamResponse: true,
 	showTokenUsage: true,
 
@@ -59,6 +66,11 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 	ragTopK: 5,
 	ragEmbeddingProvider: 'openai',
 	ragEmbeddingModel: 'text-embedding-3-small',
+
+	enableAgent: false,
+	agentMaxTurns: 5,
+	enableWebSearch: false,
+	showDaySeparators: true,
 
 	hotkeys: {
 		toggleChat: 'Ctrl+Shift+G',
@@ -319,7 +331,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 				})
 				.addButton((b) => {
 					b.setButtonText('Delete')
-						.setWarning()
+						.setDestructive()
 						.onClick(async () => {
 							this.plugin.providerRegistry.removeCustomProvider(def.id);
 							this.plugin.settings.customProviders = this.plugin.settings.customProviders.filter((p) => p.id !== def.id);
@@ -372,16 +384,37 @@ export class CurtisSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName('System prompt')
-			.setDesc('Instructions for the AI assistant')
+			.setName('Curtis identity (read-only)')
+			.setDesc('The non-negotiable CORE prompt — defines who Curtis is, what tools are available, and the operating principles. Appended automatically to every conversation.')
 			.addTextArea((text) => {
 				text
+					.setValue(CORE_SYSTEM_PROMPT)
+					.setDisabled(true);
+				text.inputEl.rows = 10;
+				text.inputEl.addClass('ai-system-prompt-core');
+			});
+
+		new Setting(containerEl)
+			.setName('Additional instructions')
+			.setDesc('Your own context layered on top of Curtis\'s core — project specifics, tone preferences, domain knowledge. Optional.')
+			.addTextArea((text) => {
+				text
+					.setPlaceholder('e.g., "You are my Rust coding assistant. Prefer the 2021 edition. Always explain lifetimes when introducing them."')
 					.setValue(this.plugin.settings.systemPrompt)
 					.onChange(async (val) => {
 						this.plugin.settings.systemPrompt = val;
 						await this.plugin.saveSettings();
 					});
 				text.inputEl.rows = 4;
+			})
+			.addExtraButton((btn) => {
+				btn.setIcon('reset')
+					.setTooltip('Reset to defaults')
+					.onClick(async () => {
+						this.plugin.settings.systemPrompt = '';
+						await this.plugin.saveSettings();
+						this.display();
+					});
 			});
 
 		new Setting(containerEl)
@@ -406,8 +439,65 @@ export class CurtisSettingTab extends PluginSettingTab {
 				});
 			});
 
+		// ---- Agent ----
+		new Setting(containerEl).setName('Agent').setHeading();
+
+		new Setting(containerEl)
+			.setName('Enable agent mode')
+			.setDesc('Let the AI call tools to read/create/modify your vault notes. Only OpenAI-compatible providers support this in v4.0.0 (Anthropic/Gemini/Ollama silently skip tools).')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.enableAgent);
+				toggle.onChange(async (val) => {
+					this.plugin.settings.enableAgent = val;
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName('Max tool calls per message')
+			.setDesc('Safety limit — prevents infinite agent loops')
+			.addDropdown((dd) => {
+				for (const n of [1, 3, 5, 10]) {
+					dd.addOption(String(n), String(n));
+				}
+				dd.setValue(String(this.plugin.settings.agentMaxTurns));
+				dd.onChange(async (val) => {
+					this.plugin.settings.agentMaxTurns = Number(val);
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName('Enable web tools')
+			.setDesc('Adds web_search (DuckDuckGo) + read_url (Jina reader) tools so the AI can look things up online. Free, no API key. Requires agent mode ON. Off by default — Curtis is vault-first.')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.enableWebSearch);
+				toggle.onChange(async (val) => {
+					this.plugin.settings.enableWebSearch = val;
+					await this.plugin.saveSettings();
+					// Hot-reload the tool registry so the change takes effect on
+					// the next agent send — no Obsidian reload required.
+					this.plugin.toolRegistry.setWebToolsEnabled(val);
+					new Notice(val
+						? 'Web tools enabled'
+						: 'Web tools disabled');
+				});
+			});
+
 		// ---- Chat UI ----
 		new Setting(containerEl).setName('Chat UI').setHeading();
+
+		new Setting(containerEl)
+			.setName('Day separators')
+			.setDesc('Show "Today", "Yesterday", or the date between messages on different days.')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.showDaySeparators !== false);
+				toggle.onChange(async (val) => {
+					this.plugin.settings.showDaySeparators = val;
+					await this.plugin.saveSettings();
+					this.plugin.refreshChatViews();
+				});
+			});
 
 		new Setting(containerEl)
 			.setName('Enter key behavior')
@@ -464,10 +554,12 @@ export class CurtisSettingTab extends PluginSettingTab {
 		})
 		.addButton((btn) => {
 			btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
-				new FolderSuggestModal(this.app, async (path) => {
-					this.plugin.settings.noteSaveFolder = path;
-					await this.plugin.saveSettings();
-					this.display();
+				new FolderSuggestModal(this.app, (path) => {
+					void (async () => {
+						this.plugin.settings.noteSaveFolder = path;
+						await this.plugin.saveSettings();
+						this.display();
+					})();
 				}).open();
 			});
 		});
@@ -496,10 +588,12 @@ export class CurtisSettingTab extends PluginSettingTab {
 		})
 		.addButton((btn) => {
 			btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
-				new FolderSuggestModal(this.app, async (path) => {
-					this.plugin.settings.autoSaveFolder = path;
-					await this.plugin.saveSettings();
-					this.display();
+				new FolderSuggestModal(this.app, (path) => {
+					void (async () => {
+						this.plugin.settings.autoSaveFolder = path;
+						await this.plugin.saveSettings();
+						this.display();
+					})();
 				}).open();
 			});
 		});
@@ -535,12 +629,14 @@ export class CurtisSettingTab extends PluginSettingTab {
 		})
 		.addButton((btn) => {
 			btn.setIcon('image').setTooltip('Pick image from vault').onClick(() => {
-				new ImageSuggestModal(this.app, async (path) => {
-					this.plugin.settings.chatWallpaperPath = path;
-					this.plugin.settings.chatBackground = 'wallpaper';
-					await this.plugin.saveSettings();
-					this.display();
-					this.plugin.refreshAllChatViews();
+				new ImageSuggestModal(this.app, (path) => {
+					void (async () => {
+						this.plugin.settings.chatWallpaperPath = path;
+						this.plugin.settings.chatBackground = 'wallpaper';
+						await this.plugin.saveSettings();
+						this.display();
+						this.plugin.refreshAllChatViews();
+					})();
 				}).open();
 			});
 		});
@@ -586,13 +682,15 @@ export class CurtisSettingTab extends PluginSettingTab {
 		})
 		.addButton((btn) => {
 			btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
-				new FolderSuggestModal(this.app, async (path) => {
-					// FolderSuggestModal picks a folder; append default filename.
-					const fname = 'Curtis Memory.md';
-					this.plugin.settings.memoryFilePath = path ? `${path}/${fname}` : fname;
-					await this.plugin.saveSettings();
-					await this.plugin.memoryStore.reload(this.plugin);
-					this.display();
+				new FolderSuggestModal(this.app, (path) => {
+					void (async () => {
+						// FolderSuggestModal picks a folder; append default filename.
+						const fname = 'Curtis Memory.md';
+						this.plugin.settings.memoryFilePath = path ? `${path}/${fname}` : fname;
+						await this.plugin.saveSettings();
+						await this.plugin.memoryStore.reload(this.plugin);
+						this.display();
+					})();
 				}).open();
 			});
 		})
@@ -605,11 +703,41 @@ export class CurtisSettingTab extends PluginSettingTab {
 			});
 		})
 		.addButton((btn) => {
-			btn.setButtonText('Clear').setWarning().setTooltip('Delete all facts').onClick(async () => {
+			btn.setButtonText('Clear').setDestructive().setTooltip('Delete all facts').onClick(async () => {
 				await this.plugin.memoryStore.clear();
 				new Notice('Memory cleared');
 			});
 		});
+
+	// Fact list — only when memory is enabled.
+	if (this.plugin.settings.enableMemory) {
+		const facts = this.plugin.memoryStore.getFacts();
+		if (facts.length === 0) {
+			new Setting(containerEl)
+				.setName('No facts yet')
+				.setDesc('Memory facts will appear here once captured.');
+		} else {
+			new Setting(containerEl).setName('Facts').setHeading();
+			for (const fact of facts) {
+				const preview = fact.content.length > 80 ? fact.content.slice(0, 80) + '…' : fact.content;
+				new Setting(containerEl)
+					.setName(preview)
+					.setDesc(fact.category ? `Category: ${fact.category}` : 'Uncategorized')
+					.addButton((btn) => btn.setButtonText('Edit').onClick(() => {
+						new EditFactModal(this.app, fact, (content, category) => {
+							void (async () => {
+								await this.plugin.memoryStore.updateFact(fact.id, content, category || undefined);
+								this.display();
+							})();
+						}).open();
+					}))
+					.addButton((btn) => btn.setButtonText('Delete').setDestructive().onClick(async () => {
+						await this.plugin.memoryStore.deleteFact(fact.id);
+						this.display();
+					}));
+			}
+		}
+	}
 
 		// ---- Support ----
 		new Setting(containerEl).setName('🙏 Support').setHeading();
@@ -641,24 +769,27 @@ export class CurtisSettingTab extends PluginSettingTab {
 	private openCustomProviderModal(existing?: ProviderDefinition, existingKey?: string): void {
 		new CustomProviderModal(
 			this.app,
-			async ({ definition, apiKey }) => {
-				// If editing, remove the old entry first
-				if (existing) {
-					this.plugin.settings.customProviders = this.plugin.settings.customProviders.filter((p) => p.id !== existing.id);
-				}
-				this.plugin.settings.customProviders.push(definition);
-				const config: ProviderConfig = {
-					enabled: true,
-					defaultModel: definition.models[0]?.id,
-				};
-				setApiKeyForProvider(this.app, definition.id, config, apiKey);
-				this.plugin.settings.providerConfigs[definition.id] = config;
-				await this.plugin.saveSettings();
-				// Recreate the registry with new config
-				this.plugin.providerRegistry.addCustomProvider(definition);
-				this.plugin.providerRegistry.updateConfig(definition.id, config);
-				this.display();
-				new Notice(`Saved ${definition.name}`);
+			(result) => {
+				void (async () => {
+					const { definition, apiKey } = result;
+					// If editing, remove the old entry first
+					if (existing) {
+						this.plugin.settings.customProviders = this.plugin.settings.customProviders.filter((p) => p.id !== existing.id);
+					}
+					this.plugin.settings.customProviders.push(definition);
+					const config: ProviderConfig = {
+						enabled: true,
+						defaultModel: definition.models[0]?.id,
+					};
+					setApiKeyForProvider(this.app, definition.id, config, apiKey);
+					this.plugin.settings.providerConfigs[definition.id] = config;
+					await this.plugin.saveSettings();
+					// Recreate the registry with new config
+					this.plugin.providerRegistry.addCustomProvider(definition);
+					this.plugin.providerRegistry.updateConfig(definition.id, config);
+					this.display();
+					new Notice(`Saved ${definition.name}`);
+				})();
 			},
 			existing,
 			existingKey

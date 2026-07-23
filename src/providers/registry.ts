@@ -430,7 +430,8 @@ export class ProviderRegistry {
 		for (const [id, provider] of this.providers) {
 			if (this.configs[id]?.enabled && provider.isAuthenticated()) return provider;
 		}
-		return this.providers.values().next().value;
+		const first = this.providers.values().next();
+		return first.done ? undefined : first.value;
 	}
 
 	getAllProviders(): AIProvider[] {

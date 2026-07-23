@@ -1,8 +1,8 @@
 {
-	"id": "curtis",
-	"name": "Curtis",
-	"version": "3.0.1",
-	"minAppVersion": "1.11.4",
+	"id": "curtis-ai-chat",
+	"name": "Curtis AI Chat",
+	"version": "4.0.0",
+	"minAppVersion": "1.13.0",
 	"description": "Polyglot AI chat with 30+ providers (Anthropic, OpenAI, Gemini, Ollama, and more), image attachments, long-term memory, slash commands, and inline selection actions.",
 	"author": "Jordan Newell",
 	"authorUrl": "https://github.com/jordannewell",

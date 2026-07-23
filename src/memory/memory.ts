@@ -156,6 +156,20 @@ export class MemoryStore {
 		return true;
 	}
 
+	/** Edit a fact's content (and optionally its category) by id. */
+	async updateFact(id: string, content: string, category?: string): Promise<MemoryFact | null> {
+		const fact = this.facts.find((f) => f.id === id);
+		if (!fact) return null;
+		const trimmed = content.trim();
+		if (!trimmed) return null;
+		fact.content = trimmed;
+		if (category !== undefined) fact.category = category;
+		fact.timestamp = Date.now();
+		fact.lastAccessed = Date.now();
+		await this.persist();
+		return fact;
+	}
+
 	/** Remove every fact (the file is reset to its header). */
 	async clear(): Promise<void> {
 		this.facts = [];

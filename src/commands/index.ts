@@ -1,3 +1,4 @@
+import { Editor, Notice } from 'obsidian';
 import type CurtisPlugin from '../main';
 
 export function registerCommands(plugin: CurtisPlugin): void {
@@ -12,6 +13,15 @@ export function registerCommands(plugin: CurtisPlugin): void {
 		id: 'new-chat',
 		name: 'New Chat Conversation',
 		callback: () => plugin.activateChatView(true),
+	});
+
+	plugin.addCommand({
+		id: 'search-conversations',
+		name: 'Search conversations',
+		hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'f' }],
+		callback: () => {
+			void plugin.openChatSearch();
+		},
 	});
 
 	// ── Selection Commands ──
@@ -61,6 +71,21 @@ export function registerCommands(plugin: CurtisPlugin): void {
 		id: 'extract-key-points',
 		name: 'Extract key points from selection',
 		editorCallback: (editor) => plugin.processSelection(editor, 'key-points'),
+	});
+
+	// ── Diff Rewrite (Cursor-style inline rewrite) ──
+	plugin.addCommand({
+		id: 'rewrite-with-ai',
+		name: 'Rewrite selection with AI (with diff)',
+		editorCallback: (editor: Editor) => {
+			const selection = editor.getSelection();
+			if (!selection) {
+				new Notice('Select some text first');
+				return;
+			}
+			void plugin.runDiffRewrite(editor, selection);
+		},
+		hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'r' }],
 	});
 
 	// ── Extended Selection Commands ──

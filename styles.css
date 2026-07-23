@@ -187,7 +187,7 @@
 	padding: var(--size-4-3) var(--size-4-4);
 	display: flex;
 	flex-direction: column;
-	gap: var(--size-4-3);
+	gap: var(--size-4-5);
 	position: relative;
 	z-index: 3;
 	background: transparent;
@@ -569,6 +569,7 @@ pre:hover .ai-code-copy-btn {
 .ai-chat-attach-col {
 	display: flex;
 	align-items: flex-end;
+	gap: var(--size-4-2);
 	flex-shrink: 0;
 }
 
@@ -1024,6 +1025,59 @@ pre:hover .ai-code-copy-btn {
 }
 
 /* ============================================================================
+   @-MENTION MENU — vault-note autocomplete dropdown above the input area.
+   Mirrors .ai-slash-menu geometry so both dropdowns feel like the same surface.
+   ============================================================================ */
+
+.ai-mention-menu {
+	position: absolute;
+	left: var(--size-4-4);
+	right: var(--size-4-4);
+	bottom: calc(100% + 4px);
+	max-height: 240px;
+	overflow-y: auto;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+	z-index: 10;
+}
+
+.ai-mention-menu-item {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px var(--size-4-2);
+	cursor: pointer;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ai-mention-menu-item:last-child {
+	border-bottom: none;
+}
+
+.ai-mention-menu-item:hover,
+.ai-mention-menu-item.is-selected {
+	background: var(--background-modifier-hover);
+}
+
+.ai-mention-menu-name {
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ai-mention-menu-path {
+	font-size: var(--font-ui-smallest);
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* ============================================================================
    SLASH HELP MODAL
    ============================================================================ */
 
@@ -1175,7 +1229,8 @@ pre:hover .ai-code-copy-btn {
 	}
 
 	/* Slash/mention menus: span full width minus tight margins. */
-	.ai-slash-menu {
+	.ai-slash-menu,
+	.ai-mention-menu {
 		left: var(--size-4-2);
 		right: var(--size-4-2);
 	}
@@ -1225,7 +1280,8 @@ pre:hover .ai-code-copy-btn {
  * (the Obsidian linter forbids direct style writes). Applied to:
  *   - .ai-chat-image-strip (when no pending images)
  *   - .ai-chat-abort-btn (initial state, before first send)
- *   - .ai-slash-menu (when no suggestions / hidden) */
+ *   - .ai-slash-menu (when no suggestions / hidden)
+ *   - .ai-mention-menu (when no suggestions / hidden) */
 .is-hidden {
 	display: none;
 }
@@ -1260,5 +1316,784 @@ pre:hover .ai-code-copy-btn {
 /* Highlight the active model name in the picker. */
 .ai-model-suggestion-name.is-active {
 	color: var(--interactive-accent);
+}
+
+/* ============================================================================
+   AGENT — tool invocation + tool result bubbles
+   Rendered inline between the user message and the final assistant text.
+   Monospace, slightly muted — terminal-output feel.
+   ============================================================================ */
+
+/* Tool invocation bubble — assistant requested a tool call.
+ * Left-aligned (same side as assistant), narrower than content bubbles. */
+.ai-message-tool-call {
+	align-self: flex-start;
+	align-items: flex-start;
+	max-width: 80%;
+	background: var(--background-secondary);
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: 10px;
+	padding: 8px 12px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	animation: ai-message-slide 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.ai-tool-call-header,
+.ai-tool-result-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 4px;
+}
+
+.ai-tool-call-icon,
+.ai-tool-result-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--interactive-accent);
+}
+
+.ai-tool-call-icon svg,
+.ai-tool-result-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+.ai-tool-call-name {
+	font-family: var(--font-monospace);
+	font-weight: 600;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+}
+
+.ai-tool-call-args pre {
+	margin: 0;
+	padding: 6px 8px;
+	background: var(--background-primary);
+	border-radius: 6px;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smallest);
+	color: var(--text-muted);
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 200px;
+	overflow-y: auto;
+}
+
+/* Tool result bubble — output from an executed tool. */
+.ai-message-tool {
+	align-self: flex-start;
+	max-width: 80%;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	padding: 8px 12px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	animation: ai-message-slide 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* Error variant — red-tinted border + label. */
+.ai-message-tool.is-error {
+	border-color: var(--text-error);
+}
+
+.ai-message-tool.is-error .ai-tool-result-icon,
+.ai-message-tool.is-error .ai-tool-result-label {
+	color: var(--text-error);
+}
+
+.ai-tool-result-label {
+	font-family: var(--font-monospace);
+	font-weight: 600;
+	color: var(--text-normal);
+	font-size: var(--font-ui-smallest);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.ai-tool-result-body pre {
+	margin: 0;
+	padding: 6px 8px;
+	background: var(--background-primary);
+	border-radius: 6px;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smallest);
+	color: var(--text-normal);
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 280px;
+	overflow-y: auto;
+}
+
+/* Mobile: tool bubbles get a bit more width on narrow screens. */
+@media (hover: none) {
+	.ai-message-tool-call,
+	.ai-message-tool {
+		max-width: 90%;
+	}
+}
+
+/* ============================================================================
+   ARENA MODE — multi-model parallel streaming
+   ============================================================================ */
+
+/* Arena toggle button — highlighted when active. */
+.ai-chat-arena-btn.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.ai-chat-arena-btn.is-active:hover {
+	background: var(--interactive-accent-hover);
+	color: var(--text-on-accent);
+}
+
+/* Arena layout — CSS grid with N equal columns. Column count is set via
+ * the --arena-columns custom property on the layout element. */
+.ai-arena-layout {
+	display: grid;
+	grid-template-columns: repeat(var(--arena-columns, 2), minmax(0, 1fr));
+	gap: var(--size-4-2);
+	margin: var(--size-4-2) 0;
+	width: 100%;
+	align-self: stretch;
+}
+
+.ai-arena-column {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	overflow: hidden;
+}
+
+.ai-arena-column-header {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	padding: 6px 10px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	font-size: var(--font-ui-smaller);
+}
+
+.ai-arena-column-header .ai-message-role-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--provider-color, var(--interactive-accent));
+	flex-shrink: 0;
+}
+
+.ai-arena-column-header-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	flex: 1;
+}
+
+.ai-arena-column-model {
+	font-weight: 600;
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--font-ui-smaller);
+}
+
+.ai-arena-column-provider {
+	font-size: var(--font-ui-smallest);
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ai-arena-column-response {
+	padding: 8px 10px;
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
+	color: var(--text-normal);
+	max-height: 600px;
+	overflow-y: auto;
+	flex: 1;
+}
+
+/* Reuse the streaming-text pre styling from the live message renderer. */
+.ai-arena-column-response .ai-message-streaming-text {
+	margin: 0;
+	font-family: var(--font-text);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+/* Thinking state — subtle pulse to show "waiting for first chunk". */
+.ai-arena-column-response.ai-message-thinking {
+	min-height: 40px;
+	position: relative;
+}
+
+.ai-arena-column-response.ai-message-thinking::after {
+	content: '…';
+	position: absolute;
+	top: 8px;
+	left: 10px;
+	color: var(--text-faint);
+	animation: ai-arena-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ai-arena-pulse {
+	0%, 100% { opacity: 0.3; }
+	50% { opacity: 1; }
+}
+
+.ai-arena-column-error {
+	color: var(--text-error);
+	font-size: var(--font-ui-smaller);
+	padding: 6px 0;
+}
+
+.ai-arena-column-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--size-4-2);
+	padding: 4px 10px;
+	border-top: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	font-size: var(--font-ui-smallest);
+	color: var(--text-muted);
+	min-height: 28px;
+}
+
+.ai-arena-column-usage {
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+.ai-arena-promote-btn {
+	background: transparent;
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	border-radius: var(--radius-s);
+	padding: 2px 8px;
+	font-size: var(--font-ui-smallest);
+	cursor: pointer;
+	transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.ai-arena-promote-btn:hover:not(:disabled) {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+	border-color: var(--interactive-accent);
+}
+
+.ai-arena-promote-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+/* Narrow phone only — stack columns vertically. Sidebar at ~360px+ keeps
+ * the side-by-side arena view; only true phone-width collapses. */
+@media (max-width: 360px) {
+	.ai-arena-layout {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* ============================================================================
+   ARENA MODEL PICKER MODAL
+   ============================================================================ */
+
+.ai-arena-picker-modal .ai-arena-picker-desc {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	margin: 0 0 var(--size-4-2) 0;
+}
+
+.ai-arena-picker-counter {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-normal);
+	font-weight: 600;
+	margin-bottom: var(--size-4-2);
+}
+
+.ai-arena-picker-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	max-height: 50vh;
+	overflow-y: auto;
+	margin-bottom: var(--size-4-3);
+}
+
+.ai-arena-picker-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-4-2) var(--size-4-3);
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	transition: background 0.12s ease;
+}
+
+.ai-arena-picker-row:hover {
+	background: var(--background-modifier-hover);
+}
+
+.ai-arena-picker-row.is-selected {
+	background: var(--background-modifier-hover);
+}
+
+.ai-arena-picker-check {
+	width: 18px;
+	height: 18px;
+	border-radius: var(--radius-s);
+	border: 2px solid var(--background-modifier-border);
+	flex-shrink: 0;
+	position: relative;
+	transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.ai-arena-picker-row.is-selected .ai-arena-picker-check {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+}
+
+.ai-arena-picker-row.is-selected .ai-arena-picker-check::after {
+	content: '';
+	position: absolute;
+	left: 5px;
+	top: 1px;
+	width: 5px;
+	height: 10px;
+	border: solid var(--text-on-accent);
+	border-width: 0 2px 2px 0;
+	transform: rotate(45deg);
+}
+
+.ai-arena-picker-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	flex: 1;
+}
+
+.ai-arena-picker-name {
+	font-weight: 500;
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ai-arena-picker-provider {
+	font-size: var(--font-ui-smallest);
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ai-arena-picker-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--size-4-2);
+	padding-top: var(--size-4-2);
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.ai-arena-picker-start:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* ============================================================================
+   DIFF REWRITE MODAL — Cursor-style inline rewrite review
+   ============================================================================ */
+
+.ai-diff-container {
+	font-family: var(--font-monospace);
+	font-size: var(--font-size-sm);
+	background: var(--background-secondary);
+	border-radius: 6px;
+	padding: 8px;
+	max-height: 50vh;
+	overflow-y: auto;
+	margin-bottom: 12px;
+}
+
+.ai-diff-line {
+	display: flex;
+	padding: 1px 4px;
+	border-radius: 2px;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.ai-diff-prefix {
+	width: 16px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+
+.ai-diff-added {
+	background: var(--background-modifier-success);
+}
+.ai-diff-added .ai-diff-prefix { color: var(--text-success); }
+
+.ai-diff-removed {
+	background: var(--background-modifier-error);
+}
+.ai-diff-removed .ai-diff-prefix { color: var(--text-error); }
+
+.ai-diff-unchanged {
+	color: var(--text-muted);
+}
+
+/* ============================================================================
+   VOICE I/O — mic button, speaking indicator, auto-speak toggle
+   ============================================================================ */
+
+/* Mic button — pulses red while recording. */
+.ai-chat-mic-button.is-recording {
+	background: var(--color-red);
+	color: var(--text-on-accent);
+	animation: ai-pulse 1.5s ease-in-out infinite;
+}
+
+.ai-chat-mic-button.is-recording:hover {
+	background: var(--color-red);
+	color: var(--text-on-accent);
+}
+
+/* Speaker action on assistant messages — accent-colored while speaking. */
+.ai-msg-speak-btn.is-speaking {
+	color: var(--interactive-accent);
+	animation: ai-pulse 1s ease-in-out infinite;
+}
+
+/* Auto-speak toggle in the header — highlighted when active. */
+.ai-chat-autospeak-btn.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.ai-chat-autospeak-btn.is-active:hover {
+	background: var(--interactive-accent-hover);
+	color: var(--text-on-accent);
+}
+
+@keyframes ai-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.5; }
+}
+
+/* ============================================================================
+   ACTIVE-NOTE AWARENESS — header pill + attachment chips
+   ============================================================================ */
+
+/* Header pill — shows the note the user is currently editing. Click attaches. */
+.ai-chat-active-note {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	background: var(--background-modifier-hover);
+	border-radius: 4px;
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+	max-width: 150px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-muted);
+	flex-shrink: 0;
+	transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ai-chat-active-note:hover {
+	background: var(--background-modifier-border-hover);
+	color: var(--text-normal);
+}
+
+.ai-chat-active-note svg {
+	width: 12px;
+	height: 12px;
+	opacity: 0.7;
+	flex-shrink: 0;
+}
+
+.ai-chat-active-note span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Attachment chip strip — sits above the input card, lists pending @-mentions
+ * + active-note attachments for the next send. Hidden when empty. */
+.ai-chat-attachments {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	padding: 4px 0;
+	min-height: 0;
+}
+
+.ai-chat-attachments:empty {
+	display: none;
+}
+
+.ai-chat-attachment-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	background: var(--background-modifier-hover);
+	border-radius: 12px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.ai-chat-attachment-name {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 160px;
+}
+
+.ai-chat-attachment-remove {
+	cursor: pointer;
+	opacity: 0.6;
+	font-weight: bold;
+	line-height: 1;
+}
+
+.ai-chat-attachment-remove:hover {
+	opacity: 1;
+	color: var(--text-error);
+}
+
+/* Narrow viewports — give the header pill a tighter max-width so it doesn't
+ * crowd the model picker + history buttons on phones. */
+@media (max-width: 480px) {
+	.ai-chat-active-note {
+		max-width: 100px;
+	}
+
+	.ai-chat-attachment-name {
+		max-width: 120px;
+	}
+}
+
+
+/* --- System prompt: read-only CORE display --------------------------- */
+/* Greys out the non-editable Curtis identity textarea so users see the
+ * architecture: this is who Curtis IS, the lower box is what they're adding. */
+.ai-system-prompt-core textarea,
+textarea.ai-system-prompt-core {
+	background: var(--background-modifier-hover) !important;
+	color: var(--text-muted) !important;
+	font-family: var(--font-monospace);
+	font-size: var(--font-size-smaller);
+	cursor: default;
+	opacity: 0.85;
+}
+
+/* ============================================================================
+   DAY SEPARATOR — hairline rule with date label, sits between messages from
+   different days. Rendered by view.ts:renderDaySeparator().
+   ============================================================================ */
+
+.ai-chat-day-divider {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	margin: var(--size-4-2) 0;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smallest);
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	user-select: none;
+}
+
+.ai-chat-day-divider::before,
+.ai-chat-day-divider::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: var(--background-modifier-border);
+}
+
+/* First divider in a session doesn't need a leading rule — the messages
+ * container padding already provides separation from the header. */
+.ai-chat-day-divider:first-child::before {
+	display: none;
+}
+
+/* ============================================================================
+   USER MESSAGE ACTIONS — inline row below user bubble (Copy, Edit & resend).
+   Different from .ai-message-actions which floats absolute on assistant hover;
+   this sits in normal flow so it can't clip the bubble's tail.
+   ============================================================================ */
+
+.ai-user-actions {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 2px;
+	margin-top: 10px;
+	opacity: 0;
+	transition: opacity 0.12s ease;
+	pointer-events: none;
+}
+
+.ai-message-user:hover .ai-user-actions,
+.ai-user-actions:focus-within {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+/* Re-use .ai-message-action-btn sizing/icon styling from the assistant rule.
+ * User-bubble context: buttons are tinted toward on-accent for legibility
+ * against the accent background when the bubble overlaps, but the actions row
+ * sits OUTSIDE the bubble in normal flow so default muted color is correct. */
+.ai-user-actions .ai-message-action-btn {
+	width: 22px;
+	height: 22px;
+	opacity: 0.7;
+}
+
+.ai-user-actions .ai-message-action-btn:hover {
+	opacity: 1;
+}
+
+/* Touch devices — always show user actions (no hover). */
+@media (hover: none) {
+	.ai-user-actions {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+/* ============================================================================
+   TTS PLAYER BAR — inline under assistant message during playback.
+   Pause/resume, skip ±1 sentence, position (n/N), rate cycle, close.
+   ============================================================================ */
+
+.ai-tts-player {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	margin-top: 6px;
+	padding: 4px 6px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	box-shadow: 0 1px 2px var(--background-modifier-border);
+	font-size: var(--font-ui-smaller);
+	animation: ai-tts-fade-in 0.18s ease;
+}
+
+@keyframes ai-tts-fade-in {
+	from { opacity: 0; transform: translateY(-2px); }
+	to   { opacity: 1; transform: translateY(0); }
+}
+
+.ai-tts-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	border-radius: 6px;
+	transition: background 0.12s ease, color 0.12s ease;
+}
+
+.ai-tts-btn:hover:not(:disabled) {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.ai-tts-btn:active:not(:disabled) {
+	transform: scale(0.94);
+}
+
+.ai-tts-btn:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+
+.ai-tts-btn svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* Rate button shows text ("1x") not an icon — slightly wider, tabular. */
+.ai-tts-rate {
+	width: auto;
+	min-width: 30px;
+	padding: 0 6px;
+	font-variant-numeric: tabular-nums;
+	font-size: var(--font-ui-smallest);
+	font-weight: 500;
+}
+
+.ai-tts-position {
+	font-variant-numeric: tabular-nums;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smallest);
+	padding: 0 4px;
+	user-select: none;
+}
+
+.ai-tts-spacer {
+	flex: 1;
+	min-width: 4px;
+}
+
+/* Close button gets a subtler danger treatment on hover. */
+.ai-tts-close:hover:not(:disabled) {
+	color: var(--text-error);
+}
+
+/* On touch devices, the player shows a more prominent affordance. */
+@media (hover: none) {
+	.ai-tts-player {
+		padding: 6px 8px;
+	}
+
+	.ai-tts-btn {
+		width: 28px;
+		height: 28px;
+	}
+
+	.ai-tts-btn svg {
+		width: 16px;
+		height: 16px;
+	}
+}
+
+/* ============================================================================
+   BUBBLE CONTENT — make assistant/user text selectable for copy.
+   Default .markdown-rendered and bubble content is selectable in Obsidian,
+   but our white-space: pre-wrap on user bubbles can break selection on some
+   platforms; enforce explicitly.
+   ============================================================================ */
+
+.ai-message-content {
+	user-select: text;
+	-webkit-user-select: text;
 }
 

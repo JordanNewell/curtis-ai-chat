@@ -1,6 +1,6 @@
 # Image attachments
 
-Curtis supports vision — drag a screenshot in, paste a photo, or pick from a file. The model reads it and responds.
+Curtis AI Chat supports vision — drag a screenshot in, paste a photo, or pick from a file. The model reads it and responds.
 
 ## Three ways to attach
 
@@ -18,14 +18,14 @@ Images are **saved as real files** in your vault's `attachments/` folder (create
 
 The conversation stores the **vault path** of each attachment, not the base64 bytes. This keeps `localStorage` small (no quota issues) and makes the images visible, auditable, and reusable in other notes.
 
-At send time, Curtis reads the bytes back from the vault and encodes them as a base64 data URL for the provider's API.
+At send time, Curtis AI Chat reads the bytes back from the vault and encodes them as a base64 data URL for the provider's API.
 
 ## Vision-capable models
 
 Look for the **👁 vision** pill in the model picker — that model can read images. Models without it will reject image content.
 
 If you send an image to a non-vision model:
-- Curtis detects the rejection automatically
+- Curtis AI Chat detects the rejection automatically
 - Shows a Notice: *"This endpoint rejected the image — retrying as text only"*
 - Retries the message with images stripped, so you still get a response
 

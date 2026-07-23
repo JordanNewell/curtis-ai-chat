@@ -1,16 +1,17 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - '*.*.*'
 
 permissions:
-  contents: read
-  attestations: write
+  contents: write
   id-token: write
+  attestations: write
 
 jobs:
-  attest:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,3 +33,20 @@ jobs:
             main.js
             manifest.json
             styles.css
+
+      - name: Create release + upload assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists — uploading assets"
+            gh release upload "$tag" main.js manifest.json styles.css --clobber
+          else
+            echo "Creating release $tag"
+            gh release create "$tag" \
+              --verify-tag \
+              --title "$tag" \
+              --generate-notes \
+              main.js manifest.json styles.css
+          fi

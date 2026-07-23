@@ -1,8 +1,29 @@
 # Slash commands
 
-Type `/` in the chat input to open the autocomplete menu. Arrow keys to navigate, Enter/Tab to pick, Esc to dismiss.
+Type `/` in the chat input to open the autocomplete menu. Arrow keys to navigate, Enter/Tab to pick, Esc to dismiss. Or run `/help` to open a reference modal inside Obsidian.
 
 Unknown commands (e.g. `/typo hello`) fall through and get sent as a literal user message — useful when you actually want to send text starting with `/`.
+
+## Reference
+
+| Command | Args | Description |
+|---|---|---|
+| `/clear` | — | Start a new chat. Previous conversation stays in history. |
+| `/regen` · `/regenerate` | — | Regenerate the last assistant response. |
+| `/title` | `<new name>` | Rename the current conversation. |
+| `/copy` | — | Copy the last assistant response to clipboard. |
+| `/note` | `[name]` | Save the last assistant response as a new note. |
+| `/save-all` | `[name]` | Export the entire conversation as one structured markdown note in your vault. |
+| `/export` | — | Download the current conversation as a `.md` file to your downloads folder. *(new in v4.0.0)* |
+| `/paste` | — | Paste from system clipboard into the chat input. |
+| `/model` | `<query>` | Switch the active model via fuzzy match. |
+| `/provider` | `<query>` | Switch the active provider via fuzzy match. |
+| `/system` | `<text>` | Set the system prompt for the session. No arg resets to default. |
+| `/stats` | — | Show conversation stats (conversations, messages, tokens). |
+| `/remember` | `<fact>` | Manually save a durable fact to long-term memory. |
+| `/forget` | `<substring>` | Delete the first memory fact matching the substring. |
+| `/memory` | `[open\|clear]` | List recent facts, or `open`/`clear` the memory file. |
+| `/help` | — | Open a modal listing every slash command. |
 
 ## Conversation management
 
@@ -39,7 +60,7 @@ Save the last assistant response as a new note in your configured Note save fold
 - Without a name: the basename is derived from the first line of the response
 - With a name: uses what you provide
 - Opens the note in a new split
-- Frontmatter records `source: Curtis`, `provider`, `model`, `created`
+- Frontmatter records `source: Curtis AI Chat`, `provider`, `model`, `created`
 - Embeds any attached images as `![[filename.png]]`
 
 ```
@@ -48,7 +69,7 @@ Save the last assistant response as a new note in your configured Note save fold
 
 ### `/save-all [name]`
 
-Export the entire current conversation as a single structured markdown note. Each message becomes a section:
+Export the entire current conversation as a single structured markdown note **inside your vault**. Each message becomes a section:
 
 ```markdown
 # Conversation title
@@ -64,7 +85,41 @@ Your message here.
 Assistant response here.
 ```
 
-Great for archiving a useful conversation into your vault.
+Great for archiving a useful conversation as a searchable, linkable note.
+
+### `/export`
+
+Download the current conversation as a `.md` file to your browser's downloads folder (not into your vault). Uses a clean markdown format with metadata header:
+
+```markdown
+# Conversation title
+
+> Provider: openai (OpenAI)
+> Model: gpt-5
+> Started: 2026-07-22 4:54 PM
+> Messages: 12
+
+---
+
+## User
+*2026-07-22 4:54 PM*
+
+Your message.
+
+---
+
+## Assistant · gpt-5
+*2026-07-22 4:54 PM*
+
+Response.
+
+---
+```
+
+Attached images are emitted as `![](vault/path.png)` references — they won't render outside your vault, but the paths are preserved.
+
+> [!NOTE]
+> `/save-all` writes into your vault (searchable, linkable). `/export` downloads to your filesystem (shareable, portable). Pick based on where you want the artifact to live.
 
 ## Input helpers
 
@@ -73,7 +128,7 @@ Great for archiving a useful conversation into your vault.
 Paste from the system clipboard into the chat input. Useful when you've copied text from elsewhere and want to ask about it.
 
 > [!NOTE]
-> Requires clipboard-read permission. If Obsidian blocks it, you can still paste normally with `Ctrl+V`.
+> Requires clipboard-read permission. If Obsidian blocks it, paste normally with `Ctrl+V`.
 
 ### `/model <query>`
 
@@ -131,7 +186,7 @@ With arguments:
 - `/memory open` — open the memory file in Obsidian
 - `/memory clear` — wipe all facts
 
-See [MEMORY.md](MEMORY.md) for how memory works.
+See [MEMORY.md](MEMORY.md) for how memory works and how to edit individual facts from the settings UI (new in v4.0.0).
 
 ## Reference
 

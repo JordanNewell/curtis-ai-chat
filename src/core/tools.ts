@@ -1,4 +1,7 @@
 import { App, TFile } from 'obsidian';
+import { asStringArray } from './types/json-helpers';
+import { getActiveNoteFile } from '../vault/active-note';
+import { WEB_SEARCH_TOOL, READ_URL_TOOL } from './web-tools';
 
 // ============================================================================
 // Tool/Function Calling Framework
@@ -72,9 +75,13 @@ export class ToolRegistry {
 	private tools: Map<string, ToolDefinition> = new Map();
 	private app: App;
 
-	constructor(app: App) {
+	constructor(app: App, opts: { enableWebSearch?: boolean } = {}) {
 		this.app = app;
 		this.registerBuiltinTools();
+		if (opts.enableWebSearch) {
+			this.register(WEB_SEARCH_TOOL);
+			this.register(READ_URL_TOOL);
+		}
 	}
 
 	register(tool: ToolDefinition): () => void {
@@ -84,6 +91,21 @@ export class ToolRegistry {
 
 	unregister(name: string): void {
 		this.tools.delete(name);
+	}
+
+	/**
+	 * Hot-reload the web tools (web_search + read_url) without rebuilding the
+	 * rest of the registry. Called from the settings toggle so users don't
+	 * need to reload Obsidian when flipping enableWebSearch.
+	 */
+	setWebToolsEnabled(enabled: boolean): void {
+		if (enabled) {
+			if (!this.tools.has(WEB_SEARCH_TOOL.name)) this.register(WEB_SEARCH_TOOL);
+			if (!this.tools.has(READ_URL_TOOL.name)) this.register(READ_URL_TOOL);
+		} else {
+			this.unregister(WEB_SEARCH_TOOL.name);
+			this.unregister(READ_URL_TOOL.name);
+		}
 	}
 
 	getTool(name: string): ToolDefinition | undefined {
@@ -200,7 +222,7 @@ export class ToolRegistry {
 				for (const file of files) {
 					if (file.path.toLowerCase().includes(query) || file.basename.toLowerCase().includes(query)) {
 						const cache = this.app.metadataCache.getFileCache(file);
-						const tags = cache?.frontmatter?.tags || [];
+						const tags: string[] = asStringArray(cache?.frontmatter?.tags);
 						results.push(`- **${file.basename}** (${file.path}) [${tags.length ? '#' + tags.join(' #') : 'no tags'}]`);
 						if (results.length >= max) break;
 					}
@@ -316,7 +338,7 @@ export class ToolRegistry {
 
 				return files.map(f => {
 					const cache = this.app.metadataCache.getFileCache(f);
-					const tags = cache?.frontmatter?.tags || [];
+					const tags: string[] = asStringArray(cache?.frontmatter?.tags);
 					const mtime = new Date(f.stat.mtime).toLocaleDateString();
 					return `- **${f.basename}** (${f.path}) [${mtime}]${tags.length ? ' #' + tags.join(' #') : ''}`;
 				}).join('\n');
@@ -331,8 +353,8 @@ export class ToolRegistry {
 				const tags: Record<string, number> = {};
 				for (const file of this.app.vault.getMarkdownFiles()) {
 					const cache = this.app.metadataCache.getFileCache(file);
-					const fileTags = cache?.tags?.map(t => t.tag.replace('#', '')) || [];
-					const fmTags = cache?.frontmatter?.tags || [];
+					const fileTags: string[] = cache?.tags?.map(t => t.tag.replace('#', '')) || [];
+					const fmTags: string[] = asStringArray(cache?.frontmatter?.tags);
 					const all = [...fileTags, ...fmTags].filter(Boolean);
 					for (const tag of all) {
 						tags[tag] = (tags[tag] || 0) + 1;
@@ -380,14 +402,43 @@ export class ToolRegistry {
 			description: 'Get the content and metadata of the note currently open in the editor.',
 			parameters: {},
 			execute: async () => {
-				const activeFile = this.app.workspace.getActiveFile();
-				if (!activeFile) return 'No note is currently open.';
+				// Use the robust resolver — `workspace.getActiveFile()` returns
+				// whatever has focus, which is the chat sidebar itself when the
+				// user is mid-conversation. `getActiveNoteFile()` walks every
+				// markdown leaf and picks the center-area one the user means.
+				const activeFile = getActiveNoteFile(this.app);
+				if (!activeFile) return 'No note is currently open in the editor.';
 
 				const content = await this.app.vault.read(activeFile);
 				const cache = this.app.metadataCache.getFileCache(activeFile);
 				const frontmatter = cache?.frontmatter || {};
 
 				return `Current note: **${activeFile.basename}** (${activeFile.path})\n\nFrontmatter: ${JSON.stringify(frontmatter, null, 2)}\n\nContent:\n${content}`;
+			},
+		});
+
+		this.register({
+			name: 'get_current_date',
+			description:
+				'Get the current date, day of week, and time in the user\'s local timezone. ' +
+				'Use whenever the user asks "what day is it", "today", "this week", or references dates relative to now. ' +
+				'No arguments — just returns the current moment.',
+			parameters: {},
+			execute: async () => {
+				const now = new Date();
+				const dateStr = now.toLocaleDateString(undefined, {
+					weekday: 'long',
+					year: 'numeric',
+					month: 'long',
+					day: 'numeric',
+				});
+				const timeStr = now.toLocaleTimeString(undefined, {
+					hour: '2-digit',
+					minute: '2-digit',
+					second: '2-digit',
+				});
+				const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local';
+				return `Current date: ${dateStr}\nTime: ${timeStr} (${tz})\nISO: ${now.toISOString()}`;
 			},
 		});
 	}

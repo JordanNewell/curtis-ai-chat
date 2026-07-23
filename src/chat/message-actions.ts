@@ -1,6 +1,6 @@
-// Per-message action toolbar — attached to assistant message wrappers.
-// Actions: copy, quote-into-input, save-as-note, insert-into-active-note,
-// regenerate, edit-resend.
+// Per-message action toolbar.
+// Assistant actions: copy, quote-into-input, save-as-note, insert-into-active-note, regenerate.
+// User actions: copy, edit-resend (loads text back into input for re-send).
 
 import { App, Notice, setIcon, TFile } from 'obsidian';
 import type { ConversationMessage } from '../types';
@@ -10,10 +10,13 @@ import { getActiveNoteView } from '../vault/active-note';
 export interface MessageActionCallbacks {
 	/** Regenerate: drop the trailing assistant message + re-run last user msg. */
 	onRegenerate?: (assistantMsg: ConversationMessage) => void;
-	/** Edit-resend: load the preceding user message's text into the input. */
-	onEditResend?: (assistantMsg: ConversationMessage) => void;
 	/** Append the message as a markdown blockquote into the chat input box. */
 	onQuoteIntoInput?: (assistantMsg: ConversationMessage) => void;
+}
+
+export interface UserMessageActionCallbacks {
+	/** Edit-resend for a user bubble directly: truncate + load text into input. */
+	onEditUserMessage?: (userMsg: ConversationMessage) => void;
 }
 
 export interface AttachActionsOptions {
@@ -43,7 +46,7 @@ export function attachMessageActions(opts: AttachActionsOptions): void {
 	const addAction = (
 		icon: string,
 		title: string,
-		onClick: () => void
+		onClick: () => void | Promise<void>
 	): void => {
 		const btn = bar.createEl('button', { cls: 'ai-message-action-btn' });
 		setIcon(btn, icon);
@@ -51,7 +54,7 @@ export function attachMessageActions(opts: AttachActionsOptions): void {
 		btn.setAttribute('aria-label', title);
 		btn.addEventListener('click', (e) => {
 			e.stopPropagation();
-			onClick();
+			void onClick();
 		});
 	};
 
@@ -96,9 +99,48 @@ export function attachMessageActions(opts: AttachActionsOptions): void {
 		if (callbacks?.onRegenerate) {
 			addAction('refresh-cw', 'Regenerate', () => callbacks.onRegenerate!(message));
 		}
-		if (callbacks?.onEditResend) {
-			addAction('pencil', 'Edit & resend', () => callbacks.onEditResend!(message));
+	}
+}
+
+/**
+ * Attach an INLINE actions row BELOW a user bubble. Different from the
+ * assistant attachMessageActions (which floats absolute top-right) — this
+ * sits in normal flow so it can't break the bubble layout. Right-aligned
+ * to match the user bubble alignment.
+ *
+ * Actions: Copy, Edit & resend.
+ */
+export function attachUserMessageActions(
+	wrapper: HTMLElement,
+	message: ConversationMessage,
+	callbacks: UserMessageActionCallbacks
+): void {
+	if (wrapper.querySelector('.ai-user-actions')) return;
+
+	const bar = wrapper.createDiv({ cls: 'ai-user-actions' });
+
+	const addAction = (icon: string, title: string, onClick: () => void): void => {
+		const btn = bar.createEl('button', { cls: 'ai-message-action-btn' });
+		setIcon(btn, icon);
+		btn.title = title;
+		btn.setAttribute('aria-label', title);
+		btn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			onClick();
+		});
+	};
+
+	addAction('copy', 'Copy message', async () => {
+		try {
+			await navigator.clipboard.writeText(message.content);
+			new Notice('Copied');
+		} catch {
+			new Notice('Copy failed');
 		}
+	});
+
+	if (callbacks.onEditUserMessage) {
+		addAction('pencil', 'Edit & resend', () => callbacks.onEditUserMessage!(message));
 	}
 }
 

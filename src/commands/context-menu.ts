@@ -14,6 +14,7 @@ const CONTEXT_ACTIONS: ContextAction[] = [
 	{ id: 'ai-summarize', label: 'Summarize with AI', action: 'summarize', section: 'ai-top' },
 	{ id: 'ai-tldr', label: 'TL;DR', action: 'tldr', section: 'ai-top' },
 	{ id: 'ai-improve', label: 'Improve writing with AI', action: 'improve', section: 'ai-top' },
+	{ id: 'ai-rewrite-diff', label: 'Rewrite with AI (diff)', action: 'rewrite-diff', section: 'ai-top' },
 	{ id: 'ai-fix-grammar', label: 'Fix grammar with AI', action: 'fix-grammar', section: 'ai-top' },
 	{ id: 'ai-shorten', label: 'Shorten with AI', action: 'shorten', section: 'ai-top' },
 	{ id: 'ai-translate', label: 'Translate with AI', action: 'translate', section: 'ai-mid' },
@@ -32,7 +33,7 @@ const CONTEXT_ACTIONS: ContextAction[] = [
 export function registerContextMenu(plugin: CurtisPlugin): void {
 	// Register workspace menu event
 	plugin.registerEvent(
-		plugin.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
+		plugin.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, _view: MarkdownView) => {
 			const selection = editor.getSelection();
 			if (!selection) return;
 
@@ -45,7 +46,7 @@ export function registerContextMenu(plugin: CurtisPlugin): void {
 				'bottom': CONTEXT_ACTIONS.filter(a => a.section === 'ai-bottom'),
 			};
 
-			for (const [group, actions] of Object.entries(groups) as Array<[string, ContextAction[]]>) {
+			for (const [group, actions] of Object.entries(groups)) {
 				for (const action of actions) {
 					menu.addItem((item) => {
 						item.setTitle(action.label);
@@ -54,6 +55,8 @@ export function registerContextMenu(plugin: CurtisPlugin): void {
 							if (action.action === 'chat') {
 								void plugin.activateChatView();
 								// TODO: pre-load selection into chat
+							} else if (action.action === 'rewrite-diff') {
+								void plugin.runDiffRewrite(editor, selection);
 							} else {
 								void plugin.processSelection(editor, action.action);
 							}

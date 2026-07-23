@@ -1,6 +1,6 @@
 # Memory
 
-Curtis remembers durable facts about you across conversations. This doc explains what gets stored, where, how it's used, and how to manage it.
+Curtis AI Chat remembers durable facts about you across conversations. This doc explains what gets stored, where, how it's used, how to manage it, and the editing UI new in v4.0.0.
 
 ## What memory is for
 
@@ -43,7 +43,7 @@ You can edit this file directly — add bullets, delete them, rewrite them. The 
 
 ### Auto-capture (default)
 
-After each assistant turn, Curtis fires a background call to the active model with a strict extraction prompt:
+After each assistant turn, Curtis AI Chat fires a background call to the active model with a strict extraction prompt:
 
 > *"Extract 0-3 durable facts about the user from this chat turn. A durable fact is something true across future conversations: a preference, identity trait, long-lived project detail, or standing instruction. Do NOT capture ephemeral requests. Respond with ONLY a JSON array."*
 
@@ -82,8 +82,41 @@ Every prompt includes a `## What you know about the user` block appended to the 
 | Open the file | `/memory open` or Settings → Memory → Open |
 | Forget one fact | `/forget <substring>` |
 | Clear everything | `/memory clear` or Settings → Memory → Clear |
-| Edit a fact | Open the file and edit the bullet directly |
-| Add a fact by hand | Open the file and add a new bullet (use a valid category) |
+| **Edit a fact** | **Settings → Memory → fact list → Edit (new in v4.0.0)** |
+| **Delete a fact** | **Settings → Memory → fact list → Delete (new in v4.0.0)** |
+| Add a fact by hand | Open the file and add a new bullet, or use `/remember` |
+
+## Memory editing UI (new in v4.0.0)
+
+Before v4.0.0, the only ways to fix an incorrect fact were:
+
+- Edit the markdown file by hand
+- `/forget` then `/remember` (two steps, loses the original timestamp)
+
+v4.0.0 adds an **edit/delete UI** directly in Settings → Memory. Every fact in the memory file renders as a row with two buttons:
+
+- **Edit** — opens a modal with the fact's content and category. Change either, click Save. The fact's `id` is preserved; only `content`, `category`, and `updated` timestamp change.
+- **Delete** — removes the fact immediately (with a confirmation prompt for safety).
+
+This makes memory correction a first-class operation — no more file editing or two-step forget/remember.
+
+### `updateFact` API (power users)
+
+If you're scripting against the plugin or writing tools that need to mutate memory programmatically, the underlying API is:
+
+```ts
+class MemoryStore {
+  // Update an existing fact by ID. Returns the updated fact or null if not found.
+  async updateFact(id: string, content: string, category?: string): Promise<MemoryFact | null>;
+
+  // Delete a fact by ID. Returns true if a fact was deleted.
+  async deleteFact(id: string): Promise<boolean>;
+}
+```
+
+The `category` parameter is optional — pass it to change category, omit to preserve the existing one. Validation matches the markdown-file rules: must be one of `preference | identity | project | instruction | other` (or empty string for "other").
+
+The Edit Fact modal in settings calls `updateFact` under the hood.
 
 ## Privacy
 
@@ -103,5 +136,6 @@ The memory system is modeled on obsidian-copilot's user-memory layer (see the de
 - **LLM-gated capture over regex** — the model decides what's durable, so recall can be trivial (full injection)
 - **Full injection over retrieval** — at the scale of personal facts (tens, not thousands), retrieval adds complexity for no benefit
 - **Categories as enum** — `preference | identity | project | instruction | other`. Keeps the file parseable even with hand-edits.
+- **Edit UI over file-only** — added in v4.0.0 because the file-only workflow made correcting facts needlessly high-friction.
 
-See the codebase audit (`src/memory/memory.ts`) for implementation details.
+See the codebase (`src/memory/memory.ts`) for implementation details.

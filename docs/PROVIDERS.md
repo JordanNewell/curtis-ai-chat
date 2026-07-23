@@ -1,50 +1,55 @@
 # Providers
 
-Curtis ships with 30+ built-in providers and supports any OpenAI-compatible endpoint as a custom provider. This doc covers what's built-in, how each one authenticates, and per-provider setup quirks.
+Curtis AI Chat ships with 30+ built-in providers and supports any OpenAI-compatible endpoint as a custom provider. This doc covers what's built-in, how each one authenticates, per-provider setup quirks, and agent compatibility.
 
 > [!TIP]
-> Look for the **👁 vision** marker next to a model in the picker — that model can read images. Models without it will reject image attachments with a clear Notice.
+> Look for the **👁 vision** marker next to a model in the picker — that model can read images. The **🔧 tools** marker means the model supports function calling (required for the [Curtis Agent](AGENT.md)).
 
 ## Built-in providers
 
-| Provider | Auth | Auto-discovery | Notes |
-|---|---|---|---|
-| **Anthropic Claude** | `x-api-key` | No | Uses Anthropic's native message format (auto-converted from OpenAI shape). Vision on Opus/Sonnet/Haiku. |
-| **OpenAI** | Bearer | Yes (`/v1/models`) | Full GPT-5 family. Vision on most models. |
-| **Google Gemini** | Bearer | Yes (`/v1beta/models`) | Uses Gemini's OpenAI-compat endpoint. Vision on Pro/Flash. |
-| **Z.ai GLM** | Bearer | Yes | Coding plan endpoint — text-only on the coding endpoint even for vision models. Use the full GLM endpoint for vision. |
-| **Ollama (Local)** | None | Yes (`/api/tags`) | Set a custom endpoint if your Ollama lives elsewhere (e.g. `http://your-server:11434/v1/chat/completions`). |
-| **LM Studio (Local)** | None | Yes | Same as Ollama — custom endpoint supported. |
-| **OpenRouter** | Bearer | Yes | 400+ models via one key. Model IDs are namespaced (`openai/gpt-5`, `anthropic/claude-...`). |
-| **Groq** | Bearer | Yes | Fastest inference available. Llama 3.3, GPT-OSS, etc. |
-| **Together AI** | Bearer | Yes | Llama, Qwen, DeepSeek hosted. |
-| **Fireworks** | Bearer | Yes | Similar to Together. |
-| **Mistral** | Bearer | Yes | Mistral Large, Codestral, Devstral. |
-| **DeepSeek** | Bearer | Yes | V4 Pro/Flash. Function calling supported. |
-| **Cohere** | Bearer | Yes | Command A / R+ / R. |
-| **Vercel AI Gateway** | Bearer | Yes | One key, 20+ upstream providers, namespaced model IDs. |
-| **xAI Grok** | Bearer | Yes | Grok 4 / 4 fast / 2 vision. |
-| **Perplexity** | Bearer | Yes | Sonar models with web search baked in. |
-| **Novita AI** | Bearer | Yes | Discount DeepSeek/Llama hosting. |
-| **DeepInfra** | Bearer | Yes | Similar to Novita. |
-| **Hyperbolic** | Bearer | Yes | Llama 3.1 405B, Qwen 72B. |
-| **Chutes AI** | Bearer | Yes | DeepSeek, Qwen Coder. |
-| **Replicate** | Bearer | Yes | Image-gen roots but supports chat now. |
-| **Lepton AI** | Bearer | Yes | DeepSeek, Llama. |
-| **Lambda Labs** | Bearer | Yes | Llama 3.3, DeepSeek V3. |
-| **Hugging Face** | Bearer | Yes | Inference endpoints — any HF model. |
-| **Azure OpenAI** | Bearer | No | Requires a full deployment URL in the "Deployment URL" field — see below. |
-| **GitHub Models** | Bearer | Yes | Free tier with your GitHub token. GPT-5, Mistral, etc. |
-| **fal.ai** | Bearer | Yes | Primarily image gen, but supports chat. |
-| **Cerebras** | Bearer | Yes | Fastest inference after Groq. Llama 3.3 70B. |
-| **SambaNova** | Bearer | Yes | DeepSeek V3, Llama 3.3. |
-| **Requesty** | Bearer | Yes | Router across many providers. |
+| Provider | Auth | Auto-discovery | Agent (tools) | Notes |
+|---|---|---|---|---|
+| **Anthropic Claude** | `x-api-key` | No | ⚠️ v4.1.0 | Native Anthropic message format (auto-converted). Vision on Opus/Sonnet/Haiku. |
+| **OpenAI** | Bearer | Yes (`/v1/models`) | ✅ | Full GPT-5 family. Vision on most models. |
+| **Google Gemini** | Bearer | Yes (`/v1beta/models`) | ⚠️ v4.1.0 | Gemini's OpenAI-compat endpoint. Vision on Pro/Flash. |
+| **Z.ai GLM** | Bearer | Yes | ⚠️ v4.1.0 | Coding plan endpoint — text-only on the coding endpoint even for vision models. |
+| **Ollama (Local)** | None | Yes (`/api/tags`) | ⚠️ v4.1.0 | Set a custom endpoint if your Ollama lives elsewhere. |
+| **LM Studio (Local)** | None | Yes | ⚠️ v4.1.0 | Same as Ollama — custom endpoint supported. |
+| **OpenRouter** | Bearer | Yes | ✅ | 400+ models via one key. Model IDs are namespaced (`openai/gpt-5`, `anthropic/claude-...`). |
+| **Groq** | Bearer | Yes | ✅ | Fastest inference available. Llama 3.3, GPT-OSS, etc. |
+| **Together AI** | Bearer | Yes | ✅ | Llama, Qwen, DeepSeek hosted. |
+| **Fireworks** | Bearer | Yes | ✅ | Similar to Together. |
+| **Mistral** | Bearer | Yes | ✅ | Mistral Large, Codestral, Devstral. |
+| **DeepSeek** | Bearer | Yes | ✅ | V4 Pro/Flash. Function calling supported. |
+| **Cohere** | Bearer | Yes | ✅ | Command A / R+ / R. |
+| **Vercel AI Gateway** | Bearer | Yes | ✅ | One key, 20+ upstream providers, namespaced model IDs. |
+| **xAI Grok** | Bearer | Yes | ✅ | Grok 4 / 4 fast / 2 vision. |
+| **Perplexity** | Bearer | Yes | ✅ | Sonar models with web search baked in. |
+| **Novita AI** | Bearer | Yes | ✅ | Discount DeepSeek/Llama hosting. |
+| **DeepInfra** | Bearer | Yes | ✅ | Similar to Novita. |
+| **Hyperbolic** | Bearer | Yes | ✅ | Llama 3.1 405B, Qwen 72B. |
+| **Chutes AI** | Bearer | Yes | ✅ | DeepSeek, Qwen Coder. |
+| **Replicate** | Bearer | Yes | ✅ | Image-gen roots but supports chat now. |
+| **Lepton AI** | Bearer | Yes | ✅ | DeepSeek, Llama. |
+| **Lambda Labs** | Bearer | Yes | ✅ | Llama 3.3, DeepSeek V3. |
+| **Hugging Face** | Bearer | Yes | ✅ | Inference endpoints — any HF model. |
+| **Azure OpenAI** | Bearer | No | ✅ | Requires a full deployment URL — see below. |
+| **GitHub Models** | Bearer | Yes | ✅ | Free tier with your GitHub token. GPT-5, Mistral, etc. |
+| **fal.ai** | Bearer | Yes | ✅ | Primarily image gen, but supports chat. |
+| **Cerebras** | Bearer | Yes | ✅ | Fastest inference after Groq. Llama 3.3 70B. |
+| **SambaNova** | Bearer | Yes | ✅ | DeepSeek V3, Llama 3.3. |
+| **Requesty** | Bearer | Yes | ✅ | Router across many providers. |
+
+### Agent compatibility legend
+
+- ✅ — supports OpenAI-style function calling. Works with the [Curtis Agent](AGENT.md) today.
+- ⚠️ v4.1.0 — uses a different function-calling shape. Agent support tracked for v4.1.0. Route through OpenRouter in the meantime if you need agent + Claude/Gemini.
 
 ## Setting up a provider
 
-1. **Settings → Curtis → Provider Configuration**
+1. **Settings → Curtis AI Chat → Provider Configuration**
 2. Find the provider, toggle **Enable**
-3. Paste your API key — it's stored in your OS keychain on Obsidian 1.11.4+
+3. Paste your API key — it's stored in your OS keychain on Obsidian 1.13+
 4. (Optional) Click the **refresh icon** to auto-discover available models
 5. (Optional) Click the **crosshair icon** to test the connection
 6. Pick a default model from the dropdown
@@ -95,6 +100,8 @@ Any OpenAI-compatible endpoint works as a custom provider. Common use cases:
 3. Optionally set a default model
 4. Auto-discovery runs if the endpoint exposes `/v1/models`
 
+Custom providers are agent-compatible as long as the upstream server implements OpenAI function-calling.
+
 ## Switching providers mid-conversation
 
 Click the **model picker button** at the top of the chat. The picker shows every enabled provider and their models. Switching is instant — the next message uses the new model. The conversation continues seamlessly.
@@ -112,5 +119,7 @@ Every assistant message records which provider and model produced it. Hover an a
 **"This model rejected the image"** — you sent an image to a non-vision model. Switch to a vision-capable model via the picker (look for 👁).
 
 **"Provider is having issues (5xx)"** — the provider is down. Try again or switch providers.
+
+**"Tool calls not working"** — the [agent](AGENT.md) only works with OpenAI-compatible providers in v4.0.0. Anthropic/Gemini/Ollama agent support lands in v4.1.0. Use OpenRouter to route Claude/Gemini through an OpenAI-compat shape.
 
 **Discovery returns no models** — the `/models` endpoint may require a different auth header or path. File an issue with the provider name + endpoint.

@@ -102,7 +102,7 @@ export function streamResponseFromNode(stream: NodeIncomingMessage): StreamRespo
 		ok: status >= 200 && status < 400,
 		status,
 		body: wrapNodeStream(stream),
-		json: async () => JSON.parse(await readAllText(stream)),
+		json: async (): Promise<unknown> => JSON.parse(await readAllText(stream)) as unknown,
 		text: async () => readAllText(stream),
 	};
 }
@@ -134,7 +134,7 @@ export function streamResponseFromBuffer(
 		ok: status >= 200 && status < 400,
 		status,
 		body: { getReader: () => reader },
-		json: async () => (jsonCache !== undefined ? jsonCache : JSON.parse(bodyText)),
+		json: async (): Promise<unknown> => (jsonCache !== undefined ? jsonCache : JSON.parse(bodyText) as unknown),
 		text: async () => bodyText,
 	};
 }

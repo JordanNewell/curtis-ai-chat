@@ -4,6 +4,7 @@
 
 import { App, Notice, TFile } from 'obsidian';
 import type { ConversationStore } from './conversation-store';
+import { downloadConversationMarkdown } from './export';
 import { createNote, renderConversationAsMarkdown, saveMessageAsNote } from '../vault/notes';
 import { SlashHelpModal } from '../ui/modals/slash-help-modal';
 import type CurtisPlugin from '../main';
@@ -138,6 +139,23 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 			const name = ctx.args.trim() || conv.title;
 			const file = await createNote(ctx.app, folder, name, body, { open: true });
 			if (file instanceof TFile) new Notice(`Exported: ${file.basename}`);
+			return true;
+		},
+	},
+	{
+		name: 'export',
+		usage: '/export',
+		description: 'Download current conversation as a markdown file',
+		run: (ctx) => {
+			const conv = findConv(ctx.plugin.conversationStore);
+			if (!conv || conv.messages.length === 0) {
+				new Notice('Nothing to export');
+				return true;
+			}
+			downloadConversationMarkdown(conv, {
+				providerName: (id) => ctx.plugin.providerRegistry.getProvider(id)?.name,
+			});
+			new Notice(`Exported: ${conv.title}`);
 			return true;
 		},
 	},

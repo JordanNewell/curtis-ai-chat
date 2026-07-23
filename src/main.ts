@@ -1,7 +1,7 @@
 // Curtis — Main Plugin Entry Point
 
-import { Editor, Notice, Plugin } from 'obsidian';
-import type { CurtisSettings, AIMessage, TokenUsage, AIProvider } from './types';
+import { Editor, Notice, Plugin, requestUrl } from 'obsidian';
+import type { CurtisSettings, AIMessage, TokenUsage, AIProvider, ToolCall, ToolDefinition } from './types';
 import { DEFAULT_SETTINGS, CurtisSettingTab } from './settings';
 import { ProviderRegistry } from './providers/registry';
 import { chatStream } from './providers/transport';
@@ -14,6 +14,8 @@ import { migrateSecretsToKeychain, resolveApiKey } from './core/secrets';
 import { MemoryStore } from './memory';
 import { TemplateManager } from './templates';
 import { ConversationStore } from './chat/conversation-store';
+import { ChatSearchModal } from './ui/modals/chat-search-modal';
+import { DiffRewriteModal } from './ui/modals/diff-rewrite-modal';
 import { CHAT_VIEW_TYPE, ChatView } from './chat/view';
 import { registerCommands } from './commands';
 import { registerContextMenu } from './commands/context-menu';
@@ -46,7 +48,9 @@ export default class CurtisPlugin extends Plugin {
 		// 3. Initialize core services
 		this.eventBus = new EventBus();
 		this.hookSystem = new HookSystem();
-		this.toolRegistry = new ToolRegistry(this.app);
+		this.toolRegistry = new ToolRegistry(this.app, {
+			enableWebSearch: this.settings.enableWebSearch,
+		});
 		this.memoryStore = new MemoryStore(this.app);
 		await this.memoryStore.load(this);
 		this.templateManager = new TemplateManager();
@@ -126,6 +130,25 @@ export default class CurtisPlugin extends Plugin {
 		}
 	}
 
+	/** Re-render the full conversation in every open ChatView. Called after
+	 *  the current conversation is swapped externally (e.g. from the search
+	 *  modal) so the view reflects the new conversation without a full reload. */
+	refreshChatViews(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)) {
+			const view = leaf.view;
+			if (view instanceof ChatView) {
+				view.renderCurrentConversation();
+			}
+		}
+	}
+
+	/** Open the cross-conversation search modal. Ensures the chat view exists
+	 *  first so onChooseItem has somewhere to render the result. */
+	async openChatSearch(): Promise<void> {
+		await this.activateChatView();
+		new ChatSearchModal(this.app, this).open();
+	}
+
 	async activateChatView(newChat?: boolean): Promise<void> {
 		const { workspace } = this.app;
 
@@ -145,7 +168,7 @@ export default class CurtisPlugin extends Plugin {
 		}
 
 		await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
-		workspace.revealLeaf(leaf);
+		void workspace.revealLeaf(leaf);
 
 		if (newChat && leaf.view instanceof ChatView) {
 			leaf.view.startNewChat();
@@ -201,6 +224,51 @@ export default class CurtisPlugin extends Plugin {
 		}
 	}
 
+	// ---- Diff Rewrite (Cursor-style inline rewrite) ----
+
+	/**
+	 * Rewrite the current selection via the 'improve' prompt and open a diff
+	 * modal so the user can review changes before applying. Non-streaming —
+	 * we need the full response to compute the diff before showing the modal.
+	 */
+	async runDiffRewrite(editor: Editor, selection: string): Promise<void> {
+		try {
+			this.getAuthenticatedProvider();
+		} catch {
+			new Notice('No AI provider configured. Check settings.');
+			return;
+		}
+
+		const action = SELECTION_ACTIONS.improve;
+		const messages: AIMessage[] = [
+			{ role: 'system', content: action.systemPrompt },
+			{ role: 'user', content: action.userPrompt(selection) },
+		];
+
+		new Notice('Rewriting...', 2000);
+
+		try {
+			const provider = this.getAuthenticatedProvider();
+			const direct = await this.callProviderOnce(provider, messages, this.settings.activeModel, undefined);
+			if (direct.error) {
+				new Notice(`Rewrite failed: ${direct.error.message}`);
+				return;
+			}
+			const result = direct.content?.trim();
+			if (!result) {
+				new Notice('Rewrite returned empty content');
+				return;
+			}
+			new DiffRewriteModal(this.app, selection, result, (modified) => {
+				editor.replaceSelection(modified);
+				new Notice('Applied');
+			}).open();
+		} catch (e) {
+			console.error('[Curtis] Diff rewrite failed:', e);
+			new Notice(`Rewrite failed: ${(e as Error).message}`);
+		}
+	}
+
 	// ---- Core AI Call ----
 
 	/**
@@ -211,6 +279,18 @@ export default class CurtisPlugin extends Plugin {
 		const provider = this.providerRegistry.getActiveProvider(this.settings.activeProvider);
 		if (!provider) throw new Error('No active provider');
 		if (!provider.isAuthenticated()) throw new Error('Provider not authenticated');
+		return provider;
+	}
+
+	/**
+	 * Resolve a specific provider by id and verify authentication. Used by
+	 * arena mode where each parallel call targets a different provider.
+	 * Throws with a readable message if the provider is missing or unauthed.
+	 */
+	getAuthenticatedProviderById(providerId: string): AIProvider {
+		const provider = this.providerRegistry.getProvider(providerId);
+		if (!provider) throw new Error(`Provider "${providerId}" not configured`);
+		if (!provider.isAuthenticated()) throw new Error(`Provider "${providerId}" not authenticated`);
 		return provider;
 	}
 
@@ -229,9 +309,14 @@ export default class CurtisPlugin extends Plugin {
 			onUsage?: (usage: TokenUsage) => void;
 			onError?: (error: Error) => void;
 			signal?: AbortSignal;
+			/** Override the active provider for this call. Used by arena mode
+			 *  to fan out a single prompt to multiple providers in parallel. */
+			providerId?: string;
 		}
 	): Promise<void> {
-		const provider = this.getAuthenticatedProvider();
+		const provider = callbacks?.providerId
+			? this.getAuthenticatedProviderById(callbacks.providerId)
+			: this.getAuthenticatedProvider();
 
 		// Run hooks: messages:before-send
 		const processedMessages = (await this.hookSystem.runPipeline(
@@ -347,6 +432,178 @@ export default class CurtisPlugin extends Plugin {
 		}
 	}
 
+	// ---- Agent loop --------------------------------------------------------
+	//
+	// When agent mode is enabled AND the active provider speaks the OpenAI
+	// tool-calling dialect, callAI delegates here. The loop:
+	//   1. Send messages + tool catalog (non-streaming) → AIResponse.
+	//   2. If response has tool_calls: execute the first one, append the
+	//      assistant tool_call message + the tool result message, loop.
+	//   3. If response has no tool_calls: it's the final answer — deliver
+	//      the text via onChunk and return.
+	//
+	// v1 constraints (per design doc):
+	//   - Single tool call per turn (ignore parallel tool_calls).
+	//   - Auto-approve (no per-call confirmation).
+	//   - Loop cap = settings.agentMaxTurns (default 5).
+	//   - Non-streaming — tool_call detection needs the full response.
+
+	async callAgentLoop(
+		messages: AIMessage[],
+		modelId: string,
+		callbacks: {
+			onChunk?: (chunk: string) => void;
+			onUsage?: (usage: TokenUsage) => void;
+			onError?: (error: Error) => void;
+			onToolCall?: (call: ToolCall) => void;
+			onToolResult?: (call: ToolCall, result: { content: string; isError: boolean }) => void;
+			signal?: AbortSignal;
+		}
+	): Promise<void> {
+		const provider = this.getAuthenticatedProvider();
+		const allTools = this.toolRegistry.getAllTools();
+		const maxTurns = Math.max(1, this.settings.agentMaxTurns);
+
+		// If any user message in the working set already carries an attached
+		// note (marked by the `[Attached note: X]` block that prependAttachedNotes
+		// injects), strip read_note + search_notes from the tool list. The note
+		// content is already in the conversation context — advertising these
+		// tools just tempts the model to re-fetch what it already has, wasting
+		// a turn + tokens. Other tools (create_note, edit_note, get_tags, etc.)
+		// remain available since they do work the attachment can't substitute for.
+		const hasAttachedNote = messages.some((m) =>
+			m.role === 'user' && typeof m.content === 'string' && m.content.includes('[Attached note:')
+		);
+		const tools = hasAttachedNote
+			? allTools.filter((t) => t.name !== 'read_note' && t.name !== 'search_notes')
+			: allTools;
+
+		// Working copy — we append assistant tool_call messages and tool
+		// result messages as the loop progresses.
+		let working: AIMessage[] = [...messages];
+
+		let turns = 0;
+		while (turns < maxTurns) {
+			if (callbacks.signal?.aborted) return;
+
+			const direct = await this.callProviderOnce(provider, working, modelId, tools, callbacks.signal);
+			if (direct.error) {
+				callbacks.onError?.(direct.error);
+				if (!callbacks.onError) throw direct.error;
+				return;
+			}
+			if (direct.usage) {
+				callbacks.onUsage?.(direct.usage);
+				this.eventBus.emit('provider:response', { usage: direct.usage, provider: provider.id, model: modelId });
+			}
+
+			if (!direct.toolCalls || direct.toolCalls.length === 0) {
+				// Final answer — deliver as one chunk. The view's streaming
+				// renderer handles a single large delta fine.
+				if (direct.content) callbacks.onChunk?.(direct.content);
+				return;
+			}
+
+			// v1: execute the first tool call only.
+			const call = direct.toolCalls[0];
+			callbacks.onToolCall?.(call);
+
+			// Append the assistant message (with tool_calls) to working set.
+			working = [...working, {
+				role: 'assistant' as const,
+				content: direct.content || '',
+				tool_calls: [call],
+			}];
+
+			// Execute.
+			const toolResult = await this.toolRegistry.executeTool(call);
+
+			callbacks.onToolResult?.(call, {
+				content: toolResult.content,
+				isError: toolResult.is_error === true,
+			});
+
+			// Append the tool result message.
+			working = [...working, {
+				role: 'tool' as const,
+				content: toolResult.content,
+				tool_call_id: call.id,
+				name: call.name,
+			}];
+
+			turns++;
+		}
+
+		// Hit the loop cap without a final answer.
+		console.warn(`[Curtis] Agent hit max turns (${maxTurns}) without a final response`);
+		callbacks.onChunk?.('\n\n*[Agent stopped: reached max tool calls limit]*');
+	}
+
+	/**
+	 * One-shot non-streaming provider call. Returns the parsed AIResponse
+	 * (content + tool_calls + usage) or an error. Used by callAgentLoop.
+	 *
+	 * Goes through Obsidian's requestUrl (CORS-immune, buffered) so we can
+	 * call provider.parseResponse ourselves and recover tool_calls — the
+	 * streaming chatStream path only forwards content deltas.
+	 *
+	 * v1 limitation: requestUrl ignores AbortSignal, so agent requests
+	 * can't be mid-flight cancelled. The user can still abort before the
+	 * next loop iteration.
+	 */
+	private async callProviderOnce(
+		provider: AIProvider,
+		messages: AIMessage[],
+		modelId: string,
+		tools: ToolDefinition[] | undefined,
+		signal?: AbortSignal
+	): Promise<{ content: string; toolCalls?: ToolCall[]; usage?: TokenUsage; error?: Error }> {
+		const options = {
+			model: modelId,
+			temperature: this.settings.temperature,
+			maxTokens: this.settings.maxTokens,
+			stream: false as const,
+			tools,
+		};
+		const requestInit = provider.formatRequest(messages, options);
+		const finalRequest = await this.hookSystem.runPipeline('provider:request', requestInit, {});
+
+		const headers: Record<string, string> = {};
+		for (const [k, v] of Object.entries(finalRequest.headers || {})) {
+			headers[k] = String(v);
+		}
+
+		try {
+			const resp = await requestUrl({
+				url: provider.endpoint,
+				method: finalRequest.method || 'POST',
+				headers,
+				body: finalRequest.body as string,
+				throw: false,
+			});
+			if (resp.status < 200 || resp.status >= 300) {
+				const snippet = (resp.text || '').slice(0, 500);
+				return { content: '', error: new Error(`${provider.name} API error (${resp.status}): ${snippet}`) };
+			}
+			const body = resp.text;
+			const data: unknown = JSON.parse(body);
+			const ai = await provider.parseResponse({
+				ok: resp.status >= 200 && resp.status < 300,
+				status: resp.status,
+				json: async () => data,
+				text: async () => body,
+			});
+			return {
+				content: ai.content || '',
+				toolCalls: ai.tool_calls,
+				usage: ai.usage,
+			};
+		} catch (e) {
+			if (signal?.aborted) return { content: '', error: new Error('Aborted') };
+			return { content: '', error: e as Error };
+		}
+	}
+
 	// ---- Memory auto-capture -----------------------------------------------
 
 	/**
@@ -409,7 +666,7 @@ function extractJsonArray(text: string): Array<{ content?: unknown; category?: u
 	if (start === -1 || end === -1 || end <= start) return null;
 	const slice = candidate.slice(start, end + 1);
 	try {
-		const parsed = JSON.parse(slice);
+		const parsed: unknown = JSON.parse(slice);
 		return Array.isArray(parsed) ? (parsed as Array<{ content?: unknown; category?: unknown }>) : null;
 	} catch {
 		return null;

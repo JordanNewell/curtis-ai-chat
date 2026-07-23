@@ -1,12 +1,29 @@
 // Curtis — Shared Types & Interfaces
 
 // ============================================================================
+// TOOL TYPES (re-exported so callers can stay on a single import surface)
+// ============================================================================
+//
+// ToolCall / ToolResult / ToolDefinition live in core/tools.ts alongside
+// ToolRegistry; re-export them here so consumers that already pull from
+// '../types' don't have to thread a second import. The definitions below
+// depend on these shapes.
+import type { ToolDefinition, ToolCall } from './core/tools';
+export type { ToolDefinition, ToolParameter, ToolCall, ToolResult, ToolContext } from './core/tools';
+
+// ============================================================================
 // PROVIDER TYPES
 // ============================================================================
 
 export interface AIMessage {
-	role: 'system' | 'user' | 'assistant';
+	role: 'system' | 'user' | 'assistant' | 'tool';
 	content: string | MessageContent[];
+	/** When role='assistant' and the model returned tool_calls. */
+	tool_calls?: ToolCall[];
+	/** When role='tool' — id of the originating assistant tool call. */
+	tool_call_id?: string;
+	/** Optional name of the tool that produced this result (role='tool'). */
+	name?: string;
 }
 
 export interface MessageContent {
@@ -30,12 +47,16 @@ export interface AIRequestOptions {
 	temperature: number;
 	maxTokens: number;
 	stream?: boolean;
+	/** When set, the provider advertises tools to the model (agent mode). */
+	tools?: ToolDefinition[];
 }
 
 export interface AIResponse {
 	content: string;
 	usage?: TokenUsage;
 	reasoning?: string;
+	/** Tool calls the model wants executed. Empty/absent means: final answer. */
+	tool_calls?: ToolCall[];
 }
 
 export interface TokenUsage {
@@ -98,6 +119,10 @@ export interface AIProvider {
 	getModelPricing(modelId: string): { inputPrice: number; outputPrice: number } | null;
 	/** Replace this provider's model list (used by auto-discovery). */
 	setModels?(models: AIModel[]): void;
+	/** True when this provider speaks the OpenAI tool-calling dialect.
+	 *  Optional — providers that don't implement it return falsy via
+	 *  `provider?.supportsToolCalls?.()`. v1 agent mode is gated on this. */
+	supportsToolCalls?(): boolean;
 }
 
 export type AuthType = 'bearer' | 'anthropic' | 'none' | 'oauth';
@@ -128,7 +153,7 @@ export interface ProviderConfig {
 
 export interface ConversationMessage {
 	id: string;
-	role: 'system' | 'user' | 'assistant';
+	role: 'system' | 'user' | 'assistant' | 'tool';
 	content: string;
 	timestamp: number;
 	cost?: number;
@@ -137,6 +162,18 @@ export interface ConversationMessage {
 	model?: string;
 	images?: string[];  // base64
 	parentId?: string;  // for branching
+	/** Vault paths of notes attached via @-mention. Their contents are
+	 *  prepended to `content` when building the message sent to the AI,
+	 *  but never shown in the user's chat bubble. Presists across
+	 *  regen / edit-resend so the AI sees consistent context. */
+	attachedNotes?: string[];
+	/** Tool calls the assistant requested (role='assistant' only).
+	 *  v1 agent mode emits at most one per turn. */
+	tool_calls?: ToolCall[];
+	/** Set when role='tool' — links the result back to the originating call. */
+	tool_call_id?: string;
+	/** True when a tool returned an error — used to style the result bubble. */
+	tool_error?: boolean;
 }
 
 export interface ConversationBranch {
@@ -233,6 +270,18 @@ export interface CurtisSettings {
 	ragTopK: number;
 	ragEmbeddingProvider: string;
 	ragEmbeddingModel: string;
+
+	// Agent — lets the AI invoke tools to read/modify the vault. v1 ships
+	// OpenAI-compat only; other families fall back to plain chat silently.
+	enableAgent: boolean;
+	/** Safety cap on tool invocations per user message (loop guard). */
+	agentMaxTurns: number;
+	/** Opt-in web tools (web_search + read_url). Off by default — Curtis is
+	 *  vault-first. When enabled, requires enableAgent=true to take effect. */
+	enableWebSearch: boolean;
+	/** Render "Today / Yesterday / date" dividers between messages that
+	 *  cross a calendar-date boundary. Matches iMessage/Telegram feel. */
+	showDaySeparators: boolean;
 
 	// Hotkeys
 	hotkeys: HotkeyConfig;

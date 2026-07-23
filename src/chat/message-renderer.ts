@@ -88,7 +88,7 @@ export class MessageRenderer {
 
 			btn.addEventListener('click', () => {
 				const code = block.textContent || '';
-				navigator.clipboard.writeText(code).then(() => {
+				void navigator.clipboard.writeText(code).then(() => {
 					btn.textContent = 'Copied!';
 					window.setTimeout(() => {
 						btn.textContent = 'Copy';

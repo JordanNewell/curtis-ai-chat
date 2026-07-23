@@ -23,6 +23,7 @@ import type { RequestUrlResponse } from 'obsidian';
 import type { AIProvider, StreamResponse, StreamCallback, UsageCallback, ErrorCallback } from '../types';
 import { streamResponseFromNode, streamResponseFromBuffer } from './stream-shim';
 import type { NodeIncomingMessage } from './stream-shim';
+import { isRecord } from '../core/types/json-helpers';
 
 export type TransportKind = 'node-https' | 'fetch' | 'requestUrl';
 
@@ -77,6 +78,10 @@ function getNodeHttps(): typeof import('https') | undefined {
 export function pickTransport(stream: boolean): TransportKind {
 	if (stream) {
 		if (getNodeHttps() !== undefined) return 'node-https';
+		// fetch() is architecturally required here for mobile streaming.
+		// Obsidian's requestUrl does not support SSE streaming (it buffers).
+		// Mobile users have no alternative transport for CORS-friendly providers.
+		// eslint-disable-next-line no-restricted-globals
 		if (typeof fetch !== 'undefined') return 'fetch';
 	}
 	// requestUrl always available; safe fallback.
@@ -238,10 +243,16 @@ async function runViaFetch(
 	callbacks: ChatStreamCallbacks,
 	registerCancel: (cancel: () => void) => void
 ): Promise<void> {
+	// Mobile-only streaming path. requestUrl cannot stream SSE; node-https is
+	// unavailable on mobile. fetch is the only transport that works for mobile + CORS-friendly providers.
+	// eslint-disable-next-line no-restricted-globals
 	if (typeof fetch === 'undefined') {
 		throw new Error('fetch unavailable — falling back');
 	}
 
+	// Mobile-only streaming path. requestUrl cannot stream SSE; node-https is
+	// unavailable on mobile. This is the only transport that works for mobile + CORS-friendly providers.
+	// eslint-disable-next-line no-restricted-globals
 	const response = await fetch(provider.endpoint, {
 		...requestInit,
 		signal: callbacks.signal,
@@ -294,7 +305,7 @@ async function runViaRequestUrl(
 	try {
 		urlResp = await requestUrl({
 			url: provider.endpoint,
-			method: (requestInit.method as 'POST' | 'GET') || 'POST',
+			method: requestInit.method || 'POST',
 			headers,
 			body: requestInit.body as string,
 			throw: true,
@@ -304,8 +315,16 @@ async function runViaRequestUrl(
 		throw new Error(`${provider.name} API error: ${msg}`);
 	}
 
-	// requestUrl returns .json already-parsed and .text as string.
-	const response = streamResponseFromBuffer(urlResp.status, urlResp.text, urlResp.json);
+	// Parse the body ourselves and narrow at the boundary. requestUrl returns
+	// .json already-parsed, but we re-parse .text so the value flows through
+	// isRecord before reaching provider.parseResponse.
+	const body = urlResp.text;
+	const data: unknown = JSON.parse(body);
+	if (!isRecord(data)) {
+		throw new Error(`${provider.name}: malformed JSON response`);
+	}
+	// Pass `data` to provider.parseResponse which will narrow further.
+	const response = streamResponseFromBuffer(urlResp.status, body, data);
 	const ai = await provider.parseResponse(response);
 	if (ai.content) callbacks.onChunk?.(ai.content);
 	if (ai.usage) callbacks.onUsage?.(ai.usage);
