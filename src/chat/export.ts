@@ -63,9 +63,10 @@ export function formatConversationAsMarkdown(
 	return lines.join('\n');
 }
 
-/** Sanitize a string for use as a filename. */
+/** Sanitize a string for use as a filename.
+ *  Strips Windows-forbidden chars + Unicode control characters (Cc category). */
 function sanitizeFilename(name: string): string {
-	return name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'conversation';
+	return name.replace(/[<>:"/\\|?*\p{Cc}]/gu, '_').trim() || 'conversation';
 }
 
 /** Trigger a browser download of the conversation as a .md file.

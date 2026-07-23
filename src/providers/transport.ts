@@ -127,12 +127,13 @@ export async function chatStream(
 				}
 				resolve();
 			} catch (err) {
-				if ((err as Error)?.name === 'AbortError') {
+				const error = err instanceof Error ? err : new Error(String(err));
+				if (error.name === 'AbortError') {
 					resolve();
 					return;
 				}
-				callbacks.onError?.(err as Error);
-				reject(err);
+				callbacks.onError?.(error);
+				reject(error);
 			} finally {
 				if (callbacks.signal) callbacks.signal.removeEventListener('abort', onAbort);
 			}
