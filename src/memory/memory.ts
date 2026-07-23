@@ -212,21 +212,29 @@ export class MemoryStore {
 			let body = line;
 			const metaMatch = body.match(/<!--\s*id:([^\s]+)\s+updated:(\d+)\s*-->\s*$/);
 			if (metaMatch) {
-				id = String(metaMatch[1] ?? '');
-				updated = parseInt(String(metaMatch[2] ?? '0'), 10);
-				const idx: number = typeof metaMatch.index === 'number' ? metaMatch.index : 0;
+				const groups: string[] = metaMatch;
+				id = groups[1] ?? '';
+				updated = parseInt(groups[2] ?? '0', 10);
+				const matchIndex = metaMatch.index;
+				const idx: number = typeof matchIndex === 'number' ? matchIndex : 0;
 				body = body.slice(0, idx).trimEnd();
 			}
 			// 2. Bullet marker.
 			const bulletMatch = body.match(/^\s*[-*]\s+(.+)$/);
 			if (!bulletMatch) continue;
-			let text = bulletMatch[1].trim();
+			const bulletGroups: string[] = bulletMatch;
+			let text = (bulletGroups[1] ?? '').trim();
 			// 3. Trailing [category] — ONLY if it's a valid category value.
 			let category: string | undefined;
 			const catMatch = text.match(/\s\[([^\]]+)\]\s*$/);
-			if (catMatch && validCats.has(catMatch[1].trim())) {
-				category = catMatch[1].trim();
-				text = text.slice(0, catMatch.index).trim();
+			if (catMatch) {
+				const catGroups: string[] = catMatch;
+				const catValue = (catGroups[1] ?? '').trim();
+				if (validCats.has(catValue)) {
+					category = catValue;
+					const catIdx = catMatch.index;
+					text = text.slice(0, typeof catIdx === 'number' ? catIdx : text.length).trim();
+				}
 			}
 			if (!text) continue;
 			facts.push({

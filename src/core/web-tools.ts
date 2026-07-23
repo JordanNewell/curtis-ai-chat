@@ -79,7 +79,7 @@ export const WEB_SEARCH_TOOL: ToolDefinition = {
 		},
 	},
 	execute: async (params) => {
-		const query = String(params.query || '').trim();
+		const query = (typeof params.query === 'string' ? params.query : '').trim();
 		if (!query) return 'Search query is required.';
 		const max = Math.min(10, Math.max(1, Number(params.max_results) || 5));
 
@@ -119,7 +119,7 @@ export const READ_URL_TOOL: ToolDefinition = {
 		url: { type: 'string', description: 'The full URL to fetch (https://...)', required: true },
 	},
 	execute: async (params) => {
-		const url = String(params.url || '').trim();
+		const url = (typeof params.url === 'string' ? params.url : '').trim();
 		if (!url) return 'URL is required.';
 		if (!/^https?:\/\//i.test(url)) {
 			return 'URL must start with http:// or https://';

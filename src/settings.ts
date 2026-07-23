@@ -1,7 +1,6 @@
 // Curtis Settings — defaults, settings tab UI
 
 import { App, Notice, PluginSettingTab, Setting, requestUrl } from 'obsidian';
-import type { SettingDefinitionItem } from 'obsidian';
 import type { CurtisSettings, ProviderConfig, ProviderDefinition } from './types';
 import { PROVIDER_DEFINITIONS } from './providers/registry';
 import { CustomProviderModal } from './ui/modals/custom-provider-modal';
@@ -87,15 +86,6 @@ export class CurtisSettingTab extends PluginSettingTab {
 	constructor(app: App, plugin: CurtisPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
-	}
-
-	/**
-	 * Declarative settings stub. Returns empty so Obsidian 1.13+ recognizes
-	 * this tab as declarative-aware and falls back to imperative display().
-	 * Full migration to declarative definitions deferred to a future release.
-	 */
-	getSettingDefinitions(): SettingDefinitionItem[] {
-		return [];
 	}
 
 	display(): void {
