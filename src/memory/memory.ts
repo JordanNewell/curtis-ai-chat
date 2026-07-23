@@ -218,7 +218,7 @@ export class MemoryStore {
 				const matchIndex = metaMatch.index;
 				const idx: number = typeof matchIndex === 'number' ? matchIndex : 0;
 				const sliced: string = body.slice(0, idx);
-				body = sliced.trimEnd();
+				body = sliced.replace(/\s+$/, '');
 			}
 			// 2. Bullet marker.
 			const bulletMatch = body.match(/^\s*[-*]\s+(.+)$/);
