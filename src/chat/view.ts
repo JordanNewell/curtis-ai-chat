@@ -2124,13 +2124,12 @@ export class ChatView extends ItemView {
 			if (btn instanceof HTMLElement) btn.removeClass('is-active');
 			return;
 		}
-		const entries: ArenaModelEntry[] = enabled.flatMap(({ id, provider }) =>
-			provider.models.map((model): ArenaModelEntry => ({
-				providerId: id,
-				providerName: provider.name,
-				model,
-			}))
-		);
+		const entries: ArenaModelEntry[] = [];
+		for (const { id, provider } of enabled) {
+			for (const model of provider.models) {
+				entries.push({ providerId: id, providerName: provider.name, model });
+			}
+		}
 		if (entries.length < 2) {
 			new Notice('Need at least 2 models across enabled providers for arena');
 			this.arenaMode = false;
@@ -2239,8 +2238,9 @@ export class ChatView extends ItemView {
 			promises.push(this.streamArenaResponse(sel, messages, responseEl, footer, promoteBtn));
 		}
 
-		// All streams run in parallel; resolve independently.
-		void Promise.allSettled(promises).then(() => {
+		// All streams run parallel; resolve independently. allSettled so one
+		// failure doesn't reject the batch.
+		void Promise.all(promises.map((p): Promise<void> => p.then(() => undefined, () => undefined))).then(() => {
 			this.isGenerating = false;
 			this.setGeneratingUI(false);
 			this.arenaAbortControllers.clear();

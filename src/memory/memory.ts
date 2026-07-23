@@ -212,9 +212,9 @@ export class MemoryStore {
 			let body = line;
 			const metaMatch = body.match(/<!--\s*id:([^\s]+)\s+updated:(\d+)\s*-->\s*$/);
 			if (metaMatch) {
-				id = metaMatch[1];
-				updated = parseInt(metaMatch[2], 10);
-				const idx = metaMatch.index ?? 0;
+				id = String(metaMatch[1] ?? '');
+				updated = parseInt(String(metaMatch[2] ?? '0'), 10);
+				const idx: number = typeof metaMatch.index === 'number' ? metaMatch.index : 0;
 				body = body.slice(0, idx).trimEnd();
 			}
 			// 2. Bullet marker.
