@@ -1,24 +1,21 @@
-# Legacy `curtis` listing — deprecation update
+# Legacy `curtis` listing — deprecation + archive
 
-**Use:** Text to update the existing community.obsidian.md/plugins/curtis listing so v3.0.1 users find curtis-ai-chat as the successor. The old listing stays live (existing users auto-update from it); only the description changes.
+**Status:** ✅ Applied 2026-07-23. Long page body pasted into the dashboard; listing archived.
 
-**Context:** Plugin ID changed `curtis` → `curtis-ai-chat`. The old listing cannot be deleted (users have it installed), but its description should redirect to the new plugin.
+**Use:** Reference for what was done to community.obsidian.md/plugins/curtis to redirect v3.0.1 users to curtis-ai-chat. Kept as a template for any future plugin successor launches.
+
+**Context:** Plugin ID changed `curtis` → `curtis-ai-chat`. The old listing cannot be deleted (users have it installed). Deprecation text + archiving is the cleanest combination: search-hidden from new users, page still loads for existing users with clear redirect.
 
 ---
 
-## Short manifest description (~200 chars)
+## What was applied
 
-For the curtis-chat repo's `manifest.json` `description` field. Requires a v3.0.2 patch release to land — auto-update delivers the deprecation notice to existing curtis users.
-
-```
-Superseded by curtis-ai-chat (community.obsidian.md/plugins/curtis-ai-chat). Install the new plugin instead — v1.0 is the active line. This v3 stays for existing installs only; no new features.
-```
+1. **Long description updated** on `community.obsidian.md/plugins/curtis` with the deprecation body below.
+2. **Listing archived** via the dashboard. Effect: hidden from "Browse" search; direct URL still works; existing installs keep functioning; auto-update from curtis-chat releases still works.
 
 ---
 
 ## Long page body (~650 chars)
-
-For the community.obsidian.md dashboard's long-description field on the curtis listing (if the dashboard allows editing without a new release — verify first). Otherwise bundle into the v3.0.2 release notes.
 
 ```
 ⚠️ **Deprecated — install curtis-ai-chat instead.**
@@ -34,20 +31,31 @@ This listing will not receive further updates.
 
 ---
 
-## Deployment paths
+## Optional follow-up: v3.0.2 patch release
 
-**Path A — dashboard edit only (no release):**
-1. Visit `community.obsidian.md/account/plugins/curtis`
-2. If the dashboard exposes a description field, paste the long page body
-3. Done — no release needed, no auto-update churn
+If you want every installed v3 user to see the deprecation notice in their Obsidian plugins list (not just the directory page), ship a v3.0.2 patch release of curtis-chat with the short blurb as the manifest description:
 
-**Path B — v3.0.2 patch release:**
-1. In the curtis-chat repo, bump `manifest.json` version to `3.0.2` + description to the short blurb above
+```
+Superseded by curtis-ai-chat (community.obsidian.md/plugins/curtis-ai-chat). Install the new plugin instead — v1.0 is the active line. This v3 stays for existing installs only; no new features.
+```
+
+Steps:
+1. In curtis-chat repo, bump `manifest.json` version → `3.0.2`, description → short blurb above
 2. Bump `versions.json` to add `"3.0.2": "1.11.4"`
-3. Commit + tag `3.0.2` (no `v` prefix per Obsidian rule)
-4. Push tag → existing curtis auto-update installs pick up v3.0.2 and show the deprecation description in their plugin list
-5. Also update the dashboard long description with the body text
+3. Commit + tag `3.0.2` (no `v` prefix)
+4. Push tag → curtis-chat release.yml publishes assets, Obsidian auto-update delivers v3.0.2 with deprecation text to installed users
 
-Path B is more thorough (every installed user sees the notice in their plugins list, not just on the directory page) but requires a release. Path A is fast if the dashboard supports it.
+Not required — the archive + dashboard description handles the funnel side. v3.0.2 is only worth it if you want maximum in-product visibility for existing users.
 
-**Recommendation:** try Path A first. If the dashboard doesn't allow description edits without a release, fall back to Path B.
+---
+
+## Why archive + deprecation > deprecation alone
+
+| Approach | New users find curtis? | Existing users see notice? | Risk |
+|----------|------------------------|----------------------------|------|
+| Do nothing | Yes (in search) | No | Confusion |
+| Update description only | Yes (in search) | Only if they visit page | Mild confusion |
+| **Archive + deprecation text** | **No (search-hidden)** | **Yes (page + archived badge)** | **None — reversible** |
+
+Archiving is reversible via the dashboard if curtis-ai-chat submission ever needs to be backed out.
+
