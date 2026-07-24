@@ -1,6 +1,7 @@
 // Curtis Settings — defaults, settings tab UI
 
 import { App, Notice, PluginSettingTab, Setting, requestUrl } from 'obsidian';
+import type { SettingDefinitionItem } from 'obsidian';
 import type { CurtisSettings, ProviderConfig, ProviderDefinition } from './types';
 import { PROVIDER_DEFINITIONS } from './providers/registry';
 import { CustomProviderModal } from './ui/modals/custom-provider-modal';
@@ -88,8 +89,37 @@ export class CurtisSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	display(): void {
-		const { containerEl } = this;
+	/**
+	 * Declarative settings entry point (Obsidian 1.13+).
+	 *
+	 * Returns a single group whose render callback builds the full imperative
+	 * settings UI into the group's container element. This satisfies the
+	 * declarative API contract (so the tab appears in settings search and
+	 * display() is no longer needed) while preserving the existing imperative
+	 * Setting-based rendering code unchanged.
+	 */
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return [
+			{
+				type: 'group',
+				heading: 'Curtis AI Chat',
+				items: [
+					{
+						name: 'Settings',
+						render: (_setting, group) => {
+							this.renderSettings(group.listEl);
+						},
+					},
+				],
+			},
+		];
+	}
+
+	/**
+	 * Build the full settings UI imperatively into the given container.
+	 * Called from getSettingDefinitions() render callback.
+	 */
+	private renderSettings(containerEl: HTMLElement): void {
 		containerEl.empty();
 
 		// ---- Active Provider & Model ----
@@ -526,219 +556,219 @@ export class CurtisSettingTab extends PluginSettingTab {
 				});
 			});
 
-	new Setting(containerEl)
-		.setName('Chat panel width')
-		.setDesc('Width in pixels')
-		.addText((text) => {
-			text.setValue(String(this.plugin.settings.chatWidth)).onChange(async (val) => {
-				const n = parseInt(val, 10);
-				if (!isNaN(n) && n >= 200) {
-					this.plugin.settings.chatWidth = n;
-					await this.plugin.saveSettings();
-				}
+		new Setting(containerEl)
+			.setName('Chat panel width')
+			.setDesc('Width in pixels')
+			.addText((text) => {
+				text.setValue(String(this.plugin.settings.chatWidth)).onChange(async (val) => {
+					const n = parseInt(val, 10);
+					if (!isNaN(n) && n >= 200) {
+						this.plugin.settings.chatWidth = n;
+						await this.plugin.saveSettings();
+					}
+				});
 			});
-		});
 
-	// ---- Notes ----
-	new Setting(containerEl).setName('Notes').setHeading();
+		// ---- Notes ----
+		new Setting(containerEl).setName('Notes').setHeading();
 
-	new Setting(containerEl)
-		.setName('Note save folder')
-		.setDesc('Where "Save as note" and the /note slash command save new notes. Empty = vault root.')
-		.addText((text) => {
-			text.setPlaceholder('AI Notes')
-				.setValue(this.plugin.settings.noteSaveFolder)
-				.onChange(async (val) => {
-					this.plugin.settings.noteSaveFolder = val.trim();
+		new Setting(containerEl)
+			.setName('Note save folder')
+			.setDesc('Where "Save as note" and the /note slash command save new notes. Empty = vault root.')
+			.addText((text) => {
+				text.setPlaceholder('AI Notes')
+					.setValue(this.plugin.settings.noteSaveFolder)
+					.onChange(async (val) => {
+						this.plugin.settings.noteSaveFolder = val.trim();
+						await this.plugin.saveSettings();
+					});
+			})
+			.addButton((btn) => {
+				btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
+					new FolderSuggestModal(this.app, (path) => {
+						void (async () => {
+							this.plugin.settings.noteSaveFolder = path;
+							await this.plugin.saveSettings();
+							this.update();
+						})();
+					}).open();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName('Auto-save assistant responses')
+			.setDesc('Silently save each completed assistant message as a note. Folder below.')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.autoSaveAssistantResponses);
+				toggle.onChange(async (val) => {
+					this.plugin.settings.autoSaveAssistantResponses = val;
 					await this.plugin.saveSettings();
 				});
-		})
-		.addButton((btn) => {
-			btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
-				new FolderSuggestModal(this.app, (path) => {
-					void (async () => {
-						this.plugin.settings.noteSaveFolder = path;
+			});
+
+		new Setting(containerEl)
+			.setName('Auto-save folder')
+			.setDesc('Defaults to the Note save folder above when empty.')
+			.addText((text) => {
+				text.setPlaceholder('AI Responses')
+					.setValue(this.plugin.settings.autoSaveFolder)
+					.onChange(async (val) => {
+						this.plugin.settings.autoSaveFolder = val.trim();
 						await this.plugin.saveSettings();
-						this.update();
-					})();
-				}).open();
-			});
-		});
-
-	new Setting(containerEl)
-		.setName('Auto-save assistant responses')
-		.setDesc('Silently save each completed assistant message as a note. Folder below.')
-		.addToggle((toggle) => {
-			toggle.setValue(this.plugin.settings.autoSaveAssistantResponses);
-			toggle.onChange(async (val) => {
-				this.plugin.settings.autoSaveAssistantResponses = val;
-				await this.plugin.saveSettings();
-			});
-		});
-
-	new Setting(containerEl)
-		.setName('Auto-save folder')
-		.setDesc('Defaults to the Note save folder above when empty.')
-		.addText((text) => {
-			text.setPlaceholder('AI Responses')
-				.setValue(this.plugin.settings.autoSaveFolder)
-				.onChange(async (val) => {
-					this.plugin.settings.autoSaveFolder = val.trim();
-					await this.plugin.saveSettings();
+					});
+			})
+			.addButton((btn) => {
+				btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
+					new FolderSuggestModal(this.app, (path) => {
+						void (async () => {
+							this.plugin.settings.autoSaveFolder = path;
+							await this.plugin.saveSettings();
+							this.update();
+						})();
+					}).open();
 				});
-		})
-		.addButton((btn) => {
-			btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
-				new FolderSuggestModal(this.app, (path) => {
-					void (async () => {
-						this.plugin.settings.autoSaveFolder = path;
-						await this.plugin.saveSettings();
-						this.update();
-					})();
-				}).open();
 			});
-		});
 
-	// ---- Chat Background ----
-	new Setting(containerEl).setName('Chat Background').setHeading();
+		// ---- Chat Background ----
+		new Setting(containerEl).setName('Chat Background').setHeading();
 
-	new Setting(containerEl)
-		.setName('Background style')
-		.setDesc('"Theme" uses your Obsidian theme colors. "Wallpaper" uses the image picked below.')
-		.addDropdown((dd) => {
-			dd.addOption('theme', 'Theme (default)');
-			dd.addOption('wallpaper', 'Wallpaper image');
-			dd.setValue(this.plugin.settings.chatBackground);
-			dd.onChange(async (val) => {
-				this.plugin.settings.chatBackground = val as 'theme' | 'wallpaper';
-				await this.plugin.saveSettings();
-				this.plugin.refreshAllChatViews();
-			});
-		});
-
-	new Setting(containerEl)
-		.setName('Wallpaper image')
-		.setDesc('Pick any image file in your vault.')
-		.addText((text) => {
-			text.setPlaceholder('attachments/wallpaper.png')
-				.setValue(this.plugin.settings.chatWallpaperPath)
-				.onChange(async (val) => {
-					this.plugin.settings.chatWallpaperPath = val.trim();
+		new Setting(containerEl)
+			.setName('Background style')
+			.setDesc('"Theme" uses your Obsidian theme colors. "Wallpaper" uses the image picked below.')
+			.addDropdown((dd) => {
+				dd.addOption('theme', 'Theme (default)');
+				dd.addOption('wallpaper', 'Wallpaper image');
+				dd.setValue(this.plugin.settings.chatBackground);
+				dd.onChange(async (val) => {
+					this.plugin.settings.chatBackground = val as 'theme' | 'wallpaper';
 					await this.plugin.saveSettings();
 					this.plugin.refreshAllChatViews();
 				});
-		})
-		.addButton((btn) => {
-			btn.setIcon('image').setTooltip('Pick image from vault').onClick(() => {
-				new ImageSuggestModal(this.app, (path) => {
-					void (async () => {
-						this.plugin.settings.chatWallpaperPath = path;
-						this.plugin.settings.chatBackground = 'wallpaper';
+			});
+
+		new Setting(containerEl)
+			.setName('Wallpaper image')
+			.setDesc('Pick any image file in your vault.')
+			.addText((text) => {
+				text.setPlaceholder('attachments/wallpaper.png')
+					.setValue(this.plugin.settings.chatWallpaperPath)
+					.onChange(async (val) => {
+						this.plugin.settings.chatWallpaperPath = val.trim();
 						await this.plugin.saveSettings();
-						this.update();
 						this.plugin.refreshAllChatViews();
-					})();
-				}).open();
-			});
-		});
-
-	// ---- Memory ----
-	new Setting(containerEl).setName('Memory').setHeading();
-
-	new Setting(containerEl)
-		.setName('Enable memory')
-		.setDesc('Inject remembered facts about the user into each prompt')
-		.addToggle((toggle) => {
-			toggle.setValue(this.plugin.settings.enableMemory);
-			toggle.onChange(async (val) => {
-				this.plugin.settings.enableMemory = val;
-				await this.plugin.saveSettings();
-			});
-		});
-
-	new Setting(containerEl)
-		.setName('Auto-capture facts')
-		.setDesc('After each turn, ask the model to extract durable facts. Off = manual only (/remember, right-click).')
-		.addDropdown((dd) => {
-			dd.addOption('off', 'Off (manual only)');
-			dd.addOption('auto', 'Auto-extract after each turn');
-			dd.setValue(this.plugin.settings.memoryCaptureMode);
-			dd.onChange(async (val) => {
-				this.plugin.settings.memoryCaptureMode = val as 'off' | 'auto';
-				await this.plugin.saveSettings();
-			});
-		});
-
-	new Setting(containerEl)
-		.setName('Memory file path')
-		.setDesc('Markdown file where facts are stored. Editable by hand.')
-		.addText((text) => {
-			text.setPlaceholder('AI/Curtis Memory.md')
-				.setValue(this.plugin.settings.memoryFilePath)
-				.onChange(async (val) => {
-					this.plugin.settings.memoryFilePath = val.trim() || 'AI/Curtis Memory.md';
-					await this.plugin.saveSettings();
-					await this.plugin.memoryStore.reload(this.plugin);
+					});
+			})
+			.addButton((btn) => {
+				btn.setIcon('image').setTooltip('Pick image from vault').onClick(() => {
+					new ImageSuggestModal(this.app, (path) => {
+						void (async () => {
+							this.plugin.settings.chatWallpaperPath = path;
+							this.plugin.settings.chatBackground = 'wallpaper';
+							await this.plugin.saveSettings();
+							this.update();
+							this.plugin.refreshAllChatViews();
+						})();
+					}).open();
 				});
-		})
-		.addButton((btn) => {
-			btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
-				new FolderSuggestModal(this.app, (path) => {
-					void (async () => {
-						// FolderSuggestModal picks a folder; append default filename.
-						const fname = 'Curtis Memory.md';
-						this.plugin.settings.memoryFilePath = path ? `${path}/${fname}` : fname;
+			});
+
+		// ---- Memory ----
+		new Setting(containerEl).setName('Memory').setHeading();
+
+		new Setting(containerEl)
+			.setName('Enable memory')
+			.setDesc('Inject remembered facts about the user into each prompt')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.enableMemory);
+				toggle.onChange(async (val) => {
+					this.plugin.settings.enableMemory = val;
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName('Auto-capture facts')
+			.setDesc('After each turn, ask the model to extract durable facts. Off = manual only (/remember, right-click).')
+			.addDropdown((dd) => {
+				dd.addOption('off', 'Off (manual only)');
+				dd.addOption('auto', 'Auto-extract after each turn');
+				dd.setValue(this.plugin.settings.memoryCaptureMode);
+				dd.onChange(async (val) => {
+					this.plugin.settings.memoryCaptureMode = val as 'off' | 'auto';
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName('Memory file path')
+			.setDesc('Markdown file where facts are stored. Editable by hand.')
+			.addText((text) => {
+				text.setPlaceholder('AI/Curtis Memory.md')
+					.setValue(this.plugin.settings.memoryFilePath)
+					.onChange(async (val) => {
+						this.plugin.settings.memoryFilePath = val.trim() || 'AI/Curtis Memory.md';
 						await this.plugin.saveSettings();
 						await this.plugin.memoryStore.reload(this.plugin);
-						this.update();
-					})();
-				}).open();
+					});
+			})
+			.addButton((btn) => {
+				btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
+					new FolderSuggestModal(this.app, (path) => {
+						void (async () => {
+							// FolderSuggestModal picks a folder; append default filename.
+							const fname = 'Curtis Memory.md';
+							this.plugin.settings.memoryFilePath = path ? `${path}/${fname}` : fname;
+							await this.plugin.saveSettings();
+							await this.plugin.memoryStore.reload(this.plugin);
+							this.update();
+						})();
+					}).open();
+				});
+			})
+			.addButton((btn) => {
+				btn.setButtonText('Open').setTooltip('Open memory file').onClick(async () => {
+					await this.plugin.memoryStore.ensureFile();
+					const p = this.plugin.settings.memoryFilePath;
+					const file = this.app.vault.getAbstractFileByPath(p);
+					if (file) await this.app.workspace.openLinkText(p, '', false);
+				});
+			})
+			.addButton((btn) => {
+				btn.setButtonText('Clear').setDestructive().setTooltip('Delete all facts').onClick(async () => {
+					await this.plugin.memoryStore.clear();
+					new Notice('Memory cleared');
+				});
 			});
-		})
-		.addButton((btn) => {
-			btn.setButtonText('Open').setTooltip('Open memory file').onClick(async () => {
-				await this.plugin.memoryStore.ensureFile();
-				const p = this.plugin.settings.memoryFilePath;
-				const file = this.app.vault.getAbstractFileByPath(p);
-				if (file) await this.app.workspace.openLinkText(p, '', false);
-			});
-		})
-		.addButton((btn) => {
-			btn.setButtonText('Clear').setDestructive().setTooltip('Delete all facts').onClick(async () => {
-				await this.plugin.memoryStore.clear();
-				new Notice('Memory cleared');
-			});
-		});
 
-	// Fact list — only when memory is enabled.
-	if (this.plugin.settings.enableMemory) {
-		const facts = this.plugin.memoryStore.getFacts();
-		if (facts.length === 0) {
-			new Setting(containerEl)
-				.setName('No facts yet')
-				.setDesc('Memory facts will appear here once captured.');
-		} else {
-			new Setting(containerEl).setName('Facts').setHeading();
-			for (const fact of facts) {
-				const preview = fact.content.length > 80 ? fact.content.slice(0, 80) + '…' : fact.content;
+		// Fact list — only when memory is enabled.
+		if (this.plugin.settings.enableMemory) {
+			const facts = this.plugin.memoryStore.getFacts();
+			if (facts.length === 0) {
 				new Setting(containerEl)
-					.setName(preview)
-					.setDesc(fact.category ? `Category: ${fact.category}` : 'Uncategorized')
-					.addButton((btn) => btn.setButtonText('Edit').onClick(() => {
-						new EditFactModal(this.app, fact, (content, category) => {
-							void (async () => {
-								await this.plugin.memoryStore.updateFact(fact.id, content, category || undefined);
-								this.update();
-							})();
-						}).open();
-					}))
-					.addButton((btn) => btn.setButtonText('Delete').setDestructive().onClick(async () => {
-						await this.plugin.memoryStore.deleteFact(fact.id);
-						this.update();
-					}));
+					.setName('No facts yet')
+					.setDesc('Memory facts will appear here once captured.');
+			} else {
+				new Setting(containerEl).setName('Facts').setHeading();
+				for (const fact of facts) {
+					const preview = fact.content.length > 80 ? fact.content.slice(0, 80) + '…' : fact.content;
+					new Setting(containerEl)
+						.setName(preview)
+						.setDesc(fact.category ? `Category: ${fact.category}` : 'Uncategorized')
+						.addButton((btn) => btn.setButtonText('Edit').onClick(() => {
+							new EditFactModal(this.app, fact, (content, category) => {
+								void (async () => {
+									await this.plugin.memoryStore.updateFact(fact.id, content, category || undefined);
+									this.update();
+								})();
+							}).open();
+						}))
+						.addButton((btn) => btn.setButtonText('Delete').setDestructive().onClick(async () => {
+							await this.plugin.memoryStore.deleteFact(fact.id);
+							this.update();
+						}));
+				}
 			}
 		}
-	}
 
 		// ---- Support ----
 		new Setting(containerEl).setName('🙏 Support').setHeading();
