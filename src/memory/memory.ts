@@ -217,6 +217,7 @@ export class MemoryStore {
 				updated = parseInt(groups[2] ?? '0', 10);
 				const matchIndex = metaMatch.index;
 				const idx: number = typeof matchIndex === 'number' ? matchIndex : 0;
+				// Slice off the trailing HTML comment, then strip trailing whitespace.
 				const sliced: string = body.slice(0, idx);
 				body = sliced.replace(/\s+$/, '');
 			}
