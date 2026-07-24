@@ -13,14 +13,16 @@
   <img src="https://img.shields.io/badge/Obsidian-1.13%2B-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian 1.13+">
   <img src="https://img.shields.io/badge/providers-30%2B-8B5CF6" alt="30+ providers">
   <img src="https://img.shields.io/badge/build-0%20warnings-10B981" alt="Zero lint warnings">
+  <a href="https://github.com/JordanNewell/curtis-ai-chat/discussions"><img src="https://img.shields.io/github/discussions/JordanNewell/curtis-ai-chat?label=discussions&color=34D399" alt="GitHub Discussions"></a>
 </p>
 
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
-  <a href="#whats-new-in-v400">What's new</a> ·
+  <a href="#highlights">What's new</a> ·
   <a href="#features">Features</a> ·
   <a href="docs/INDEX.md">Docs</a> ·
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="https://github.com/JordanNewell/curtis-ai-chat/discussions">Feedback</a>
 </p>
 
 ---
@@ -50,7 +52,7 @@ Eight flagship features in this initial release. Full details in [CHANGELOG.md](
 | | Feature | What it does |
 |---|---|---|
 | 🤖 | **[Curtis Agent](docs/AGENT.md)** | AI calls tools to read, create, and edit your vault notes. Nine built-in tools. |
-| ⚔️ | **[Multi-model arena](docs/ARENA.md)** | Stream one prompt to 2–5 models in parallel, side-by-side. Pick a winner, promote to chat. |
+| ⚔️ | **[Multi-model arena](docs/ARENA.md)** | Stream one prompt to 2 models in parallel, side-by-side. Pick a winner, promote to chat. |
 | 🎨 | **[Inline diff rewrite](docs/DIFF_REWRITE.md)** | Cursor-style rewrite with an Accept/Reject diff modal. Assignable hotkey. |
 | @ | **[@-mention vault notes](docs/MENTIONS.md)** | Type `@` in chat → fuzzy-search your vault → attach note content as context. |
 | 🎙️ | **[Voice I/O](docs/VOICE.md)** | Whisper speech-to-text on the mic button. Browser TTS on every assistant message. |
@@ -76,7 +78,7 @@ The AI can now call tools to modify your vault. Nine built-in tools: `read_note`
 
 ### ⚔️ Multi-model arena
 
-Pick 2–5 models, send one prompt, watch responses stream side-by-side. Click **Promote to chat** on any column to continue with that model.
+Pick 2 models, send one prompt, watch responses stream side-by-side. Click **Promote to chat** on any column to continue with that model.
 
 - Compare quality, latency, and cost live
 - All providers supported (mind per-provider rate limits)
@@ -311,6 +313,19 @@ Obsidian 1.13.0 introduced a declarative `getSettingDefinitions()` API that also
 The dual-path (`getSettingDefinitions()` + `display()` fallback) was evaluated and rejected: on 1.13+ the declarative path needs `SettingTab.update()` for re-renders, which is also 1.13-only and trips the `no-unsupported-api` lint rule regardless of runtime guards. The migration will be adopted once 1.13 reaches stable — tracked in the [Roadmap](#roadmap).
 
 The 13 `display is deprecated` lint warnings this produces are expected, justified, and non-blocking for plugin review.
+
+## 💬 Feedback
+
+All feedback is public and lives on GitHub:
+
+- **Bug found?** [Open an issue](https://github.com/JordanNewell/curtis-ai-chat/issues)
+- **Feature idea?** [Start a discussion](https://github.com/JordanNewell/curtis-ai-chat/discussions/categories/ideas)
+- **Love it?** [Share in Show & Tell](https://github.com/JordanNewell/curtis-ai-chat/discussions/categories/show-and-tell)
+- **Stuck?** [Ask in Q&A](https://github.com/JordanNewell/curtis-ai-chat/discussions/categories/q-a)
+
+No GitHub account? Email [hello@jordannewell.com](mailto:hello@jordannewell.com) and it gets posted publicly for you.
+
+---
 
 ## License
 
