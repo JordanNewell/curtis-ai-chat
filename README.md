@@ -283,6 +283,7 @@ Curtis AI Chat works on iOS and Android with a few caveats:
 
 - [ ] Curtis Agent: Anthropic, Gemini, and Ollama provider support (v1.1)
 - [ ] Inline diff rewrite: word-level diff and inline editor decorations (v1.1)
+- [ ] Settings: migrate to declarative `getSettingDefinitions()` once Obsidian 1.13 reaches stable (see [ADR: settings API](#settings-api))
 - [ ] Voice: streaming TTS, wake-word detection
 - [ ] Conversation branching UI
 - [ ] Plugin settings import/export
@@ -298,6 +299,18 @@ PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style
 
 > [!NOTE]
 > Not accepting external PRs yet while the v1 line stabilizes. Bug reports and feature requests via [Issues](../../issues) are very welcome.
+
+## Architecture decisions
+
+### Settings API
+
+Curtis targets Obsidian 1.11.4+ (set by the `SecretStorage` API used for per-provider key storage). The settings tab therefore uses the **imperative `display()` API**, which works on every supported version including 1.13+.
+
+Obsidian 1.13.0 introduced a declarative `getSettingDefinitions()` API that also powers the new settings-search panel, and marked `display()` as `@deprecated`. Migrating to it fully would drop the floor to 1.13.0 — but **1.13.x is still Catalyst/early-access as of July 2026; the stable line is 1.12.x.** Adopting it now would make the plugin uninstallable for every user on stable.
+
+The dual-path (`getSettingDefinitions()` + `display()` fallback) was evaluated and rejected: on 1.13+ the declarative path needs `SettingTab.update()` for re-renders, which is also 1.13-only and trips the `no-unsupported-api` lint rule regardless of runtime guards. The migration will be adopted once 1.13 reaches stable — tracked in the [Roadmap](#roadmap).
+
+The 13 `display is deprecated` lint warnings this produces are expected, justified, and non-blocking for plugin review.
 
 ## License
 

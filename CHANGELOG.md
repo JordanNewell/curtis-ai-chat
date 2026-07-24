@@ -15,7 +15,7 @@ Hotfix release. The 1.0.2 manifest declared `minAppVersion: 1.13.0` (a catalyst/
 ### Notes
 
 - The true API floor is **1.11.4**, set by the `SecretStorage` API used for per-provider key storage in `core/secrets.ts`. `App.loadLocalStorage/saveLocalStorage` (1.8.7) and `Workspace.revealLeaf` (1.7.2) are also in use but below the floor. Nothing 1.13-specific remains.
-- The declarative settings API is still the intended future path; it will be re-adopted once 1.13 reaches stable. The 13 `display is deprecated` lint warnings are expected and non-blocking for plugin review.
+- The declarative settings API (`getSettingDefinitions()`) is still the intended future path. A dual-path (`getSettingDefinitions()` + `display()` fallback) was evaluated and rejected: the declarative path's re-render call (`SettingTab.update()`) is also 1.13-only and trips `no-unsupported-api` regardless of runtime guards. Migration is deferred until 1.13 reaches stable — see the [Settings API ADR](README.md#settings-api) in the README. The 13 `display is deprecated` lint warnings are expected, justified, and non-blocking for plugin review.
 
 ## [1.0.2] — 2026-07-23
 
