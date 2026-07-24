@@ -1,7 +1,6 @@
 // Curtis Settings — defaults, settings tab UI
 
 import { App, Notice, PluginSettingTab, Setting, requestUrl } from 'obsidian';
-import type { SettingDefinitionItem } from 'obsidian';
 import type { CurtisSettings, ProviderConfig, ProviderDefinition } from './types';
 import { PROVIDER_DEFINITIONS } from './providers/registry';
 import { CustomProviderModal } from './ui/modals/custom-provider-modal';
@@ -90,36 +89,11 @@ export class CurtisSettingTab extends PluginSettingTab {
 	}
 
 	/**
-	 * Declarative settings entry point (Obsidian 1.13+).
-	 *
-	 * Returns a single group whose render callback builds the full imperative
-	 * settings UI into the group's container element. This satisfies the
-	 * declarative API contract (so the tab appears in settings search and
-	 * display() is no longer needed) while preserving the existing imperative
-	 * Setting-based rendering code unchanged.
+	 * Build the full settings UI imperatively into the tab container.
+	 * Works on all supported Obsidian versions.
 	 */
-	getSettingDefinitions(): SettingDefinitionItem[] {
-		return [
-			{
-				type: 'group',
-				heading: 'Curtis AI Chat',
-				items: [
-					{
-						name: 'Settings',
-						render: (_setting, group) => {
-							this.renderSettings(group.listEl);
-						},
-					},
-				],
-			},
-		];
-	}
-
-	/**
-	 * Build the full settings UI imperatively into the given container.
-	 * Called from getSettingDefinitions() render callback.
-	 */
-	private renderSettings(containerEl: HTMLElement): void {
+	display(): void {
+		const { containerEl } = this;
 		containerEl.empty();
 
 		// ---- Active Provider & Model ----
@@ -145,7 +119,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 						this.plugin.settings.activeModel = config.defaultModel;
 					}
 					await this.plugin.saveSettings();
-					this.update();
+					this.display();
 				});
 			});
 
@@ -196,7 +170,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 						config.enabled = val;
 						await this.plugin.saveSettings();
 						this.plugin.providerRegistry.updateConfig(def.id, config);
-						this.update();
+						this.display();
 					});
 				});
 
@@ -291,7 +265,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 									const discovered = await this.plugin.providerRegistry.discoverModels(def);
 									if (discovered.length > 0) {
 										new Notice(`${def.name}: ${discovered.length} models available`);
-										this.update();
+										this.display();
 									} else {
 										new Notice(`${def.name}: no models discovered. Check API key.`);
 									}
@@ -335,7 +309,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 						config.enabled = val;
 						await this.plugin.saveSettings();
 						this.plugin.providerRegistry.updateConfig(def.id, config);
-						this.update();
+						this.display();
 					});
 				});
 
@@ -361,16 +335,16 @@ export class CurtisSettingTab extends PluginSettingTab {
 						.onClick(() => this.openCustomProviderModal(def, config.apiKey));
 				})
 				.addButton((b) => {
-					b.setButtonText('Delete')
-						.setDestructive()
-						.onClick(async () => {
-							this.plugin.providerRegistry.removeCustomProvider(def.id);
-							this.plugin.settings.customProviders = this.plugin.settings.customProviders.filter((p) => p.id !== def.id);
-							delete this.plugin.settings.providerConfigs[def.id];
-							await this.plugin.saveSettings();
-							this.update();
-							new Notice(`Deleted ${def.name}`);
-						});
+					b.setButtonText('Delete');
+					b.buttonEl.addClass('mod-destructive');
+					b.onClick(async () => {
+						this.plugin.providerRegistry.removeCustomProvider(def.id);
+						this.plugin.settings.customProviders = this.plugin.settings.customProviders.filter((p) => p.id !== def.id);
+						delete this.plugin.settings.providerConfigs[def.id];
+						await this.plugin.saveSettings();
+						this.display();
+						new Notice(`Deleted ${def.name}`);
+					});
 				});
 		}
 
@@ -444,7 +418,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 					.onClick(async () => {
 						this.plugin.settings.systemPrompt = '';
 						await this.plugin.saveSettings();
-						this.update();
+						this.display();
 					});
 			});
 
@@ -589,7 +563,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 						void (async () => {
 							this.plugin.settings.noteSaveFolder = path;
 							await this.plugin.saveSettings();
-							this.update();
+							this.display();
 						})();
 					}).open();
 				});
@@ -623,7 +597,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 						void (async () => {
 							this.plugin.settings.autoSaveFolder = path;
 							await this.plugin.saveSettings();
-							this.update();
+							this.display();
 						})();
 					}).open();
 				});
@@ -665,7 +639,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 							this.plugin.settings.chatWallpaperPath = path;
 							this.plugin.settings.chatBackground = 'wallpaper';
 							await this.plugin.saveSettings();
-							this.update();
+							this.display();
 							this.plugin.refreshAllChatViews();
 						})();
 					}).open();
@@ -720,7 +694,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 							this.plugin.settings.memoryFilePath = path ? `${path}/${fname}` : fname;
 							await this.plugin.saveSettings();
 							await this.plugin.memoryStore.reload(this.plugin);
-							this.update();
+							this.display();
 						})();
 					}).open();
 				});
@@ -734,7 +708,9 @@ export class CurtisSettingTab extends PluginSettingTab {
 				});
 			})
 			.addButton((btn) => {
-				btn.setButtonText('Clear').setDestructive().setTooltip('Delete all facts').onClick(async () => {
+				btn.setButtonText('Clear').setTooltip('Delete all facts');
+				btn.buttonEl.addClass('mod-destructive');
+				btn.onClick(async () => {
 					await this.plugin.memoryStore.clear();
 					new Notice('Memory cleared');
 				});
@@ -758,14 +734,18 @@ export class CurtisSettingTab extends PluginSettingTab {
 							new EditFactModal(this.app, fact, (content, category) => {
 								void (async () => {
 									await this.plugin.memoryStore.updateFact(fact.id, content, category || undefined);
-									this.update();
+									this.display();
 								})();
 							}).open();
 						}))
-						.addButton((btn) => btn.setButtonText('Delete').setDestructive().onClick(async () => {
-							await this.plugin.memoryStore.deleteFact(fact.id);
-							this.update();
-						}));
+						.addButton((btn) => {
+							btn.setButtonText('Delete');
+							btn.buttonEl.addClass('mod-destructive');
+							btn.onClick(async () => {
+								await this.plugin.memoryStore.deleteFact(fact.id);
+								this.display();
+							});
+						});
 				}
 			}
 		}
@@ -818,7 +798,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 					// Recreate the registry with new config
 					this.plugin.providerRegistry.addCustomProvider(definition);
 					this.plugin.providerRegistry.updateConfig(definition.id, config);
-					this.update();
+					this.display();
 					new Notice(`Saved ${definition.name}`);
 				})();
 			},
