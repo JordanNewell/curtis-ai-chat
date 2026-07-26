@@ -32,6 +32,7 @@ What actually happened.
 - **Provider:** (OpenAI / Anthropic / Google / Ollama / other)
 - **Model:** (e.g. `gpt-4o`, `claude-sonnet-4-5`, `gemini-2.0-flash`)
 - **Install source:** (Community plugins / BRAT / manual)
+- **Vault state:** does this reproduce in a fresh vault with only curtis-ai-chat enabled? (yes / no / haven't checked)
 
 ## Logs / screenshots
 
