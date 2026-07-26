@@ -10,13 +10,13 @@ Email **security@jordannewell.com** with:
 
 - A description of the issue and its impact
 - Reproduction steps (a minimal example is ideal)
-- Affected version — run `curtis --version`
+- Affected version (visible in Obsidian under Settings → Community plugins, or in the plugin folder's manifest.json)
 
 **Do not open a public GitHub issue** for security reports.
 
 ## Response timeline
 
-- **Acknowledgement:** within 48 hours
+- **Acknowledgment:** within 72 hours
 - **Initial assessment:** within 5 business days
 - **Fix or mitigation:** target 30 days for high-severity issues
 
@@ -30,7 +30,7 @@ unless they prefer otherwise.
 
 - The plugin code (TypeScript)
 - System prompt handling
-- API key storage and handling
+- API key handling, including the OS-keychain storage path (Obsidian 1.13+ keychain integration — keys are NOT stored in the vault)
 
 **Out of scope:**
 
