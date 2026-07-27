@@ -1,6 +1,6 @@
-<p align="center">
+<div align="center">
   <img src="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/hero.png" alt="Curtis AI Chat — polyglot AI chat for Obsidian. 30+ providers, one sidebar." width="100%">
-</p>
+</div>
 
 <p align="center">
   <strong>Polyglot AI chat for Obsidian.</strong><br>
