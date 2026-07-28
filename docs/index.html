@@ -367,6 +367,93 @@
     @media (prefers-reduced-motion: reduce) {
       .marquee { animation: none; }
     }
+
+    /* ---------- research tease ---------- */
+    .research {
+      background: var(--bg-2);
+      border: 1px dashed var(--green-line);
+      padding: 3rem 2rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .research::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 0%, rgba(63, 255, 70, 0.06), transparent 60%);
+      pointer-events: none;
+    }
+    .research > * { position: relative; }
+    .research .scan {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 1rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .research .scan .pulse {
+      width: 8px;
+      height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 1.4s ease-in-out infinite;
+      box-shadow: 0 0 12px var(--green);
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.3; transform: scale(0.7); }
+    }
+    .research h3 {
+      font-family: "Newell", system-ui;
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      color: #ffffff;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.8rem;
+      line-height: 1;
+    }
+    .research h3 .dim { color: var(--muted); }
+    .research p {
+      font-size: 1rem;
+      color: var(--dim);
+      max-width: 620px;
+      margin-bottom: 1.5rem;
+      line-height: 1.6;
+    }
+    .research .typing {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: var(--green);
+      margin-bottom: 1.5rem;
+      min-height: 1.4em;
+    }
+    .research .typing .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 1em;
+      background: var(--green);
+      vertical-align: -2px;
+      margin-left: 2px;
+      animation: blink 1s steps(2) infinite;
+    }
+    .research .actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .research .actions .btn { border-color: var(--green-line); }
+    .research .actions .btn:hover {
+      border-color: var(--green);
+      background: rgba(63, 255, 70, 0.06);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .research .scan .pulse,
+      .research .typing .cursor { animation: none; }
+    }
   </style>
 </head>
 <body>
@@ -473,6 +560,24 @@
       <div><b>30+</b>providers, one sidebar</div>
       <div><b>BYOK</b>keys in OS keychain (Obsidian 1.13+)</div>
       <div><b>Local</b>Ollama · LM Studio · fully offline</div>
+    </div>
+  </section>
+
+  <section class="block page" id="research">
+    <div class="block-head">
+      <span class="num">03</span>
+      <h2>Coming next</h2>
+      <span class="meta">R&amp;D · soon</span>
+    </div>
+    <div class="research">
+      <div class="scan"><span class="pulse"></span> RESEARCH INITIALIZING</div>
+      <h3>Curtis AI <span class="dim">·</span> Research</h3>
+      <p>Curtis AI Chat is step one. The next thing is built for people who treat their vault like an operating system — research-grade tools for thinking, writing, and finding patterns across years of notes.</p>
+      <div class="typing">▒ calibrating scope<span class="cursor"></span></div>
+      <div class="actions">
+        <a class="btn" href="https://github.com/JordanNewell/curtis-ai-chat">★ Watch the repo ↗</a>
+        <a class="btn" href="https://github.com/sponsors/JordanNewell">Back the build ↗</a>
+      </div>
     </div>
   </section>
 </body>
