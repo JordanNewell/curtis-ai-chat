@@ -506,6 +506,34 @@
     .ollama-note a { color: var(--green); }
 
     @media (max-width: 800px) { .steps { grid-template-columns: 1fr; } }
+
+    /* ---------- footer ---------- */
+    footer {
+      padding: 3rem 0 2rem;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    footer .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    footer .links {
+      display: flex;
+      gap: 1.4rem;
+      flex-wrap: wrap;
+    }
+    footer .links a {
+      color: var(--dim);
+      border: none;
+    }
+    footer .links a:hover { color: var(--green); }
+    footer .copy b { color: var(--text); font-weight: 600; }
   </style>
 </head>
 <body>
@@ -658,5 +686,17 @@
     </div>
     <p class="ollama-note">Offline-first? Install <a href="https://ollama.com">Ollama</a>, run <code>ollama pull qwen2.5:7b-instruct</code>, enable the Ollama provider. Nothing leaves your machine.</p>
   </section>
+  <footer class="page">
+    <div class="row">
+      <div class="links">
+        <a href="https://github.com/JordanNewell/curtis-ai-chat">GitHub</a>
+        <a href="https://github.com/JordanNewell/curtis-ai-chat/releases">Releases</a>
+        <a href="https://github.com/JordanNewell/curtis-ai-chat/discussions">Discussions</a>
+        <a href="https://www.buymeacoffee.com/jordannewell">Buy me a coffee</a>
+        <a href="https://github.com/sponsors/JordanNewell">Sponsor</a>
+      </div>
+      <div class="copy"><b>Curtis AI</b> · MIT · by Jordan Newell</div>
+    </div>
+  </footer>
 </body>
 </html>
