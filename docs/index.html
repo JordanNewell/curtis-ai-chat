@@ -80,9 +80,68 @@
         scroll-behavior: auto !important;
       }
     }
+
+    /* ---------- top bar ---------- */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.1rem 1.5rem;
+      border-bottom: 1px solid var(--rule);
+      position: sticky;
+      top: 0;
+      background: rgba(0, 0, 0, 0.92);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 50;
+    }
+    .topbar .left { display: flex; gap: 1.4rem; align-items: center; }
+    .topbar .brandmark {
+      font-family: "Newell", system-ui;
+      font-size: 0.95rem;
+      color: var(--text);
+      letter-spacing: -0.02em;
+      text-transform: none;
+      line-height: 1;
+    }
+    .topbar .brandmark .dot { color: var(--green); }
+    .topbar .status {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .topbar .status b { color: var(--green); font-weight: 600; }
+    .topbar nav { display: flex; gap: 1.2rem; }
+    .topbar nav a {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--dim);
+      border: none;
+    }
+    .topbar nav a:hover { color: var(--green); }
+
+    @media (max-width: 640px) {
+      .topbar nav { display: none; }
+    }
   </style>
 </head>
 <body>
-  <!-- sections added in subsequent tasks -->
+  <div class="topbar">
+    <div class="left">
+      <span class="brandmark">CURTIS<span class="dot">·</span>AI</span>
+      <span class="status">SYSTEM <b>ONLINE</b></span>
+    </div>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#providers">Providers</a>
+      <a href="#research">Research</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/JordanNewell/curtis-ai-chat">GitHub ↗</a>
+    </nav>
+  </div>
 </body>
 </html>
