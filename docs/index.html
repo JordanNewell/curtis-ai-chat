@@ -151,6 +151,19 @@
       margin-bottom: 1.2rem;
     }
     .hero h1 .accent { color: var(--green); }
+    .hero-mark {
+      height: clamp(3.5rem, 9vw, 6.5rem);
+      width: auto;
+      vertical-align: middle;
+      margin-left: 0.4em;
+      display: inline-block;
+    }
+    @media (max-width: 640px) {
+      .hero-mark { height: clamp(2.25rem, 9vw, 3.5rem); }
+    }
+    @media (max-width: 420px) {
+      .hero-mark { display: none; }
+    }
     .hero .tag {
       font-size: clamp(1.05rem, 1.5vw, 1.25rem);
       color: var(--dim);
@@ -552,7 +565,7 @@
   </div>
   <header class="hero page">
     <div class="kicker">v1.0.3 · Obsidian plugin · MIT</div>
-    <h1>CURTIS<span class="accent">·</span>AI</h1>
+    <h1>CURTIS<span class="accent">·</span>AI <img class="hero-mark" src="assets/curtis-ai-mark.png" alt="Curtis AI mark" width="1536" height="1024"></h1>
     <p class="tag">Polyglot AI chat for Obsidian. Thirty-plus providers, one sidebar. Your vault stays yours.<span class="cursor"></span></p>
     <div class="cta-row">
       <a class="btn primary" href="https://github.com/JordanNewell/curtis-ai-chat/releases">⬇ Install</a>
