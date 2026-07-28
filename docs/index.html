@@ -296,6 +296,77 @@
 
     @media (max-width: 900px) { .features { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 520px) { .features { grid-template-columns: 1fr; } }
+
+    /* ---------- providers marquee ---------- */
+    .marquee-wrap {
+      border: 1px solid var(--rule);
+      background: var(--bg-2);
+      overflow: hidden;
+      position: relative;
+    }
+    .marquee-wrap::before,
+    .marquee-wrap::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 80px;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .marquee-wrap::before {
+      left: 0;
+      background: linear-gradient(90deg, var(--bg-2), transparent);
+    }
+    .marquee-wrap::after {
+      right: 0;
+      background: linear-gradient(270deg, var(--bg-2), transparent);
+    }
+    .marquee {
+      display: flex;
+      gap: 3rem;
+      padding: 1.2rem 0;
+      animation: scroll 40s linear infinite;
+      white-space: nowrap;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      letter-spacing: 0.06em;
+      width: max-content;
+    }
+    @keyframes scroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+    .marquee span { color: var(--dim); }
+    .marquee span.hot { color: var(--green); }
+    .marquee span::before {
+      content: "▪ ";
+      color: var(--muted);
+      margin-right: 0.3rem;
+    }
+    .marquee span.hot::before { color: var(--green); }
+    .provider-meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-top: 1rem;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .provider-meta b {
+      color: var(--green);
+      display: block;
+      font-size: 1.4rem;
+      margin-bottom: 0.2rem;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+    }
+    @media (max-width: 700px) { .provider-meta { grid-template-columns: 1fr; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .marquee { animation: none; }
+    }
   </style>
 </head>
 <body>
@@ -384,6 +455,24 @@
         <p>Edit or delete individual memory facts. No more append-only.</p>
         <span class="id">MEMORY·08</span>
       </div>
+    </div>
+  </section>
+
+  <section class="block page" id="providers">
+    <div class="block-head">
+      <span class="num">02</span>
+      <h2>Providers</h2>
+      <span class="meta">30+ · BYOK</span>
+    </div>
+    <div class="marquee-wrap">
+      <div class="marquee">
+        <span class="hot">Anthropic</span><span>OpenAI</span><span class="hot">Google Gemini</span><span>Ollama</span><span>OpenRouter</span><span class="hot">Mistral</span><span>DeepSeek</span><span>Groq</span><span>Together</span><span>Fireworks</span><span>Cohere</span><span class="hot">xAI</span><span>Perplexity</span><span>Cerebras</span><span>OpenAI-Compatible</span><span>LM Studio</span><span class="hot">Anthropic</span><span>OpenAI</span><span class="hot">Google Gemini</span><span>Ollama</span><span>OpenRouter</span><span class="hot">Mistral</span><span>DeepSeek</span><span>Groq</span><span>Together</span><span>Fireworks</span><span>Cohere</span><span class="hot">xAI</span><span>Perplexity</span><span>Cerebras</span><span>OpenAI-Compatible</span><span>LM Studio</span>
+      </div>
+    </div>
+    <div class="provider-meta">
+      <div><b>30+</b>providers, one sidebar</div>
+      <div><b>BYOK</b>keys in OS keychain (Obsidian 1.13+)</div>
+      <div><b>Local</b>Ollama · LM Studio · fully offline</div>
     </div>
   </section>
 </body>
