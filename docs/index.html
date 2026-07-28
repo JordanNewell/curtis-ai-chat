@@ -213,6 +213,89 @@
       color: var(--muted);
     }
     .hero .signals b { color: var(--text); font-weight: 600; }
+
+    /* ---------- section blocks ---------- */
+    section.block {
+      padding: 4rem 0;
+      border-bottom: 1px solid var(--rule);
+    }
+    .block-head {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+    .block-head .num {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.22em;
+      color: var(--green);
+    }
+    .block-head h2 {
+      font-family: "Newell", system-ui;
+      font-size: clamp(1.8rem, 3vw, 2.4rem);
+      color: #ffffff;
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    .block-head .meta {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ---------- features grid ---------- */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.85rem;
+    }
+    .feat {
+      background: var(--bg-2);
+      border: 1px solid var(--rule);
+      padding: 1.1rem 1rem;
+      transition: border-color 0.15s ease, background 0.15s ease;
+      min-height: 140px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .feat:hover {
+      border-color: var(--green-line);
+      background: rgba(63, 255, 70, 0.04);
+    }
+    .feat .sym {
+      font-family: var(--mono);
+      font-size: 0.95rem;
+      color: var(--green);
+    }
+    .feat h3 {
+      font-family: "Newell", system-ui;
+      font-size: 1rem;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+      line-height: 1.15;
+    }
+    .feat p {
+      font-size: 0.82rem;
+      color: var(--dim);
+      line-height: 1.45;
+    }
+    .feat .id {
+      margin-top: auto;
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    @media (max-width: 900px) { .features { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .features { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -245,5 +328,63 @@
       <span><b>BYO</b> keys</span>
     </div>
   </header>
+
+  <section class="block page" id="features">
+    <div class="block-head">
+      <span class="num">01</span>
+      <h2>Features</h2>
+      <span class="meta">8 highlights · v1.0</span>
+    </div>
+    <div class="features">
+      <div class="feat">
+        <span class="sym">🤖</span>
+        <h3>Curtis Agent</h3>
+        <p>AI calls 9 tools to read, create, and edit your vault notes.</p>
+        <span class="id">AGENT·01</span>
+      </div>
+      <div class="feat">
+        <span class="sym">⚔</span>
+        <h3>Multi-model arena</h3>
+        <p>Stream one prompt to 2 models in parallel, side-by-side.</p>
+        <span class="id">ARENA·02</span>
+      </div>
+      <div class="feat">
+        <span class="sym">⌫</span>
+        <h3>Inline diff rewrite</h3>
+        <p>Cursor-style rewrite with accept/reject modal + assignable hotkey.</p>
+        <span class="id">DIFF·03</span>
+      </div>
+      <div class="feat">
+        <span class="sym">@</span>
+        <h3>@-mention notes</h3>
+        <p>Type <code style="font-family:var(--mono);color:var(--green);">@</code> in chat, fuzzy-search your vault, attach as context.</p>
+        <span class="id">MENTION·04</span>
+      </div>
+      <div class="feat">
+        <span class="sym">🎙</span>
+        <h3>Voice I/O</h3>
+        <p>Whisper speech-to-text in, browser TTS out.</p>
+        <span class="id">VOICE·05</span>
+      </div>
+      <div class="feat">
+        <span class="sym">⌕</span>
+        <h3>Cross-chat search</h3>
+        <p>Fuzzy-matched picker across all conversations + messages.</p>
+        <span class="id">SEARCH·06</span>
+      </div>
+      <div class="feat">
+        <span class="sym">⤓</span>
+        <h3>Markdown export</h3>
+        <p>Download any conversation as <code style="font-family:var(--mono);color:var(--green);">.md</code> via <code style="font-family:var(--mono);color:var(--green);">/export</code>.</p>
+        <span class="id">EXPORT·07</span>
+      </div>
+      <div class="feat">
+        <span class="sym">🧠</span>
+        <h3>Editable memory</h3>
+        <p>Edit or delete individual memory facts. No more append-only.</p>
+        <span class="id">MEMORY·08</span>
+      </div>
+    </div>
+  </section>
 </body>
 </html>
