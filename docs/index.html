@@ -454,6 +454,58 @@
       .research .scan .pulse,
       .research .typing .cursor { animation: none; }
     }
+
+    /* ---------- quick start ---------- */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+    .step {
+      background: var(--bg-2);
+      border: 1px solid var(--rule);
+      padding: 1.4rem;
+    }
+    .step .n {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 0.6rem;
+    }
+    .step h4 {
+      font-family: "Newell", system-ui;
+      font-size: 1.1rem;
+      color: #ffffff;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.01em;
+      line-height: 1.15;
+    }
+    .step p {
+      font-size: 0.85rem;
+      color: var(--dim);
+      line-height: 1.5;
+    }
+    .step code,
+    .ollama-note code {
+      font-family: var(--mono);
+      background: #111111;
+      padding: 0.1rem 0.35rem;
+      color: var(--green);
+      font-size: 0.78rem;
+      border-radius: 2px;
+    }
+    .ollama-note {
+      margin-top: 1.5rem;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--dim);
+      line-height: 1.6;
+    }
+    .ollama-note a { color: var(--green); }
+
+    @media (max-width: 800px) { .steps { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -579,6 +631,32 @@
         <a class="btn" href="https://github.com/sponsors/JordanNewell">Back the build ↗</a>
       </div>
     </div>
+  </section>
+
+  <section class="block page" id="install">
+    <div class="block-head">
+      <span class="num">04</span>
+      <h2>Quick start</h2>
+      <span class="meta">60 seconds</span>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="n">STEP 01</div>
+        <h4>Install</h4>
+        <p>Drop <code>main.js</code>, <code>manifest.json</code>, <code>styles.css</code> from the latest release into <code>.obsidian/plugins/curtis-ai-chat/</code>. Enable under Settings → Community plugins.</p>
+      </div>
+      <div class="step">
+        <div class="n">STEP 02</div>
+        <h4>Configure</h4>
+        <p>Open Settings → Curtis AI Chat → Providers. Enable one, paste a key. Keys live in your OS keychain (Obsidian 1.13+).</p>
+      </div>
+      <div class="step">
+        <div class="n">STEP 03</div>
+        <h4>Send</h4>
+        <p>Click the robot in the ribbon (or <code>Ctrl+Shift+G</code>), pick a model, type, hit Enter. That's it.</p>
+      </div>
+    </div>
+    <p class="ollama-note">Offline-first? Install <a href="https://ollama.com">Ollama</a>, run <code>ollama pull qwen2.5:7b-instruct</code>, enable the Ollama provider. Nothing leaves your machine.</p>
   </section>
 </body>
 </html>
