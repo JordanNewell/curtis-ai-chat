@@ -215,6 +215,25 @@
     }
     .hero .signals b { color: var(--text); font-weight: 600; }
 
+    /* ---------- about / mission ---------- */
+    .about-lede {
+      font-size: clamp(1.15rem, 1.6vw, 1.4rem);
+      color: var(--text);
+      max-width: 760px;
+      line-height: 1.5;
+      margin-bottom: 1.2rem;
+      font-weight: 500;
+      letter-spacing: -0.005em;
+    }
+    .about-lede .accent { color: var(--green); }
+    .about-body {
+      font-size: 1rem;
+      color: var(--dim);
+      max-width: 720px;
+      line-height: 1.65;
+    }
+    .about-body strong { color: var(--text); font-weight: 500; }
+
     /* ---------- section blocks ---------- */
     section.block {
       padding: 4rem 0;
@@ -544,6 +563,7 @@
       <span class="status">SYSTEM <b>ONLINE</b></span>
     </div>
     <nav>
+      <a href="#about">About</a>
       <a href="#features">Features</a>
       <a href="#providers">Providers</a>
       <a href="#research">Research</a>
@@ -553,22 +573,33 @@
     </nav>
   </div>
   <header class="hero page">
-    <div class="kicker">v1.0.3 · Obsidian plugin · MIT</div>
+    <div class="kicker">Applied AI company · Est. 2026 · First product v1.0.3</div>
     <img class="hero-mark" src="assets/curtis-ai-mark.png" alt="Curtis AI" width="1024" height="1024">
     <h1>CURTIS<span class="accent">·</span>AI</h1>
-    <p class="tag">Polyglot AI chat for Obsidian. Thirty-plus providers, one sidebar. Your vault stays yours.<span class="cursor"></span></p>
+    <p class="tag">An applied AI company shipping products and running research. Curtis AI Chat — the Obsidian plugin below — is the first.<span class="cursor"></span></p>
     <div class="cta-row">
       <a class="btn primary" href="https://community.obsidian.md/plugins/curtis-ai-chat">Get it in Obsidian ↗</a>
       <a class="btn" href="https://github.com/JordanNewell/curtis-ai-chat/releases">Releases ↗</a>
       <a class="btn" href="https://github.com/JordanNewell/curtis-ai-chat">Source ↗</a>
     </div>
     <div class="signals">
+      <span><b>EST.</b> 2026</span>
       <span><b>30+</b> providers</span>
       <span><b>9</b> agent tools</span>
       <span><b>0</b> warnings</span>
       <span><b>BYO</b> keys</span>
     </div>
   </header>
+
+  <section class="block page" id="about">
+    <div class="block-head">
+      <span class="num">00</span>
+      <h2>About Curtis AI</h2>
+      <span class="meta">Applied AI · Products + Research</span>
+    </div>
+    <p class="about-lede">Curtis AI is an applied AI company. We ship <span class="accent">products</span> that earn their place in your workflow, and run a <span class="accent">research arm</span> that pushes the field forward.</p>
+    <p class="about-body">The Obsidian plugin below is our <strong>first shipped product</strong> — a polyglot AI chat with thirty-plus providers, agent tools, voice, and a research-grade memory system. The lab is in setup. More products are on the way.</p>
+  </section>
 
   <section class="block page" id="features">
     <div class="block-head">
