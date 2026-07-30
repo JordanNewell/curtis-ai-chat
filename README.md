@@ -8,6 +8,7 @@
 </p>
 
 <p align="center">
+  <a href="https://jordannewell.github.io/curtis-ai-chat/"><img src="https://img.shields.io/badge/website-live-00FF41" alt="Live site"></a>
   <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/badge/release-1.0.0-blue" alt="Latest release"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Obsidian-1.13%2B-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian 1.13+">
@@ -17,6 +18,7 @@
 </p>
 
 <p align="center">
+  <a href="https://jordannewell.github.io/curtis-ai-chat/">Website ↗</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#highlights">What's new</a> ·
   <a href="#features">Features</a> ·
