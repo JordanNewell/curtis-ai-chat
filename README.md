@@ -344,3 +344,10 @@ The donate button is also available in **Settings → Curtis AI Chat** inside Ob
 
 > [!NOTE]
 > Curtis AI Chat is and will remain **free and open source** under the MIT license. Every feature — 30+ providers, memory, image attachments, slash commands, agent, arena — works with your own API keys. Sponsorship is voluntary and appreciated, never required.
+
+
+<p align="right">
+  <a href="https://jordannewell.com" title="Built by Jordan Newell">
+    <img src="assets/newell-badge.png" alt="Built by Jordan Newell" width="48" height="48">
+  </a>
+</p>
