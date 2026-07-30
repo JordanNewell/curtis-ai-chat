@@ -125,6 +125,12 @@
       padding: 6rem 0 4rem;
       border-bottom: 1px solid var(--rule);
     }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 3rem;
+      align-items: center;
+    }
     .hero .kicker {
       font-family: var(--mono);
       font-size: 0.72rem;
@@ -145,12 +151,15 @@
     .hero h1 .accent { color: var(--green); }
     .hero-mark {
       display: block;
-      height: clamp(12rem, 32vw, 24rem);
+      height: clamp(10rem, 22vw, 18rem);
       width: auto;
-      margin-bottom: 2rem;
     }
-    @media (max-width: 640px) {
-      .hero-mark { height: clamp(8rem, 36vw, 14rem); margin-bottom: 1.5rem; }
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+      .hero-mark { height: clamp(7rem, 26vw, 11rem); order: -1; }
+    }
+    @media (max-width: 480px) {
+      .hero-mark { height: clamp(5rem, 28vw, 8rem); }
     }
     .hero .tag {
       font-size: clamp(1.05rem, 1.5vw, 1.25rem);
@@ -573,21 +582,25 @@
     </nav>
   </div>
   <header class="hero page">
-    <div class="kicker">Applied AI company · Est. 2026 · First product v1.0.3</div>
-    <img class="hero-mark" src="assets/curtis-ai-mark.png" alt="Curtis AI" width="1024" height="1024">
-    <h1>CURTIS<span class="accent">·</span>AI</h1>
-    <p class="tag">An applied AI company shipping products and running research. Curtis AI Chat — the Obsidian plugin below — is the first.<span class="cursor"></span></p>
-    <div class="cta-row">
-      <a class="btn primary" href="https://community.obsidian.md/plugins/curtis-ai-chat">Get it in Obsidian ↗</a>
-      <a class="btn" href="https://github.com/JordanNewell/curtis-ai-chat/releases">Releases ↗</a>
-      <a class="btn" href="https://github.com/JordanNewell/curtis-ai-chat">Source ↗</a>
-    </div>
-    <div class="signals">
-      <span><b>EST.</b> 2026</span>
-      <span><b>30+</b> providers</span>
-      <span><b>9</b> agent tools</span>
-      <span><b>0</b> warnings</span>
-      <span><b>BYO</b> keys</span>
+    <div class="hero-grid">
+      <div class="hero-content">
+        <div class="kicker">Applied AI company · Est. 2026 · First product v1.0.3</div>
+        <h1>CURTIS<span class="accent">·</span>AI</h1>
+        <p class="tag">An applied AI company shipping products and running research. Curtis AI Chat — the Obsidian plugin below — is the first.<span class="cursor"></span></p>
+        <div class="cta-row">
+          <a class="btn primary" href="https://community.obsidian.md/plugins/curtis-ai-chat">Get it in Obsidian ↗</a>
+          <a class="btn" href="https://github.com/JordanNewell/curtis-ai-chat/releases">Releases ↗</a>
+          <a class="btn" href="https://github.com/JordanNewell/curtis-ai-chat">Source ↗</a>
+        </div>
+        <div class="signals">
+          <span><b>EST.</b> 2026</span>
+          <span><b>30+</b> providers</span>
+          <span><b>9</b> agent tools</span>
+          <span><b>0</b> warnings</span>
+          <span><b>BYO</b> keys</span>
+        </div>
+      </div>
+      <img class="hero-mark" src="assets/curtis-ai-mark.png" alt="Curtis AI" width="1024" height="1024">
     </div>
   </header>
 
