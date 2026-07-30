@@ -23,14 +23,6 @@
   <link rel="icon" type="image/png" sizes="512x512" href="https://jordannewell.github.io/newell-typeface/assets/favicon-512.png">
   <link rel="apple-touch-icon" href="https://jordannewell.github.io/newell-typeface/assets/apple-touch-icon.png">
   <style>
-    @font-face {
-      font-family: "Newell";
-      src: url("https://jordannewell.github.io/newell-typeface/releases/Newell-Regular.woff2") format("woff2");
-      font-weight: 400;
-      font-style: normal;
-      font-display: swap;
-    }
-
     :root {
       --bg:           #000000;
       --bg-2:         #0a0a0a;
@@ -97,7 +89,7 @@
     }
     .topbar .left { display: flex; gap: 1.4rem; align-items: center; }
     .topbar .brandmark {
-      font-family: "Newell", system-ui;
+      font-family: var(--sans);
       font-size: 0.95rem;
       color: var(--text);
       letter-spacing: -0.02em;
@@ -143,7 +135,7 @@
     }
     .hero .kicker::before { content: "▒ "; }
     .hero h1 {
-      font-family: "Newell", system-ui;
+      font-family: var(--sans);
       font-size: clamp(3.5rem, 9vw, 6.5rem);
       line-height: 0.95;
       letter-spacing: -0.03em;
@@ -242,7 +234,7 @@
       color: var(--green);
     }
     .block-head h2 {
-      font-family: "Newell", system-ui;
+      font-family: var(--sans);
       font-size: clamp(1.8rem, 3vw, 2.4rem);
       color: #ffffff;
       letter-spacing: -0.02em;
@@ -283,7 +275,7 @@
       color: var(--green);
     }
     .feat h3 {
-      font-family: "Newell", system-ui;
+      font-family: var(--sans);
       font-size: 1rem;
       color: #ffffff;
       letter-spacing: -0.01em;
@@ -417,7 +409,7 @@
       50%      { opacity: 0.3; transform: scale(0.7); }
     }
     .research h3 {
-      font-family: "Newell", system-ui;
+      font-family: var(--sans);
       font-size: clamp(1.8rem, 4vw, 2.8rem);
       color: #ffffff;
       letter-spacing: -0.02em;
@@ -484,7 +476,7 @@
       margin-bottom: 0.6rem;
     }
     .step h4 {
-      font-family: "Newell", system-ui;
+      font-family: var(--sans);
       font-size: 1.1rem;
       color: #ffffff;
       margin-bottom: 0.5rem;
