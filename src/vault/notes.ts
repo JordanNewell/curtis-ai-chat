@@ -115,6 +115,7 @@ function mimeToExt(mime: string): string {
 /**
  * Convert a data URL into raw bytes for vault storage.
  */
+// atob is scanner-flagged; see README → Privacy & security → Code-level disclosures.
 export function dataUrlToBytes(dataUrl: string): { bytes: ArrayBuffer; mime: string } | null {
 	const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
 	if (!m) return null;

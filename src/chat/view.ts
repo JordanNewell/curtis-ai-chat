@@ -85,6 +85,7 @@ function imageMimeFromExt(ext: string): string {
 }
 
 /** ArrayBuffer → base64 string (Obsidian's readBinary returns ArrayBuffer). */
+// btoa is scanner-flagged; see README → Privacy & security → Code-level disclosures.
 function bytesToBase64(buf: ArrayBuffer): string {
 	const bytes = new Uint8Array(buf);
 	let binary = '';
