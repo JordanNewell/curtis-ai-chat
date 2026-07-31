@@ -31,7 +31,7 @@ Local-first via Ollama if you don't want anything to leave your machine.
 Eight flagship features:
 
 - **Curtis Agent** — AI calls nine built-in tools to read/create/edit your vault notes (`read_note`, `search_notes`, `create_note`, `edit_note`, `list_notes`, `get_tags`, `get_backlinks`, `get_current_note`, `calculator`). Opt-in via Settings → Agent.
-- **Multi-model arena** — pick 2–5 models, send one prompt, stream responses side-by-side. Promote any column to main chat.
+- **Multi-model arena** — pick 2 models, send one prompt, stream responses side-by-side. Promote any column to main chat.
 - **Inline diff rewrite** — select any text → Ctrl+Shift+R → AI generates improved version → green/red diff modal with Accept/Reject.
 - **@-mention vault notes** — type `@`, fuzzy-search your vault, attach note content as context. The active note also gets a one-click pill in the chat header.
 - **Voice I/O** — mic button (Whisper STT), speaker button on every assistant message (browser TTS, no API key), auto-speak toggle in header.

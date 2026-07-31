@@ -19,7 +19,7 @@ It's a polyglot AI chat sidebar — 30+ providers built in (Anthropic, OpenAI, G
 **v1.0.0 ships:**
 
 - **Curtis Agent** — AI calls tools to read/create/edit your vault notes. Nine built-ins. Opt-in.
-- **Multi-model arena** — 2–5 models, one prompt, side-by-side streaming.
+- **Multi-model arena** — 2 models, one prompt, side-by-side streaming.
 - **Inline diff rewrite** — select text → Ctrl+Shift+R → green/red diff modal.
 - **@-mention vault notes** — type `@`, fuzzy-search, attach.
 - **Voice I/O** — Whisper STT + browser TTS.

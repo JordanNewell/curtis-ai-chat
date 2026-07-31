@@ -30,7 +30,7 @@ Initial public release. Eight flagship features, full TypeScript type-safety at 
 AI calls tools to read, create, and edit your vault notes. Nine built-in tools: `read_note`, `search_notes`, `create_note`, `edit_note`, `list_notes`, `get_tags`, `get_backlinks`, `get_current_note`, `calculator`. OpenAI-compat providers for v1.0 (Anthropic/Gemini/Ollama agent support lands in v1.1). Opt-in via Settings → Agent → Enable.
 
 #### ⚔️ Multi-model arena
-Wand icon in the chat header. Pick 2–5 models, send one prompt, watch responses stream side-by-side. Click **Promote to chat** on any column to continue with that model. Compare quality, latency, and cost live.
+Wand icon in the chat header. Pick 2 models, send one prompt, watch responses stream side-by-side. Click **Promote to chat** on any column to continue with that model. Compare quality, latency, and cost live.
 
 #### 🎨 Inline diff rewrite
 Select text in any note → `Ctrl+Shift+R` (or right-click → **Rewrite with AI (diff)**). AI generates an improved version and a modal shows line-by-line green/red diff. Accept or reject. Cursor-style review workflow.

@@ -1,17 +1,17 @@
 # Multi-model arena
 
-> Send one prompt to 2–5 models in parallel. Pick a winner.
+> Send one prompt to 2 models in parallel. Pick a winner.
 
 The arena lets you compare model responses side-by-side, live, as they stream. Useful for picking the right model for a task, tuning prompts, or just exploring cost/quality tradeoffs.
 
 ## What it is
 
-Click the **wand icon** in the chat header to open the arena picker. Select 2–5 models from any providers you have configured. Your next prompt streams to all of them in parallel, each in its own column.
+Click the **wand icon** in the chat header to open the arena picker. Select 2 models from any providers you have configured. Your next prompt streams to all of them in parallel, each in its own column.
 
 ## Quick start
 
 1. Click the **wand icon** 🪄 in the chat header
-2. Pick 2–5 models (use the capability pills to filter — 👁 vision, 🔧 tools, context length)
+2. Pick 2 models (use the capability pills to filter — 👁 vision, 🔧 tools, context length)
 3. Click **Start arena**
 4. Type your prompt and send
 5. Responses stream into side-by-side columns

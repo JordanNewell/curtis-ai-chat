@@ -33,7 +33,7 @@ Hi HN — Jordan here, sole author. Curtis AI Chat is a free MIT-licensed AI cha
 The v1.0.0 release ships eight features I needed and couldn't get from a single plugin:
 
 1. **Curtis Agent** — the AI calls nine built-in tools to read, create, and edit notes in your vault. `read_note`, `search_notes`, `create_note`, `edit_note`, `list_notes`, `get_tags`, `get_backlinks`, `get_current_note`, `calculator`. Opt-in only.
-2. **Multi-model arena** — pick 2–5 models, send one prompt, watch responses stream side-by-side. Promote any column to main chat. Useful for "which of these is least wrong about my code".
+2. **Multi-model arena** — pick 2 models, send one prompt, watch responses stream side-by-side. Promote any column to main chat. Useful for "which of these is least wrong about my code".
 3. **Inline diff rewrite** — select any text in a note, hit Ctrl+Shift+R, the AI generates an improved version and shows a green/red diff modal. Cursor-style.
 4. **@-mention vault notes** — type `@`, fuzzy-search your vault, attach note content as context.
 5. **Voice I/O** — Whisper STT on the mic button, browser `speechSynthesis` TTS on every assistant reply.

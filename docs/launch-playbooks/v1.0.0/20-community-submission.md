@@ -38,7 +38,7 @@ Polyglot AI chat in your sidebar. Thirty-plus providers — Anthropic, OpenAI, G
 
 **Agent mode** — AI calls tools to read, create, edit your notes (search, create, edit, get_tags, get_backlinks, calculator). Opt-in.
 
-**Multi-model arena** — stream one prompt to 2–5 models side-by-side. Compare quality, latency, cost live.
+**Multi-model arena** — stream one prompt to 2 models side-by-side. Compare quality, latency, cost live.
 
 **Inline diff rewrite** — select text, AI generates an improved version, Accept/Reject diff.
 
@@ -63,7 +63,7 @@ Submitting **Curtis AI Chat** for directory review. This is a rebrand of my exis
 **What's new in v1.0.0:**
 
 - Curtis Agent — AI calls nine built-in tools to read/create/edit vault notes (opt-in)
-- Multi-model arena — stream one prompt to 2–5 models side-by-side
+- Multi-model arena — stream one prompt to 2 models side-by-side
 - Inline diff rewrite — select text → right-click → Rewrite with AI (diff), or assign a hotkey → AI rewrite with Accept/Reject diff modal
 - @-mention vault notes — fuzzy-search and attach note content as context
 - Voice I/O — Whisper speech-to-text on the mic button, browser TTS on every assistant message

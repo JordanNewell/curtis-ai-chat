@@ -1,6 +1,6 @@
 // Arena Model Picker Modal — multi-select for the Multi-Model Arena.
 //
-// FuzzySuggestModal is single-select only; arena needs 2-5 simultaneous
+// FuzzySuggestModal is single-select only; arena needs 2 simultaneous
 // selections, so we use a plain Modal with toggleable rows. Rows mirror the
 // visual language of ModelPickerModal (name + provider + capability pills)
 // but add a checkbox-style selected state.
@@ -22,7 +22,7 @@ export interface ArenaSelection {
 }
 
 const MIN_SELECTIONS = 2;
-const MAX_SELECTIONS = 5;
+const MAX_SELECTIONS = 2;
 
 /** Format a context length (in tokens) as a compact pill label. */
 function formatContext(length: number): string {
@@ -61,7 +61,7 @@ export class ArenaModelPickerModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass('ai-arena-picker-modal');
 
-		contentEl.createEl('h2', { text: 'Arena — pick 2–5 models' });
+		contentEl.createEl('h2', { text: 'Arena — pick 2 models' });
 		contentEl.createEl('p', {
 			cls: 'ai-arena-picker-desc',
 			text: 'Your next prompt streams in parallel to every selected model, side-by-side.',
