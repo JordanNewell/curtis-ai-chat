@@ -239,7 +239,8 @@ Curtis is vault-first — no background telemetry, no analytics, no auto-update 
 | You use voice transcription | `api.openai.com` | Whisper API (only when voice input is on) |
 | The agent calls `web_search` (opt-in) | `html.duckduckgo.com` | DuckDuckGo search |
 | The agent calls `read_url` (opt-in) | `r.jina.ai` | URL → markdown reader |
-| You click a sponsor link | `buymeacoffee.com`, `github.com` | Opens in your browser, off the plugin |
+
+Funding links (`buymeacoffee.com`, `github.com`) live in `manifest.json` `fundingUrl` so the Obsidian plugin directory can surface them — these are not runtime calls from the plugin.
 
 The two web tools (`web_search`, `read_url`) and voice transcription are off by default. Without them, the only external calls are to whichever AI provider you configured — or none, if you're on Ollama.
 
