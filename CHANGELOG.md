@@ -2,6 +2,27 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.4-rc1] — 2026-07-31
+
+Release candidate. Addresses Obsidian plugin scanner findings surfaced during v1.0.3 community review. All changes are disclosure-only or vanity-call removal — no behavior change, no settings schema change. Declarative settings API migration is deferred to a future release (see [1.0.3 notes](#103---2026-07-23)).
+
+### Added
+
+- **README code-level disclosures** — new "Code-level disclosures" subsection under Privacy & security enumerates every `atob`/`btoa`, clipboard, and vault-enumeration call site with `file:line` and the specific user-initiated reason for each. Surfaces what the Obsidian plugin scanner flags so reviewers and users can verify nothing is hidden.
+- **Disclosure-pointer comments** at `src/chat/view.ts:95` (`btoa`) and `src/vault/notes.ts:122` (`atob`) — link from code to the README section.
+
+### Removed
+
+- **In-plugin funding buttons** — Buy Me a Coffee and GitHub Sponsors buttons in Settings → Support removed. Hardcoded URL strings triggered the scanner's external-network-call disclosure (2 of 3 flagged domains). Funding continues to surface via `manifest.json` `fundingUrl` in the Obsidian plugin directory UI. README Network access table updated; net flagged-domain count drops from 3 → 1 (`api.openai.com` only).
+
+### Notes
+
+- The 13 `display is deprecated` warnings + `PluginSettingTab does not implement getSettingDefinitions` note remain, as in v1.0.3. Per the [1.0.3 notes](#103---2026-07-23), these are non-blocking and the migration is deferred until Obsidian 1.13 reaches stable. The migration is a substantial refactor (10+ complex sections in `settings.ts`) and warrants its own focused release with proper test coverage.
+
+### Rolling back
+
+To revert to v1.0.3, install the [v1.0.3 release assets](https://github.com/JordanNewell/curtis-ai-chat/releases/tag/v1.0.3) (`main.js`, `manifest.json`, `styles.css`) into your `<vault>/.obsidian/plugins/curtis-ai-chat/` folder and reload Obsidian. No `data.json` schema changes in v1.0.4 — all settings, provider keys, memory, and conversations round-trip cleanly.
+
 ## [1.0.3] — 2026-07-23
 
 Hotfix release. The 1.0.2 manifest declared `minAppVersion: 1.13.0` (a catalyst/insider-only build), which made the plugin uninstallable for every user on stable Obsidian (latest stable is 1.12.7). This release lowers the floor to 1.11.4 by removing the only 1.13-pinned APIs.
