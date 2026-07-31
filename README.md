@@ -9,12 +9,12 @@
 
 <p align="center">
   <a href="https://jordannewell.github.io/curtis-ai-chat/"><img src="https://img.shields.io/badge/website-live-00FF41" alt="Live site"></a>
-  <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/badge/release-1.0.0-blue" alt="Latest release"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/badge/release-1.0.4--rc1-00FF41" alt="Latest release"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-A0A0A0.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Obsidian-1.13%2B-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian 1.13+">
-  <img src="https://img.shields.io/badge/providers-30%2B-8B5CF6" alt="30+ providers">
-  <img src="https://img.shields.io/badge/build-0%20warnings-10B981" alt="Zero lint warnings">
-  <a href="https://github.com/JordanNewell/curtis-ai-chat/discussions"><img src="https://img.shields.io/github/discussions/JordanNewell/curtis-ai-chat?label=discussions&color=34D399" alt="GitHub Discussions"></a>
+  <img src="https://img.shields.io/badge/providers-30%2B-00FF41" alt="30+ providers">
+  <img src="https://img.shields.io/badge/build-0%20errors-00FF41" alt="Build: 0 errors">
+  <a href="https://github.com/JordanNewell/curtis-ai-chat/discussions"><img src="https://img.shields.io/github/discussions/JordanNewell/curtis-ai-chat?label=discussions&color=1AFF72" alt="GitHub Discussions"></a>
 </p>
 
 <p align="center">
@@ -239,9 +239,42 @@ Curtis is vault-first — no background telemetry, no analytics, no auto-update 
 | You use voice transcription | `api.openai.com` | Whisper API (only when voice input is on) |
 | The agent calls `web_search` (opt-in) | `html.duckduckgo.com` | DuckDuckGo search |
 | The agent calls `read_url` (opt-in) | `r.jina.ai` | URL → markdown reader |
-| You click a sponsor link | `buymeacoffee.com`, `github.com` | Opens in your browser, off the plugin |
+
+Funding links (`buymeacoffee.com`, `github.com`) live in `manifest.json` `fundingUrl` so the Obsidian plugin directory can surface them — these are not runtime calls from the plugin.
 
 The two web tools (`web_search`, `read_url`) and voice transcription are off by default. Without them, the only external calls are to whichever AI provider you configured — or none, if you're on Ollama.
+
+### Code-level disclosures
+
+The Obsidian plugin scanner flags a few patterns in the source that warrant explicit explanation. None hide keys, URLs, or payloads — all are single-purpose, auditable, and listed here with exact file:line.
+
+**Runtime base64 (`atob` / `btoa`)** — two legitimate uses, both for image handling:
+
+| File:line | Call | Why |
+|---|---|---|
+| `src/chat/view.ts:95` | `btoa(binary)` | Base64-encodes image attachments for vision-model API requests. Provider vision APIs (OpenAI, Anthropic, Gemini) require image data as base64 in the JSON body. |
+| `src/vault/notes.ts:122` | `atob(m[2])` | Decodes base64 image data URIs (`data:image/png;base64,...`) when extracting image content from markdown notes. |
+
+**Clipboard access** — standard chat UX, all user-initiated:
+
+| File:line | Why |
+|---|---|
+| `src/chat/view.ts:547, 1336` | Image paste from clipboard (`Ctrl+V` / `Cmd+V`) into the chat composer |
+| `src/chat/slash-commands.ts:100` | `/copy` slash command — writes last assistant response to clipboard |
+| `src/chat/slash-commands.ts:168` | `/paste` slash command — reads clipboard text into the chat input |
+| `src/chat/message-renderer.ts:91` | Code-block copy button (top-right of every code block) |
+| `src/chat/message-actions.ts:64, 135` | Per-message copy action (copies raw markdown) |
+
+**Vault file enumeration** (`vault.getFiles` / `getMarkdownFiles` / `getAllLoadedFiles`) — every invocation is user-initiated, never background:
+
+| File:line | Why |
+|---|---|
+| `src/core/tools.ts:222, 337, 359` | Agent tools `search_notes`, `list_notes`, `get_tags` — only when agent mode is enabled AND the tool is invoked |
+| `src/chat/view.ts:773` | Cross-conversation search (assigned hotkey) — fuzzy-matches across all conversations and messages |
+| `src/ui/modals/folder-suggest-modal.ts:19` | Folder picker — when configuring auto-save or wallpaper folders |
+| `src/ui/modals/image-suggest-modal.ts:17` | Image picker — when clicking the paperclip to attach an image |
+
+The plugin never enumerates the vault in the background or without an explicit user action triggering the call.
 
 ---
 

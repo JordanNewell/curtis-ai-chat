@@ -751,30 +751,17 @@ export class CurtisSettingTab extends PluginSettingTab {
 		}
 
 		// ---- Support ----
+		// In-plugin funding buttons removed in v1.0.4 — the URL strings triggered the
+		// Obsidian plugin scanner's external-network-call disclosure. Funding lives in
+		// manifest.json fundingUrl (surfaced by the Obsidian plugin directory) and in
+		// the README badges. Signpost users to those surfaces here instead.
 		new Setting(containerEl).setName('🙏 Support').setHeading();
 		const supportBlurb = containerEl.createEl('p', {
 			cls: 'ai-setting-hint ai-support-blurb',
 		});
 		supportBlurb.setText(
-			'Curtis is free and open source. If it saves you time, consider buying me a coffee or sponsoring the project on GitHub. Every contribution funds the next feature.'
+			'Curtis is free and open source. If it saves you time, consider supporting the project. Funding links appear in the Obsidian plugin directory.'
 		);
-
-		new Setting(containerEl)
-			.setName('Buy Me a Coffee')
-			.setDesc('buymeacoffee.com/jordannewell')
-			.addButton((btn) => {
-				btn.setButtonText('☕ Buy me a coffee')
-					.setClass('mod-cta')
-					.onClick(() => window.open('https://www.buymeacoffee.com/jordannewell', '_blank'));
-			});
-
-		new Setting(containerEl)
-			.setName('GitHub Sponsors')
-			.setDesc('github.com/sponsors/jordannewell')
-			.addButton((btn) => {
-				btn.setButtonText('💛 Sponsor on GitHub')
-					.onClick(() => window.open('https://github.com/sponsors/jordannewell', '_blank'));
-			});
 	}
 
 	private openCustomProviderModal(existing?: ProviderDefinition, existingKey?: string): void {

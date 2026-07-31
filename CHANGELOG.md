@@ -2,6 +2,27 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.4-rc1] — 2026-07-31
+
+Release candidate. Addresses Obsidian plugin scanner findings surfaced during v1.0.3 community review. All changes are disclosure-only or vanity-call removal — no behavior change, no settings schema change. Declarative settings API migration is deferred to a future release (see [1.0.3 notes](#103---2026-07-23)).
+
+### Added
+
+- **README code-level disclosures** — new "Code-level disclosures" subsection under Privacy & security enumerates every `atob`/`btoa`, clipboard, and vault-enumeration call site with `file:line` and the specific user-initiated reason for each. Surfaces what the Obsidian plugin scanner flags so reviewers and users can verify nothing is hidden.
+- **Disclosure-pointer comments** at `src/chat/view.ts:95` (`btoa`) and `src/vault/notes.ts:122` (`atob`) — link from code to the README section.
+
+### Removed
+
+- **In-plugin funding buttons** — Buy Me a Coffee and GitHub Sponsors buttons in Settings → Support removed. Hardcoded URL strings triggered the scanner's external-network-call disclosure (2 of 3 flagged domains). Funding continues to surface via `manifest.json` `fundingUrl` in the Obsidian plugin directory UI. README Network access table updated; net flagged-domain count drops from 3 → 1 (`api.openai.com` only).
+
+### Notes
+
+- The 13 `display is deprecated` warnings + `PluginSettingTab does not implement getSettingDefinitions` note remain, as in v1.0.3. Per the [1.0.3 notes](#103---2026-07-23), these are non-blocking and the migration is deferred until Obsidian 1.13 reaches stable. The migration is a substantial refactor (10+ complex sections in `settings.ts`) and warrants its own focused release with proper test coverage.
+
+### Rolling back
+
+To revert to v1.0.3, install the [v1.0.3 release assets](https://github.com/JordanNewell/curtis-ai-chat/releases/tag/v1.0.3) (`main.js`, `manifest.json`, `styles.css`) into your `<vault>/.obsidian/plugins/curtis-ai-chat/` folder and reload Obsidian. No `data.json` schema changes in v1.0.4 — all settings, provider keys, memory, and conversations round-trip cleanly.
+
 ## [1.0.3] — 2026-07-23
 
 Hotfix release. The 1.0.2 manifest declared `minAppVersion: 1.13.0` (a catalyst/insider-only build), which made the plugin uninstallable for every user on stable Obsidian (latest stable is 1.12.7). This release lowers the floor to 1.11.4 by removing the only 1.13-pinned APIs.
@@ -55,7 +76,7 @@ Initial public release. Eight flagship features, full TypeScript type-safety at 
 ### Added — Features
 
 - **Curtis Agent** — AI can now call tools to read/create/edit your vault notes. Built-in tools: `read_note`, `search_notes`, `create_note`, `edit_note`, `list_notes`, `get_tags`, `get_backlinks`, `get_current_note`, `calculator`. OpenAI-compat providers only for v1.0; opt-in via Settings → Agent → Enable.
-- **Multi-model arena** — click the wand icon in the chat header, pick 2-5 models, send one prompt, watch responses stream side-by-side. Click "Promote to chat" on any column to continue with that model.
+- **Multi-model arena** — click the wand icon in the chat header, pick 2 models, send one prompt, watch responses stream side-by-side. Click "Promote to chat" on any column to continue with that model.
 - **Inline diff rewrite** — select text in any note, `Ctrl+Shift+R` (or right-click → "Rewrite with AI (diff)"). AI generates an improved version, modal shows line-by-line green/red diff with Accept/Reject.
 - **`@`-mention vault notes** — type `@` in the chat input, fuzzy-search vault notes, attach. Note contents are prepended to your message as invisible context for the AI.
 - **Voice I/O** — mic button in chat input (records via `MediaRecorder`, transcribes via OpenAI Whisper, appends to input). Speaker button on every assistant message (uses browser's `speechSynthesis`). Auto-speak toggle in header for hands-free listening.

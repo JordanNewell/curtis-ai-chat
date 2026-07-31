@@ -1,0 +1,18 @@
+# Demo vault — keep markdown content committed, ignore build artifacts and Obsidian runtime state
+
+# Plugin build artifacts (regenerated via scripts/sync-demo-plugin.sh)
+.obsidian/plugins/curtis-ai-chat/main.js
+.obsidian/plugins/curtis-ai-chat/main.js.map
+.obsidian/plugins/curtis-ai-chat/manifest.json
+.obsidian/plugins/curtis-ai-chat/styles.css
+
+# Obsidian runtime state (machine-specific)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/graph.json
+.obsidian/cache
+.trash/
+
+# OS noise
+.DS_Store
+Thumbs.db

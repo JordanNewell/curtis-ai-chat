@@ -44,7 +44,7 @@ Opt-in. OpenAI-compat providers now, Anthropic/Gemini/Ollama in v1.1.
 ### Tweet 3 (arena + diff)
 
 ```
-Multi-model arena: pick 2–5 models, send one prompt, watch responses stream side-by-side. Promote any column to main chat.
+Multi-model arena: pick 2 models, send one prompt, watch responses stream side-by-side. Promote any column to main chat.
 
 Inline diff rewrite: select text, Ctrl+Shift+R, AI generates an improved version, you get a green/red diff modal. Accept or reject. Cursor-style.
 
@@ -97,7 +97,7 @@ Bug reports, feature requests → GitHub Issues.
 
 Drop 4 screenshots:
 1. Chat sidebar in action with the new header pills
-2. Arena view with 3 models streaming
+2. Arena view with 2 models streaming
 3. Diff rewrite modal (green/red)
 4. Settings → Agent panel
 

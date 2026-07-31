@@ -85,6 +85,7 @@ function imageMimeFromExt(ext: string): string {
 }
 
 /** ArrayBuffer → base64 string (Obsidian's readBinary returns ArrayBuffer). */
+// btoa is scanner-flagged; see README → Privacy & security → Code-level disclosures.
 function bytesToBase64(buf: ArrayBuffer): string {
 	const bytes = new Uint8Array(buf);
 	let binary = '';
@@ -196,7 +197,7 @@ export class ChatView extends ItemView {
 	// --- Arena mode -------------------------------------------------------
 	/** True while the user has the arena toggle active. */
 	private arenaMode = false;
-	/** Models selected for the next arena send (2–5). */
+	/** Models selected for the next arena send (2). */
 	private arenaSelectedModels: ArenaSelection[] = [];
 	/** In-flight arena AbortControllers, keyed by `${providerId}:${modelId}`. */
 	private arenaAbortControllers: Map<string, AbortController> = new Map();
