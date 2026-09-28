@@ -9,9 +9,9 @@
 
 <p align="center">
   <a href="https://jordannewell.github.io/curtis-ai-chat/"><img src="https://img.shields.io/badge/website-live-00FF41" alt="Live site"></a>
-  <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/badge/release-1.0.0-blue" alt="Latest release"></a>
+  <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/badge/release-1.0.3-blue" alt="Latest release"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Obsidian-1.13%2B-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian 1.13+">
+  <img src="https://img.shields.io/badge/Obsidian-1.11.4%2B-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian 1.11.4+">
   <img src="https://img.shields.io/badge/providers-30%2B-8B5CF6" alt="30+ providers">
   <img src="https://img.shields.io/badge/build-0%20warnings-10B981" alt="Zero lint warnings">
   <a href="https://github.com/JordanNewell/curtis-ai-chat/discussions"><img src="https://img.shields.io/github/discussions/JordanNewell/curtis-ai-chat?label=discussions&color=34D399" alt="GitHub Discussions"></a>
@@ -35,7 +35,7 @@
 
 1. **Install** — download the [latest release][releases] (`main.js`, `manifest.json`, `styles.css`) into `<vault>/.obsidian/plugins/curtis-ai-chat/`, then enable it under **Settings → Community plugins**. Or use [BRAT][brat] for auto-updates during the beta.
 
-2. **Configure one provider** — open **Settings → Curtis AI Chat → Provider Configuration**, enable a provider, paste an API key. Keys are stored in your OS keychain (Obsidian 1.13+).
+2. **Configure one provider** — open **Settings → Curtis AI Chat → Provider Configuration**, enable a provider, paste an API key. Keys are stored in your OS keychain via the Obsidian `SecretStorage` API (1.11.4+).
 
 3. **Send a message** — click the **robot icon** in the ribbon (or `Ctrl+Shift+G`), pick a model from the header dropdown, type, hit Enter.
 
