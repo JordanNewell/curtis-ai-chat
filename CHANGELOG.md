@@ -2,6 +2,15 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.5] — 2026-09-28
+
+Hotfix: keyless local providers were blocked from chatting. Closes #6.
+
+### Fixed
+
+- **Local providers (Ollama, LM Studio) rejected as "unauthenticated"** — provider construction dropped the registry's `authType: 'none'` flag, so keyless providers always failed the `isAuthenticated()` key check. Model discovery worked (it never consults the provider object), but sending a message raised "No AI provider configured or authenticated" — and the settings UI has no key field for these providers by design, leaving users stuck. `authType` now flows from the registry definition into the provider, and keyless providers are always authenticated. Also fixes custom OpenAI-compatible endpoints with auth set to "None" (llama.cpp, LiteLLM, self-hosted gateways), which hit the same wall.
+- **CI maintenance** — merged dependabot bumps for `actions/checkout` (4 to 7) and `actions/setup-node` (4 to 7).
+
 ## [1.0.3] — 2026-07-23
 
 Hotfix release. The 1.0.2 manifest declared `minAppVersion: 1.13.0` (a catalyst/insider-only build), which made the plugin uninstallable for every user on stable Obsidian (latest stable is 1.12.7). This release lowers the floor to 1.11.4 by removing the only 1.13-pinned APIs.

@@ -181,7 +181,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
 	readonly name: string;
 	readonly endpoint: string;
 	models: AIModel[];  // mutable so discoverModels can update in place
-	readonly authType: AuthType = 'bearer';
+	readonly authType: AuthType;
 
 	private apiKey: string;
 
@@ -191,6 +191,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
 		endpoint: string;
 		models: AIModel[];
 		apiKey: string;
+		authType?: AuthType;
 	}) {
 		super();
 		this.id = config.id;
@@ -198,6 +199,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
 		this.endpoint = config.endpoint;
 		this.models = config.models;
 		this.apiKey = config.apiKey;
+		this.authType = config.authType ?? 'bearer';
 	}
 
 	/** Replace this provider's model list (used by auto-discovery). */
@@ -211,7 +213,9 @@ export class OpenAICompatibleProvider extends BaseProvider {
 	}
 
 	isAuthenticated(): boolean {
-		return this.apiKey.length > 0;
+		// Keyless providers (Ollama, LM Studio, 'none'-auth custom endpoints)
+		// are always authenticated; they never send an Authorization header.
+		return this.authType === 'none' || this.apiKey.length > 0;
 	}
 
 	getModelPricing(modelId: string): { inputPrice: number; outputPrice: number } | null {

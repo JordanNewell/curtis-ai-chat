@@ -522,6 +522,7 @@ export class ProviderRegistry {
 			endpoint,
 			models: def.models,
 			apiKey,
+			authType: def.authType,
 		});
 	}
 
