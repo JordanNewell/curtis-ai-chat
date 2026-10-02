@@ -8,7 +8,7 @@ export class SlashHelpModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.titleEl.setText('Slash Commands');
+		this.titleEl.setText('Slash commands');
 		const list = this.contentEl.createDiv({ cls: 'ai-slash-help-list' });
 		for (const cmd of SLASH_COMMANDS) {
 			const row = list.createDiv({ cls: 'ai-slash-help-row' });

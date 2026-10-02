@@ -53,7 +53,7 @@ Eight flagship features in this initial release. Full details in [CHANGELOG.md](
 
 | | Feature | What it does |
 |---|---|---|
-| 🤖 | **[Curtis Agent](docs/AGENT.md)** | AI calls tools to read, create, and edit your vault notes. Nine built-in tools. |
+| 🤖 | **[Curtis Agent](docs/AGENT.md)** | AI calls tools to read, create, and edit your vault notes. Ten built-in tools, every provider. |
 | ⚔️ | **[Multi-model arena](docs/ARENA.md)** | Stream one prompt to 2 models in parallel, side-by-side. Pick a winner, promote to chat. |
 | 🎨 | **[Inline diff rewrite](docs/DIFF_REWRITE.md)** | Cursor-style rewrite with an Accept/Reject diff modal. Assignable hotkey. |
 | @ | **[@-mention vault notes](docs/MENTIONS.md)** | Type `@` in chat → fuzzy-search your vault → attach note content as context. |
@@ -70,9 +70,9 @@ Plus a full type-safety pass: every AI provider response shape is strictly typed
 
 ### 🤖 Curtis Agent
 
-The AI can now call tools to modify your vault. Nine built-in tools: `read_note`, `search_notes`, `create_note`, `edit_note`, `list_notes`, `get_tags`, `get_backlinks`, `get_current_note`, `calculator`.
+The AI can now call tools to modify your vault. Ten built-in tools: `read_note`, `search_notes`, `create_note`, `edit_note`, `list_notes`, `get_tags`, `get_backlinks`, `get_current_note`, `get_current_date`, `calculator`.
 
-- **OpenAI-compat providers only** for v1.0 (Anthropic / Gemini / Ollama agent support lands in v1.1)
+- **Every major provider** — Anthropic via native tool use, OpenAI-compatible endpoints (OpenAI, Gemini, Ollama, Groq, DeepSeek, custom). The model must support tool calling.
 - **`agentMaxTurns` safety cap** (default 5) prevents runaway tool loops
 - **Opt-in** via Settings → Agent → Enable
 
@@ -174,7 +174,7 @@ Curtis AI Chat is the **agent layer for Obsidian**. Where other plugins focus on
 | | Curtis AI Chat | Smart Connections | Text Generator | Copilot for Obsidian |
 |---|---|---|---|---|
 | **All features free (no subscription)** | ✅ | ✅ | ✅ | Core only — advanced features need Copilot Plus |
-| **Agent tools (vault-modifying)** | ✅ 9 built-in | ❌ | ❌ | ✅ v4 agent chat |
+| **Agent tools (vault-modifying)** | ✅ 10 built-in | ❌ | ❌ | ✅ v4 agent chat |
 | **Provider count** | 30+ | 1–2 | 1–2 | 10+ |
 | **Local-first (Ollama, LM Studio)** | ✅ | ❌ | ✅ | ✅ |
 | **Multi-model arena** | ✅ | ❌ | ❌ | ❌ |
@@ -286,7 +286,7 @@ Curtis AI Chat works on iOS and Android with a few caveats:
 
 ## Roadmap
 
-- [ ] Curtis Agent: Anthropic, Gemini, and Ollama provider support (v1.1)
+- [x] Curtis Agent: Anthropic, Gemini, and Ollama provider support (v1.1)
 - [ ] Inline diff rewrite: word-level diff and inline editor decorations (v1.1)
 - [ ] Settings: migrate to declarative `getSettingDefinitions()` once Obsidian 1.13 reaches stable (see [ADR: settings API](#settings-api))
 - [ ] Voice: streaming TTS, wake-word detection

@@ -5,13 +5,13 @@ export function registerCommands(plugin: CurtisPlugin): void {
 	// ── Chat Commands ──
 	plugin.addCommand({
 		id: 'open-chat',
-		name: 'Open AI Chat',
+		name: 'Open AI chat',
 		callback: () => plugin.activateChatView(),
 	});
 
 	plugin.addCommand({
 		id: 'new-chat',
-		name: 'New Chat Conversation',
+		name: 'New chat conversation',
 		callback: () => plugin.activateChatView(true),
 	});
 

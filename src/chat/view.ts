@@ -229,7 +229,7 @@ export class ChatView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return 'AI Chat';
+		return 'AI chat';
 	}
 
 	getIcon(): string {
@@ -2118,7 +2118,7 @@ export class ChatView extends ItemView {
 		this.arenaSelectedModels = [];
 		const enabled = this.plugin.providerRegistry.getAllEnabledProviders();
 		if (enabled.length === 0) {
-			new Notice('No enabled providers. Configure one in Settings first.');
+			new Notice('No enabled providers. Configure one in settings first.');
 			this.arenaMode = false;
 			const btn = this.contentEl.querySelector('.ai-chat-arena-btn');
 			if (btn instanceof HTMLElement) btn.removeClass('is-active');

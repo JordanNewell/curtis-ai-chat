@@ -11,8 +11,11 @@ import type {
 	ErrorCallback,
 	TokenUsage,
 	StreamResponse,
+	ToolCall,
 } from '../types';
 import { isAnthropicMessage, isAnthropicStreamEvent } from './types/anthropic-responses';
+import { buildToolParametersSchema } from '../core/tools';
+import { isRecord } from '../core/types/json-helpers';
 
 const ANTHROPIC_MODELS: AIModel[] = [
 	{
@@ -73,11 +76,37 @@ export class AnthropicProvider implements AIProvider {
 		return this.apiKey.length > 0;
 	}
 
+	/** Native tool use (agent mode) — Claude speaks its own tools dialect. */
+	supportsToolCalls(): boolean {
+		return true;
+	}
+
 	formatRequest(messages: AIMessage[], options: AIRequestOptions): RequestInit {
 		// Claude requires system message as a separate top-level param
 		const systemMessage = messages.find((m) => m.role === 'system');
 		const system = typeof systemMessage?.content === 'string' ? systemMessage.content : '';
-		const chatMessages = messages.filter((m) => m.role !== 'system');
+		const chatMessages = toAnthropicMessages(messages);
+
+		const body: Record<string, unknown> = {
+			model: options.model,
+			max_tokens: options.maxTokens,
+			temperature: options.temperature,
+			system,
+			messages: chatMessages,
+			stream: options.stream ?? false,
+		};
+
+		// Agent mode: advertise tools in Anthropic's native shape. Tool calls
+		// come back as tool_use content blocks (see parseResponse); results go
+		// back as tool_result user blocks (see toAnthropicMessages).
+		if (options.tools && options.tools.length > 0) {
+			body.tools = options.tools.map((t) => ({
+				name: t.name,
+				description: t.description,
+				input_schema: buildToolParametersSchema(t),
+			}));
+			body.tool_choice = { type: 'auto' };
+		}
 
 		return {
 			method: 'POST',
@@ -86,17 +115,7 @@ export class AnthropicProvider implements AIProvider {
 				'anthropic-version': '2023-06-01',
 				'content-type': 'application/json',
 			},
-			body: JSON.stringify({
-				model: options.model,
-				max_tokens: options.maxTokens,
-				temperature: options.temperature,
-				system,
-				messages: chatMessages.map((m) => ({
-					role: m.role,
-					content: toAnthropicContent(m.content),
-				})),
-				stream: options.stream ?? false,
-			}),
+			body: JSON.stringify(body),
 		};
 	}
 
@@ -105,15 +124,31 @@ export class AnthropicProvider implements AIProvider {
 		if (!isAnthropicMessage(raw)) {
 			throw new Error('Anthropic: unexpected response shape');
 		}
-		const first = raw.content[0];
-		const content = first && first.type === 'text' ? first.text : '';
+		// Claude returns a content-block array where text and tool_use blocks
+		// interleave. Join all text; collect every tool_use as a canonical
+		// ToolCall (input arrives as an object, not a JSON string).
+		const texts: string[] = [];
+		const toolCalls: ToolCall[] = [];
+		for (const block of raw.content) {
+			if (block.type === 'text' && block.text) {
+				texts.push(block.text);
+			} else if (block.type === 'tool_use') {
+				toolCalls.push({
+					id: block.id,
+					name: block.name,
+					arguments: isRecord(block.input) ? block.input : {},
+				});
+			}
+		}
 		const u = raw.usage;
 		const usage: TokenUsage = {
 			promptTokens: u.input_tokens || 0,
 			completionTokens: u.output_tokens || 0,
 			totalTokens: (u.input_tokens || 0) + (u.output_tokens || 0),
 		};
-		return { content, usage };
+		const ai: AIResponse = { content: texts.join('\n\n'), usage };
+		if (toolCalls.length > 0) ai.tool_calls = toolCalls;
+		return ai;
 	}
 
 	async parseStream(
@@ -209,6 +244,59 @@ export class AnthropicProvider implements AIProvider {
 		if (!model || model.inputPrice === undefined || model.outputPrice === undefined) return null;
 		return { inputPrice: model.inputPrice, outputPrice: model.outputPrice };
 	}
+}
+
+/**
+ * Map canonical AIMessage[] to Anthropic message turns. Key differences from
+ * the OpenAI wire shape:
+ *   - assistant tool_calls become tool_use content blocks (input as object)
+ *   - role:'tool' results become *user* turns with tool_result blocks
+ *   - consecutive tool results are grouped into one user turn (Anthropic
+ *     requires every tool_use to be answered in the immediately following
+ *     user message)
+ */
+function toAnthropicMessages(messages: AIMessage[]): Array<{ role: 'user' | 'assistant'; content: string | Array<Record<string, unknown>> }> {
+	const out: Array<{ role: 'user' | 'assistant'; content: string | Array<Record<string, unknown>> }> = [];
+	for (const m of messages) {
+		if (m.role === 'system') continue;
+
+		if (m.role === 'tool') {
+			const block: Record<string, unknown> = {
+				type: 'tool_result',
+				tool_use_id: m.tool_call_id ?? '',
+				content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+			};
+			if (m.is_error) block.is_error = true;
+			// Group into the previous user turn if it is a pure tool_result turn.
+			const prev = out[out.length - 1];
+			if (
+				prev &&
+				prev.role === 'user' &&
+				Array.isArray(prev.content) &&
+				prev.content.length > 0 &&
+				prev.content.every((b) => b.type === 'tool_result')
+			) {
+				prev.content.push(block);
+			} else {
+				out.push({ role: 'user', content: [block] });
+			}
+			continue;
+		}
+
+		if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0) {
+			const blocks: Array<Record<string, unknown>> = [];
+			const text = typeof m.content === 'string' ? m.content : '';
+			if (text) blocks.push({ type: 'text', text });
+			for (const call of m.tool_calls) {
+				blocks.push({ type: 'tool_use', id: call.id, name: call.name, input: call.arguments });
+			}
+			out.push({ role: 'assistant', content: blocks });
+			continue;
+		}
+
+		out.push({ role: m.role, content: toAnthropicContent(m.content) });
+	}
+	return out;
 }
 
 /**

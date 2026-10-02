@@ -81,7 +81,7 @@ export default class CurtisPlugin extends Plugin {
 		this.addSettingTab(new CurtisSettingTab(this.app, this));
 
 		// 8. Ribbon icon
-		this.addRibbonIcon('bot', 'Open AI Chat', () => {
+		this.addRibbonIcon('bot', 'Open AI chat', () => {
 			void this.activateChatView();
 		});
 	}
@@ -529,6 +529,7 @@ export default class CurtisPlugin extends Plugin {
 				content: toolResult.content,
 				tool_call_id: call.id,
 				name: call.name,
+				is_error: toolResult.is_error === true,
 			}];
 
 			turns++;

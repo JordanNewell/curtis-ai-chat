@@ -35,7 +35,7 @@ export class EditFactModal extends Modal {
 			.setName('Category')
 			.setDesc('Optional — used for grouping')
 			.addText((text) => {
-				text.setPlaceholder('preference / identity / project / instruction / other')
+				text.setPlaceholder('Preference / identity / project / instruction / other')
 					.setValue(this.category)
 					.onChange((val) => { this.category = val; });
 			});

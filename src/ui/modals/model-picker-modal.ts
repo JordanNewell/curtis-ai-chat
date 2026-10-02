@@ -36,7 +36,7 @@ export class ModelPickerModal extends FuzzySuggestModal<ModelPickerEntry> {
 		this.entries = entries;
 		this.activeKey = activeKey;
 		this.onPick = onPick;
-		this.setPlaceholder('Search models... (type to filter)');
+		this.setPlaceholder('Search models... (Type to filter)');
 	}
 
 	getItems(): ModelPickerEntry[] {

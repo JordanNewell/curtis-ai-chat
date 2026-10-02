@@ -10,7 +10,7 @@ export class FolderSuggestModal extends FuzzySuggestModal<TFolder | null> {
 	constructor(app: App, onChoose: (folderPath: string) => void) {
 		super(app);
 		this.onChoose = onChoose;
-		this.setPlaceholder('Pick a folder (type to filter, Esc to use vault root)');
+		this.setPlaceholder('Pick a folder (type to filter, esc to use vault root)');
 		this.setTitle('Choose folder');
 	}
 

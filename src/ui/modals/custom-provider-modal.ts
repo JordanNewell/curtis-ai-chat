@@ -46,25 +46,25 @@ export class CustomProviderModal extends Modal {
 			.setName('Display name')
 			.setDesc('Shown in the provider list and model selector')
 			.addText((t) => {
-				t.setPlaceholder('My Local LLM')
+				t.setPlaceholder('My local LLM')
 					.setValue(this.name)
 					.onChange((v) => (this.name = v));
 			});
 
 		new Setting(contentEl)
 			.setName('Endpoint URL')
-			.setDesc('Full chat-completions URL, e.g. https://api.example.com/v1/chat/completions')
+			.setDesc('Full chat-completions URL: https://api.example.com/v1/chat/completions')
 			.addText((t) => {
-				t.setPlaceholder('https://.../v1/chat/completions')
+				t.setPlaceholder('URL: https://.../v1/chat/completions')
 					.setValue(this.endpoint)
 					.onChange((v) => (this.endpoint = v));
 			});
 
 		new Setting(contentEl)
 			.setName('Authentication')
-			.setDesc('Bearer token (most providers) or None (local servers)')
+			.setDesc('Bearer token (most providers) or none (local servers)')
 			.addDropdown((dd) => {
-				dd.addOption('bearer', 'API key (Bearer)');
+				dd.addOption('bearer', 'API key (bearer)');
 				dd.addOption('none', 'None (no auth)');
 				dd.setValue(this.authType);
 				dd.onChange((v) => (this.authType = v as AuthType));
@@ -75,7 +75,7 @@ export class CustomProviderModal extends Modal {
 			.setDesc('Leave blank for no-auth providers')
 			.addText((t) => {
 				t.inputEl.type = 'password';
-				t.setPlaceholder('sk-...')
+				t.setPlaceholder('Sk-...')
 					.setValue(this.apiKey)
 					.onChange((v) => (this.apiKey = v));
 			});
@@ -84,7 +84,7 @@ export class CustomProviderModal extends Modal {
 			.setName('Default model')
 			.setDesc('Optional. Most providers expose /v1/models — leave blank to auto-discover.')
 			.addText((t) => {
-				t.setPlaceholder('llama3.1, gpt-4o, my-model-id')
+				t.setPlaceholder('Llama3.1, GPT-4o, my-model-ID')
 					.setValue(this.defaultModel)
 					.onChange((v) => (this.defaultModel = v));
 			});

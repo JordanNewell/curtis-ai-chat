@@ -11,22 +11,20 @@ import { WEB_SEARCH_TOOL, READ_URL_TOOL } from './web-tools';
 // Each tool has a JSON Schema definition and a handler.
 //
 // Built-in tools:
-//   read_note    — Read the content of a vault note
-//   search_notes — Search vault notes by name or content
-//   create_note  — Create a new note in the vault
-//   edit_note    — Append/replace content in a note
-//   list_notes   — List notes in a folder
-//   get_tags     — List all tags in the vault
-//   get_backlinks — Get backlinks for a note
-//   daily_note   — Read today's daily note
-//   calculator   — Evaluate a math expression
+//   read_note        — Read the content of a vault note
+//   search_notes     — Search vault notes by name or content
+//   create_note      — Create a new note in the vault
+//   edit_note        — Append/replace content in a note
+//   list_notes       — List notes in a folder
+//   get_tags         — List all tags in the vault
+//   get_backlinks    — Get backlinks for a note
+//   get_current_note — Get the note open in the editor
+//   get_current_date — Get the current date/time
+//   calculator       — Evaluate an arithmetic expression
 //
-// Future tools (easy to add):
-//   web_search   — Search the web
-//   read_url     — Fetch and read a URL
-//   manage_tasks — Create/complete tasks
-//   query_memory — Query cross-session memory
-//   query_rag    — Semantic search vault
+// Optional web tools (settings toggle):
+//   web_search       — Search the web (DuckDuckGo)
+//   read_url         — Fetch and read a URL
 // ============================================================================
 
 export interface ToolDefinition {
@@ -63,6 +61,32 @@ function str(v: unknown): string {
 /** Coerce a tool param value to number. 0 if absent or wrong type. */
 function num(v: unknown): number {
 	return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+
+/**
+ * Build the JSON Schema `parameters` object for a tool definition. Shared by
+ * every provider dialect: OpenAI-compat sends it as `parameters`, Anthropic
+ * as `input_schema`, Gemini as the function-declaration body.
+ */
+export function buildToolParametersSchema(tool: ToolDefinition): {
+	type: 'object';
+	properties: Record<string, Record<string, unknown>>;
+	required: string[];
+} {
+	const properties: Record<string, Record<string, unknown>> = {};
+	const required: string[] = [];
+	for (const key of Object.keys(tool.parameters)) {
+		const param: ToolParameter = tool.parameters[key];
+		const schema: Record<string, unknown> = {
+			type: param.type,
+			description: param.description,
+		};
+		if (param.enum) schema.enum = param.enum;
+		if (param.default !== undefined) schema.default = param.default;
+		properties[key] = schema;
+		if (param.required) required.push(key);
+	}
+	return { type: 'object', properties, required };
 }
 
 export interface ToolResult {
@@ -159,39 +183,6 @@ export class ToolRegistry {
 				is_error: true,
 			};
 		}
-	}
-
-	/**
-	 * Get all tool definitions in OpenAI function calling format.
-	 */
-	getOpenAITools(): Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }> {
-		return this.getAllTools().map(tool => {
-			const properties: Record<string, Record<string, unknown>> = {};
-			const required: string[] = [];
-			for (const key of Object.keys(tool.parameters)) {
-				const param: ToolParameter = tool.parameters[key];
-				const schema: Record<string, unknown> = {
-					type: param.type,
-					description: param.description,
-				};
-				if (param.enum) schema.enum = param.enum;
-				if (param.default !== undefined) schema.default = param.default;
-				properties[key] = schema;
-				if (param.required) required.push(key);
-			}
-			return {
-				type: 'function' as const,
-				function: {
-					name: tool.name,
-					description: tool.description,
-					parameters: {
-						type: 'object',
-						properties,
-						required,
-					},
-				},
-			};
-		});
 	}
 
 	private registerBuiltinTools(): void {
@@ -450,5 +441,119 @@ export class ToolRegistry {
 				return `Current date: ${dateStr}\nTime: ${timeStr} (${tz})\nISO: ${now.toISOString()}`;
 			},
 		});
+
+		this.register({
+			name: 'calculator',
+			description:
+				'Evaluate an arithmetic expression exactly (+, -, *, /, %, ^, parentheses, decimals). ' +
+				'Use for any math instead of estimating.',
+			parameters: {
+				expression: {
+					type: 'string',
+					description: 'The arithmetic expression to evaluate, e.g. "(2.5 + 3) * 12 / 8"',
+					required: true,
+				},
+			},
+			execute: async (params) => formatCalcResult(evaluateExpression(str(params.expression))),
+		});
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Safe arithmetic evaluator (recursive descent, no eval)
+// ---------------------------------------------------------------------------
+
+type CalcToken = number | string;
+
+function tokenizeExpression(input: string): CalcToken[] {
+	const tokens: CalcToken[] = [];
+	let i = 0;
+	while (i < input.length) {
+		const ch = input[i];
+		if (/\s/.test(ch)) {
+			i++;
+			continue;
+		}
+		if ('+-*/%^()'.includes(ch)) {
+			tokens.push(ch);
+			i++;
+			continue;
+		}
+		const numMatch = /^\d+(?:\.\d+)?/.exec(input.slice(i));
+		if (numMatch) {
+			tokens.push(Number(numMatch[0]));
+			i += numMatch[0].length;
+			continue;
+		}
+		throw new Error(`Invalid character in expression: "${ch}"`);
+	}
+	return tokens;
+}
+
+function evaluateExpression(input: string): number {
+	const tokens = tokenizeExpression(input);
+	let pos = 0;
+	const peek = (): CalcToken | undefined => tokens[pos];
+	const next = (): CalcToken | undefined => tokens[pos++];
+
+	function parseExpression(): number {
+		let value = parseTerm();
+		while (peek() === '+' || peek() === '-') {
+			const op = next();
+			const rhs = parseTerm();
+			value = op === '+' ? value + rhs : value - rhs;
+		}
+		return value;
+	}
+
+	function parseTerm(): number {
+		let value = parseFactor();
+		while (peek() === '*' || peek() === '/' || peek() === '%') {
+			const op = next();
+			const rhs = parseFactor();
+			if (op === '*') value = value * rhs;
+			else if (op === '/') value = value / rhs;
+			else value = value % rhs;
+		}
+		return value;
+	}
+
+	function parseFactor(): number {
+		const base = parseUnary();
+		if (peek() === '^') {
+			next();
+			return Math.pow(base, parseFactor()); // right-associative
+		}
+		return base;
+	}
+
+	function parseUnary(): number {
+		if (peek() === '-') {
+			next();
+			return -parseUnary();
+		}
+		return parsePrimary();
+	}
+
+	function parsePrimary(): number {
+		const token = next();
+		if (token === undefined) throw new Error('Unexpected end of expression');
+		if (token === '(') {
+			const value = parseExpression();
+			if (next() !== ')') throw new Error('Missing closing parenthesis');
+			return value;
+		}
+		const n = Number(token);
+		if (!Number.isFinite(n)) throw new Error(`Unexpected token: ${token}`);
+		return n;
+	}
+
+	const result = parseExpression();
+	if (pos !== tokens.length) throw new Error(`Unexpected token: ${tokens[pos]}`);
+	if (!Number.isFinite(result)) throw new Error('Result is not a finite number (division by zero?)');
+	return result;
+}
+
+function formatCalcResult(n: number): string {
+	return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(10)));
 }

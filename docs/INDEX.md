@@ -9,7 +9,7 @@ Reference documentation for every feature. Start here, follow links to the detai
 
 | Doc | What it covers |
 |---|---|
-| 🤖 **[AGENT.md](AGENT.md)** | Curtis Agent — AI tools that read, create, edit vault notes. Nine built-in tools, OpenAI-compat providers. |
+| 🤖 **[AGENT.md](AGENT.md)** | Curtis Agent — AI tools that read, create, edit vault notes. Ten built-in tools, every provider. |
 | ⚔️ **[ARENA.md](ARENA.md)** | Multi-model arena — stream one prompt to 2–5 models in parallel. Promote-to-chat workflow. |
 | 🎨 **[DIFF_REWRITE.md](DIFF_REWRITE.md)** | Inline diff rewrite — Cursor-style Accept/Reject diff modal. `Ctrl+Shift+R`. |
 | 🎙️ **[VOICE.md](VOICE.md)** | Voice I/O — Whisper STT + browser TTS. Player controls: skip ±1 sentence, rate cycle, auto-speak. |

@@ -24,6 +24,8 @@ export interface AIMessage {
 	tool_call_id?: string;
 	/** Optional name of the tool that produced this result (role='tool'). */
 	name?: string;
+	/** When role='tool' — the tool reported an error (maps to Anthropic is_error). */
+	is_error?: boolean;
 }
 
 export interface MessageContent {

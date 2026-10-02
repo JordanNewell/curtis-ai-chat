@@ -13,9 +13,9 @@ import type {
 	StreamResponse,
 	ToolCall,
 	ToolDefinition,
-	ToolParameter,
 } from '../types';
 import { isOpenAIChatCompletion, isOpenAIChunk, OpenAIToolCall } from './types/openai-responses';
+import { buildToolParametersSchema } from '../core/tools';
 
 /**
  * Discriminated tag for the protocol family a provider speaks. Informational
@@ -231,25 +231,12 @@ export class OpenAICompatibleProvider extends BaseProvider {
 
 /** Convert our ToolDefinition to the OpenAI tools[] entry shape. */
 function toolDefToOpenAI(t: ToolDefinition): { type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } } {
-	const properties: Record<string, Record<string, unknown>> = {};
-	const required: string[] = [];
-	for (const key of Object.keys(t.parameters)) {
-		const param: ToolParameter = t.parameters[key];
-		const schema: Record<string, unknown> = {
-			type: param.type,
-			description: param.description,
-		};
-		if (param.enum) schema.enum = param.enum;
-		if (param.default !== undefined) schema.default = param.default;
-		properties[key] = schema;
-		if (param.required) required.push(key);
-	}
 	return {
 		type: 'function',
 		function: {
 			name: t.name,
 			description: t.description,
-			parameters: { type: 'object', properties, required },
+			parameters: buildToolParametersSchema(t),
 		},
 	};
 }

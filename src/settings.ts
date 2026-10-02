@@ -97,7 +97,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		// ---- Active Provider & Model ----
-		new Setting(containerEl).setName('Active Provider').setHeading();
+		new Setting(containerEl).setName('Active provider').setHeading();
 
 		const enabledProviders = PROVIDER_DEFINITIONS.filter(
 			(d) => this.plugin.settings.providerConfigs[d.id]?.enabled
@@ -143,13 +143,13 @@ export class CurtisSettingTab extends PluginSettingTab {
 		}
 
 		// ---- Provider Configuration ----
-		new Setting(containerEl).setName('Provider Configuration').setHeading();
+		new Setting(containerEl).setName('Provider configuration').setHeading();
 		const privacyNote = containerEl.createEl('p', {
 			cls: 'ai-setting-hint ai-privacy-note',
 		});
 		privacyNote.createEl('strong', { text: 'Privacy:' });
 		privacyNote.appendText(' Cloud providers (Anthropic, OpenAI, Gemini, etc.) send your chat content to their servers. For fully private, offline AI, enable ');
-		privacyNote.createEl('em', { text: 'Ollama (Local)' });
+			privacyNote.createEl('em', { text: 'Ollama (local)' });
 		privacyNote.appendText(' — nothing leaves your machine.');
 
 		for (const def of PROVIDER_DEFINITIONS) {
@@ -176,11 +176,11 @@ export class CurtisSettingTab extends PluginSettingTab {
 
 			if (def.authType === 'anthropic') {
 				new Setting(details)
-					.setName('API Key')
-					.setDesc('Anthropic API key — stored in OS keychain when available')
+					.setName('API key')
+					.setDesc('Anthropic API key — stored in os keychain when available')
 					.addText((text) => {
 						text.inputEl.type = 'password';
-						text.setPlaceholder('sk-ant-...')
+						text.setPlaceholder('Sk-ant-...')
 							.setValue(config.apiKey || '')
 							.onChange(async (val) => {
 								setApiKeyForProvider(this.app, def.id, config, val);
@@ -190,10 +190,10 @@ export class CurtisSettingTab extends PluginSettingTab {
 					});
 			} else if (def.authType === 'bearer') {
 				const keyDesc = getSecretStorage(this.app)
-					? `${def.name} API key — stored in OS keychain`
+					? `${def.name} API key — stored in os keychain`
 					: `${def.name} API key`;
 				new Setting(details)
-					.setName('API Key')
+					.setName('API key')
 					.setDesc(keyDesc)
 					.addText((text) => {
 						text.inputEl.type = 'password';
@@ -287,10 +287,10 @@ export class CurtisSettingTab extends PluginSettingTab {
 		}
 
 		// ---- Custom Providers ----
-		new Setting(containerEl).setName('Custom Providers').setHeading();
+		new Setting(containerEl).setName('Custom providers').setHeading();
 		containerEl.createEl('p', {
 			cls: 'ai-setting-hint',
-			text: 'Add any OpenAI-compatible endpoint (LiteLLM, llama.cpp, Novita, DeepInfra, Portkey, Helicone, self-hosted servers, etc.).',
+			text: 'Add any OpenAI-compatible endpoint (litellm, llama.cpp, novita, deepinfra, portkey, helicone, self-hosted servers, etc.).',
 		});
 
 		const customProviders = this.plugin.settings.customProviders;
@@ -315,7 +315,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 
 			new Setting(details)
 				.setName('API key')
-				.setDesc(getSecretStorage(this.app) ? 'Stored in OS keychain' : '')
+				.setDesc(getSecretStorage(this.app) ? 'Stored in os keychain' : '')
 				.addText((t) => {
 					t.inputEl.type = 'password';
 					t.setPlaceholder('Bearer token')
@@ -352,7 +352,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 			.setName('Add custom provider')
 			.setDesc('Configure any OpenAI-compatible endpoint')
 			.addButton((b) => {
-				b.setButtonText('+ Add')
+				b.setButtonText('Add')
 					.setClass('mod-cta')
 					.onClick(() => this.openCustomProviderModal());
 			});
@@ -390,7 +390,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Curtis identity (read-only)')
-			.setDesc('The non-negotiable CORE prompt — defines who Curtis is, what tools are available, and the operating principles. Appended automatically to every conversation.')
+			.setDesc('The non-negotiable core prompt — defines who curtis is, what tools are available, and the operating principles. Appended automatically to every conversation.')
 			.addTextArea((text) => {
 				text
 					.setValue(CORE_SYSTEM_PROMPT)
@@ -401,10 +401,10 @@ export class CurtisSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Additional instructions')
-			.setDesc('Your own context layered on top of Curtis\'s core — project specifics, tone preferences, domain knowledge. Optional.')
+			.setDesc('Your own context layered on top of curtis\'s core — project specifics, tone preferences, domain knowledge. Optional.')
 			.addTextArea((text) => {
 				text
-					.setPlaceholder('e.g., "You are my Rust coding assistant. Prefer the 2021 edition. Always explain lifetimes when introducing them."')
+					.setPlaceholder('E.g., "you are my rust coding assistant. Prefer the 2021 edition. Always explain lifetimes when introducing them."')
 					.setValue(this.plugin.settings.systemPrompt)
 					.onChange(async (val) => {
 						this.plugin.settings.systemPrompt = val;
@@ -449,7 +449,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Enable agent mode')
-			.setDesc('Let the AI call tools to read/create/modify your vault notes. Only OpenAI-compatible providers support this in v1.0 (Anthropic/Gemini/Ollama silently skip tools).')
+			.setDesc('Let the AI call tools to read/create/modify your vault notes. Works with every major provider, cloud and local — the model itself must support tool calling.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.enableAgent);
 				toggle.onChange(async (val) => {
@@ -474,7 +474,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Enable web tools')
-			.setDesc('Adds web_search (DuckDuckGo) + read_url (Jina reader) tools so the AI can look things up online. Free, no API key. Requires agent mode ON. Off by default — Curtis is vault-first.')
+			.setDesc('Adds web_search (duckduckgo) + read_URL (jina reader) tools so the AI can look things up online. Free, no API key. Requires agent mode on. Off by default — curtis is vault-first.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.enableWebSearch);
 				toggle.onChange(async (val) => {
@@ -494,7 +494,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Day separators')
-			.setDesc('Show "Today", "Yesterday", or the date between messages on different days.')
+			.setDesc('Show "today", "yesterday", or the date between messages on different days.')
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.showDaySeparators !== false);
 				toggle.onChange(async (val) => {
@@ -506,7 +506,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Enter key behavior')
-			.setDesc('Choose what Enter does in the chat input.')
+			.setDesc('Choose what enter does in the chat input.')
 			.addDropdown((dd) => {
 				dd.addOption('send', 'Enter = send · Shift+Enter = newline');
 				dd.addOption('newline', 'Enter = newline · Ctrl/Cmd+Enter = send');
@@ -548,9 +548,9 @@ export class CurtisSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Note save folder')
-			.setDesc('Where "Save as note" and the /note slash command save new notes. Empty = vault root.')
+			.setDesc('Where "save as note" and the /note slash command save new notes. Empty = vault root.')
 			.addText((text) => {
-				text.setPlaceholder('AI Notes')
+				text.setPlaceholder('AI notes')
 					.setValue(this.plugin.settings.noteSaveFolder)
 					.onChange(async (val) => {
 						this.plugin.settings.noteSaveFolder = val.trim();
@@ -582,9 +582,9 @@ export class CurtisSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Auto-save folder')
-			.setDesc('Defaults to the Note save folder above when empty.')
+			.setDesc('Defaults to the note save folder above when empty.')
 			.addText((text) => {
-				text.setPlaceholder('AI Responses')
+				text.setPlaceholder('AI responses')
 					.setValue(this.plugin.settings.autoSaveFolder)
 					.onChange(async (val) => {
 						this.plugin.settings.autoSaveFolder = val.trim();
@@ -604,11 +604,11 @@ export class CurtisSettingTab extends PluginSettingTab {
 			});
 
 		// ---- Chat Background ----
-		new Setting(containerEl).setName('Chat Background').setHeading();
+		new Setting(containerEl).setName('Chat background').setHeading();
 
 		new Setting(containerEl)
 			.setName('Background style')
-			.setDesc('"Theme" uses your Obsidian theme colors. "Wallpaper" uses the image picked below.')
+			.setDesc('"theme" uses your Obsidian theme colors. "wallpaper" uses the image picked below.')
 			.addDropdown((dd) => {
 				dd.addOption('theme', 'Theme (default)');
 				dd.addOption('wallpaper', 'Wallpaper image');
@@ -760,8 +760,8 @@ export class CurtisSettingTab extends PluginSettingTab {
 		);
 
 		new Setting(containerEl)
-			.setName('Buy Me a Coffee')
-			.setDesc('buymeacoffee.com/jordannewell')
+			.setName('Buy me a coffee')
+			.setDesc('Buymeacoffee.com/jordannewell')
 			.addButton((btn) => {
 				btn.setButtonText('☕ Buy me a coffee')
 					.setClass('mod-cta')
@@ -769,8 +769,8 @@ export class CurtisSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName('GitHub Sponsors')
-			.setDesc('github.com/sponsors/jordannewell')
+			.setName('GitHub sponsors')
+			.setDesc('GitHub.com/sponsors/jordannewell')
 			.addButton((btn) => {
 				btn.setButtonText('💛 Sponsor on GitHub')
 					.onClick(() => window.open('https://github.com/sponsors/jordannewell', '_blank'));

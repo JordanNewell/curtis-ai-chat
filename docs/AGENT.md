@@ -22,28 +22,28 @@ Once enabled, the model picker will show a 🔧 **Tools** pill next to function-
 
 ## Provider compatibility
 
-The agent uses OpenAI-style function calling. For v1.0, only **OpenAI-compatible providers** are supported.
+The agent works with every major provider. OpenAI-compatible endpoints use OpenAI-style function calling; Anthropic uses its native tool-use API (`tool_use` / `tool_result` blocks).
 
 | Provider | Agent support |
 |---|---|
 | OpenAI | ✅ |
+| **Anthropic** | ✅ native tool use |
+| **Google Gemini** | ✅ via Gemini's OpenAI-compatible endpoint |
 | OpenRouter | ✅ |
 | Groq | ✅ |
 | Together / Fireworks / DeepInfra / Novita | ✅ |
 | Mistral | ✅ |
 | DeepSeek | ✅ |
 | Cohere | ✅ |
-| Custom OpenAI-compat endpoints | ✅ |
-| **Anthropic** | ⚠️ v1.1 |
-| **Google Gemini** | ⚠️ v1.1 |
-| **Ollama / LM Studio** | ⚠️ v1.1 |
+| **Ollama / LM Studio** | ✅ — requires a tool-capable model (e.g. `qwen2.5`, `llama3.1`) |
+| Custom OpenAI-compat endpoints | ✅ — if the upstream server implements function calling |
 
 > [!NOTE]
-> Anthropic, Gemini, and Ollama use different function-calling shapes. Wiring them in is tracked for v1.1. For now, route through OpenRouter if you need Claude/Gemini with tools.
+> Agent mode requires a model that supports tool calling. On local providers, pull a tool-capable model — e.g. `ollama pull qwen2.5:7b-instruct` — or the model will ignore the tools.
 
 ## Built-in tools
 
-Nine tools ship with the plugin, all read/write against your vault. Two additional **web tools** (`web_search`, `read_url`) are available but opt-in — see [Web tools](#web-tools) below.
+Ten tools ship with the plugin, all read/write against your vault. Two additional **web tools** (`web_search`, `read_url`) are available but opt-in — see [Web tools](#web-tools) below.
 
 | Tool | Description | Parameters |
 |---|---|---|
@@ -111,7 +111,7 @@ Toggle it off at **Settings → Agent → Enable**. When disabled, the plugin ne
 - **Tool calls go to your AI provider.** The model sees the tool definitions (name, description, parameter schema) as part of the request. When a tool executes, the result string is sent back to the provider in the next turn.
 - **Vault contents are sent when read.** If the model calls `read_note("Projects/Aurora.md")`, the contents of that note leave your machine (on a cloud provider).
 - **Tool definitions themselves are not sensitive** — they're standard schema descriptions, no user data.
-- For fully offline agent use, switch to Ollama once v1.1 lands. Until then, the agent requires a cloud OpenAI-compatible provider.
+- For fully offline agent use, enable Ollama with a tool-capable model (e.g. `qwen2.5:7b-instruct`). Nothing leaves your machine.
 
 ## Adding custom tools
 
@@ -143,7 +143,7 @@ There's no conflict resolution — the model just sees more context. If attachme
 
 ## Roadmap
 
-- Anthropic, Gemini, Ollama provider support (v1.1)
+- ~~Anthropic, Gemini, Ollama provider support~~ — shipped in v1.1
 - Web search tool
 - URL fetch tool
 - Per-call confirmation mode (opt-in human-in-the-loop)

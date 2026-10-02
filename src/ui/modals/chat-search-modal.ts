@@ -33,7 +33,7 @@ export class ChatSearchModal extends FuzzySuggestModal<ChatSearchResult> {
 	constructor(app: App, plugin: CurtisPlugin) {
 		super(app);
 		this.plugin = plugin;
-		this.setPlaceholder('Search conversations... (type to filter)');
+		this.setPlaceholder('Search conversations... (Type to filter)');
 		this.setInstructions([
 			{ command: '↑↓', purpose: 'Navigate' },
 			{ command: '↵', purpose: 'Open conversation' },

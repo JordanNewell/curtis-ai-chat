@@ -2,11 +2,25 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [1.1.0] — 2026-10-02
+
+Agent mode for every provider. The headline v1.1 roadmap item ships; the "OpenAI-compat only" restriction is gone.
+
+### Added
+
+- **Anthropic agent support (native tool use)** — the agent loop now speaks Anthropic's tools dialect: tools serialize to `input_schema`, assistant turns carry `tool_use` blocks, tool results return as `tool_result` user turns (with `is_error`), and responses parse `tool_use` blocks into canonical tool calls. Claude models run the full 10-tool agent loop natively.
+- **`calculator` tool actually registered** — it was advertised in the system prompt and docs since v1.0 but never registered, so models calling it got "Unknown tool: calculator". Ships with a safe recursive-descent evaluator (no `eval`): `+ - * / % ^`, unary minus, decimals, parentheses.
 
 ### Changed
 
-- Directory listing description (from `manifest.json`) now mentions agent mode, multi-model arena, and voice I/O — propagates to the community plugin directory with the next tagged release.
+- **Honest agent-provider copy** — Gemini and Ollama already worked (both speak OpenAI-format tools through their OpenAI-compatible endpoints); the settings hint and docs wrongly claimed they were blocked until v1.1. All copy now states: agent works with every major provider, gated only on the model supporting tool calling. README/docs provider tables updated.
+- **Directory listing description** (from `manifest.json`) now mentions agent mode, multi-model arena, and voice I/O — propagates to the community plugin directory with this release.
+- **Tool count is ten** — `get_current_date` was registered but unlisted in the README's tool enumeration; now correct everywhere.
+- **UI copy sentence-case pass** — 43 `obsidianmd/ui/sentence-case` lint warnings fixed across settings and modal strings. Lint floor is now 0 errors / 14 warnings (the 13 documented `display()` deprecations plus the ADR-linked settings-tab warning).
+
+### Removed
+
+- Dead code: `ToolRegistry.getOpenAITools()` (superseded by the shared `buildToolParametersSchema` helper, now used by both the OpenAI and Anthropic serializers).
 
 ## [1.0.5] — 2026-09-28
 
