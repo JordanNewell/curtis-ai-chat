@@ -2,6 +2,12 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Changed
+
+- Directory listing description (from `manifest.json`) now mentions agent mode, multi-model arena, and voice I/O — propagates to the community plugin directory with the next tagged release.
+
 ## [1.0.5] — 2026-09-28
 
 Hotfix: keyless local providers were blocked from chatting. Closes #6.

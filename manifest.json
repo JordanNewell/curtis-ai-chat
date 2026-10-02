@@ -3,7 +3,7 @@
 	"name": "Curtis AI Chat",
 	"version": "1.0.5",
 	"minAppVersion": "1.11.4",
-	"description": "Polyglot AI chat with 30+ providers (Anthropic, OpenAI, Gemini, Ollama, and more), image attachments, long-term memory, slash commands, and inline selection actions.",
+	"description": "Polyglot AI chat: 30+ providers, agent mode with vault tools, multi-model arena, voice I/O, long-term memory. Local-first (Ollama/LM Studio). Free, MIT.",
 	"author": "Jordan Newell",
 	"authorUrl": "https://github.com/jordannewell",
 	"fundingUrl": {

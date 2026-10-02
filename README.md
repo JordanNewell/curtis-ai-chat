@@ -173,8 +173,9 @@ Curtis AI Chat is the **agent layer for Obsidian**. Where other plugins focus on
 
 | | Curtis AI Chat | Smart Connections | Text Generator | Copilot for Obsidian |
 |---|---|---|---|---|
-| **Agent tools (vault-modifying)** | ✅ 9 built-in | ❌ | ❌ | Partial |
-| **Provider count** | 30+ | 1–2 | 1–2 | 5–10 |
+| **All features free (no subscription)** | ✅ | ✅ | ✅ | Core only — advanced features need Copilot Plus |
+| **Agent tools (vault-modifying)** | ✅ 9 built-in | ❌ | ❌ | ✅ v4 agent chat |
+| **Provider count** | 30+ | 1–2 | 1–2 | 10+ |
 | **Local-first (Ollama, LM Studio)** | ✅ | ❌ | ✅ | ✅ |
 | **Multi-model arena** | ✅ | ❌ | ❌ | ❌ |
 | **Inline diff rewrite** | ✅ | ❌ | ❌ | ❌ |
@@ -183,7 +184,7 @@ Curtis AI Chat is the **agent layer for Obsidian**. Where other plugins focus on
 | **Native Obsidian rendering** | ✅ `MarkdownRenderer` | Partial | ❌ | Partial |
 
 > [!NOTE]
-> Comparison reflects v1.0 capabilities as of 2026-07-23. Other plugins may have added features since. Not a knock on them — Smart Connections is the gold standard for RAG, Text Generator excels at template-driven writing. Curtis aims to be the agent layer that ties chat, tools, and memory together.
+> Comparison refreshed 2026-10-02 (v1.0.5). Other plugins ship fast — Copilot's v4 agent chat is real and actively developed, Smart Connections remains the gold standard for RAG, Text Generator excels at template-driven writing. Curtis aims to be the free, polyglot, local-first agent layer that ties chat, tools, and memory together.
 
 ### Principles
 
@@ -248,7 +249,7 @@ The two web tools (`web_search`, `read_url`) and voice transcription are off by 
 ## Installation
 
 > [!TIP]
-> Curtis AI Chat is in the [community plugin directory](https://community.obsidian.md/plugins/curtis-ai-chat) (awaiting v1.0 review). Install from there, manually (below), or via [BRAT](https://github.com/TfTHacker/obsidian42-brat) for beta-channel updates.
+> Curtis AI Chat is in the [community plugin directory](https://community.obsidian.md/plugins/curtis-ai-chat). Install from there, manually (below), or via [BRAT](https://github.com/TfTHacker/obsidian42-brat) for beta-channel updates.
 
 ### Manual install
 
