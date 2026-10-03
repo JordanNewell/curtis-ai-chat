@@ -1,7 +1,7 @@
 {
 	"id": "curtis-ai-chat",
 	"name": "Curtis AI Chat",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"minAppVersion": "1.11.4",
 	"description": "Polyglot AI chat: 30+ providers, agent mode with vault tools, multi-model arena, voice I/O, long-term memory. Local-first (Ollama/LM Studio). Free, MIT.",
 	"author": "Jordan Newell",
