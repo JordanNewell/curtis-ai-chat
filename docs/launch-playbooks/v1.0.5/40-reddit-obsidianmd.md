@@ -29,15 +29,13 @@ The setup that works end to end as of this release:
 
 **Screenshots (captured — in `assets/screenshots/`):**
 
-- `desktop-chat.png` — full desktop window: vault with daily note open, chat sidebar running the seeded agent conversation (Ollama + qwen2.5, tool call + result visible, token count).
-- `chat-panel.png` — tight 300×760 crop of the chat panel alone; good as the hero image.
-- `desktop-settings-providers.png` — settings on the Provider configuration section.
+- `phone-chat-framed.png` — hero: device-framed phone shot of the agent conversation (Ollama + qwen2.5, tool call + result, tokens) running at true phone width.
+- `desktop-chat.png` — desktop: vault with daily note open, agent chat in the sidebar.
 - `ollama-provider-settings.png` — the Ollama provider section: enabled toggle, **no API key field by design**.
+- `phone-settings-framed.png` — same, framed as a phone.
 
-<!-- TODO(author): the two on-a-phone shots still need a real device —
-     1. [SCREENSHOT: phone: provider settings showing Ollama enabled with no key field]
-     2. [SCREENSHOT: phone: chat running against the local model, model name visible in the header]
-     30 seconds each with the phone on the same LAN as a desktop running Ollama/LM Studio. -->
+<!-- TODO(author, optional): one literal on-device photo beats any mockup —
+     phone on the same LAN as a desktop running Ollama/LM Studio, 30 seconds. -->
 
 If you hit the key prompt before and gave up on local mobile — that's this bug. Update and it should save clean.
 

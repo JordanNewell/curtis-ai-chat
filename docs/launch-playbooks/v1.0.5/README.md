@@ -4,7 +4,16 @@ Patch-release promo package. All copy paste-ready; TODO markers flag the few thi
 
 ## Screenshots
 
-Regenerate any time with `npm run shots` (Playwright-core driving Obsidian over the Chrome DevTools Protocol; it closes and relaunches your Obsidian automatically, and restores your session after). Current assets in `assets/screenshots/`: `desktop-chat.png`, `chat-panel.png` (300x760 panel crop — good hero image), `desktop-settings-providers.png`, `ollama-provider-settings.png`. On-a-phone shots are the only manual capture left (TODOs in the Reddit post).
+Regenerate any time with `npm run shots` then `npm run mockups` (Playwright-core drives Obsidian over the Chrome DevTools Protocol; it closes and relaunches your Obsidian automatically and restores your session after). Assets in `assets/screenshots/`:
+
+- `desktop-chat.png` — full desktop window (vault + agent chat)
+- `chat-panel.png` — 300x760 panel crop
+- `desktop-settings-providers.png` — provider configuration section
+- `ollama-provider-settings.png` — Ollama section: enabled, no key field
+- `phone-chat.png` — 390x844 phone-width capture (chat docked left, desktop chrome stripped)
+- `phone-chat-framed.png` / `phone-settings-framed.png` — device-frame mockups (real UI, drawn frame) — best hero images
+
+The phone-width shots are the app really running at 390px via CDP emulation — for a literal on-device photo, a real phone is still the only source of truth, but the framed mockups are launch-ready.
 
 ## What's shipping in 1.0.5
 

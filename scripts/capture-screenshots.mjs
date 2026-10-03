@@ -434,31 +434,73 @@ async function main() {
 		try { rmSync(resolve(VAULT, '.obsidian/workspace.json')); } catch { /* none */ }
 	}
 
-	// ---- Pass 2: panel crops ----
-	// Obsidian enforces a ~1024px minimum window width, viewport emulation
-	// reflows the DOM but Electron still paints the real window (emulated
-	// window shots come out blank), and the is-mobile body class blanks
-	// Obsidian's desktop chrome entirely. Device-true mobile screenshots
-	// need a real phone — the launch playbook keeps that as a manual TODO.
-	// What we CAN ship hands-off: tight element crops of the chat panel and
-	// the Ollama provider section, clipped by the renderer (pixel-perfect).
-	console.log('[shots] pass 2: panel crops');
+	// ---- Pass 2: phone-width shots ----
+	// Viewport emulation renders fine as long as Obsidian's desktop chrome is
+	// left alone (the is-mobile body class blanks it). So: dock the chat to
+	// the LEFT, hide the ribbon/editor/status bar via injected CSS, and the
+	// emulated 390px viewport becomes a clean full-bleed phone screen.
+	console.log('[shots] pass 2: phone-width (390x844 emulation, chat docked left)');
 	const mob = await bootInstance(9223);
 	try {
 		let { page, ctx } = mob;
+		// Persisted settings: dock the chat panel on the left for phone framing.
+		await page.evaluate(() => {
+			const plugin = window.app.plugins.plugins['curtis-ai-chat'];
+			plugin.settings.chatViewPosition = 'left';
+			plugin.saveSettings();
+		});
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.evaluate(() => location.reload());
+		page = await waitForVaultPage(
+			ctx,
+			() => !!window.app?.plugins?.plugins?.['curtis-ai-chat']?.conversationStore,
+			45000,
+			'phone reload'
+		);
+		await waitForVaultPage(
+			ctx,
+			() => !!window.app?.commands?.commands?.['curtis-ai-chat:open-chat'],
+			15000,
+			'command registration (phone)'
+		);
 		await page.evaluate(selectLatestConversation);
+		// The workspace may have restored the chat leaf docked right from the
+		// desktop pass; activateChatView only re-docks when no leaf exists.
+		await page.evaluate(() => {
+			window.app.workspace.getLeavesOfType('curtis-chat').forEach((l) => l.detach());
+		});
 		await page.evaluate(openChatAndRender);
 		page = await waitForVaultPage(
 			ctx,
 			() => document.body.innerText.includes('Week of Sep 28'),
 			30000,
-			'chat rendered'
+			'phone chat rendered'
 		);
+		// Strip desktop chrome so the emulated viewport is pure app surface.
+		await page.addStyleTag({
+			content: `
+				.workspace-ribbon, .workspace-split.mod-root, .status-bar,
+		.titlebar-button-container, .workspace-sidedock-vault-profile,
+				.workspace-tabs .workspace-tab-header-container { display: none !important; }
+				.workspace-split.mod-left-split { width: 100% !important; max-width: 100% !important; border: none !important; }
+				.workspace-leaf-content[data-type="curtis-chat"] { width: 100% !important; }
+				.workspace-tabs { flex: 1 !important; }
+			`,
+		});
 		await page.evaluate(scrollChatToTop);
-		await page.waitForTimeout(1200);
-		const chatPanel = page.locator('.workspace-leaf-content[data-type="curtis-chat"]').first();
-		await chatPanel.screenshot({ path: resolve(OUT_DIR, 'chat-panel.png') });
-		console.log('[shots] chat-panel.png');
+		await page.waitForTimeout(1500);
+		await page.screenshot({
+			path: resolve(OUT_DIR, 'phone-chat.png'),
+			clip: { x: 0, y: 0, width: 390, height: 844 },
+		});
+		console.log('[shots] phone-chat.png');
+		await page.evaluate(scrollChatToTop);
+		await page.waitForTimeout(400);
+		await page.screenshot({
+			path: resolve(OUT_DIR, 'phone-chat-bottom.png'),
+			clip: { x: 0, y: 0, width: 390, height: 844 },
+		});
+		console.log('[shots] phone-chat-bottom.png');
 
 		await page.evaluate(() => {
 			window.app.setting.open();
