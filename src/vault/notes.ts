@@ -2,6 +2,7 @@
 
 import { App, Notice, TFile } from 'obsidian';
 import type { ConversationMessage } from '../types';
+import { fromBase64 } from '../utils/base64';
 
 /** Resolve the attachment folder. We use a fixed default rather than reading
  * Obsidian's per-vault setting (no public API in this obsidian version). */
@@ -119,7 +120,7 @@ export function dataUrlToBytes(dataUrl: string): { bytes: ArrayBuffer; mime: str
 	const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
 	if (!m) return null;
 	const mime = m[1];
-	const bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)).buffer;
+	const bytes = fromBase64(m[2]).slice().buffer;
 	return { bytes, mime };
 }
 

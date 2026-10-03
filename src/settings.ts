@@ -1,6 +1,7 @@
 // Curtis Settings — defaults, settings tab UI
 
 import { App, Notice, PluginSettingTab, Setting, requestUrl } from 'obsidian';
+import type { SettingDefinitionItem, SettingDefinitionRender } from 'obsidian';
 import type { CurtisSettings, ProviderConfig, ProviderDefinition } from './types';
 import { PROVIDER_DEFINITIONS } from './providers/registry';
 import { CustomProviderModal } from './ui/modals/custom-provider-modal';
@@ -89,236 +90,162 @@ export class CurtisSettingTab extends PluginSettingTab {
 	}
 
 	/**
-	 * Build the full settings UI imperatively into the tab container.
-	 * Works on all supported Obsidian versions.
+	 * Declarative settings (Obsidian 1.13+): each section is a group of
+	 * definitions. Simple visuals are built imperatively inside `render`
+	 * callbacks — the framework creates the row (name/desc feed the settings
+	 * search index), and we fill it with the same Setting components used
+	 * before the migration. Dynamic state changes call `this.update()` to
+	 * re-fetch definitions and re-render.
 	 */
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return [
+			this.activeProviderGroup(),
+			this.providerConfigGroup(),
+			this.customProvidersGroup(),
+			this.generationGroup(),
+			this.agentGroup(),
+			this.chatUIGroup(),
+			this.notesGroup(),
+			this.backgroundGroup(),
+			this.memoryGroup(),
+			this.supportGroup(),
+		];
+	}
 
-		// ---- Active Provider & Model ----
-		new Setting(containerEl).setName('Active provider').setHeading();
+	/** A definition whose row is built by `build`, with `name`/`desc` for search. */
+	private row(name: string, desc: string | undefined, build: (el: HTMLElement) => void): SettingDefinitionRender {
+		return {
+			name,
+			...(desc ? { desc } : {}),
+			render: (setting) => {
+				const el = setting.settingEl;
+				el.empty();
+				build(el);
+			},
+		};
+	}
 
+	// ---- Active provider & model ----
+
+	private activeProviderGroup(): SettingDefinitionItem {
+		const s = this.plugin.settings;
 		const enabledProviders = PROVIDER_DEFINITIONS.filter(
-			(d) => this.plugin.settings.providerConfigs[d.id]?.enabled
+			(d) => s.providerConfigs[d.id]?.enabled
 		);
+		return {
+			type: 'group',
+			name: 'Active provider',
+			heading: 'Active provider',
+			items: [
+				this.row('Active provider', 'Select the AI provider to use for chat', (el) => {
+					new Setting(el)
+						.setName('Active provider')
+						.setDesc('Select the AI provider to use for chat')
+						.addDropdown((dd) => {
+							dd.addOption('', 'None configured');
+							for (const def of enabledProviders) {
+								dd.addOption(def.id, def.name);
+							}
+							dd.setValue(s.activeProvider);
+							dd.onChange(async (val) => {
+								s.activeProvider = val;
+								const config = s.providerConfigs[val];
+								if (config?.defaultModel) {
+									s.activeModel = config.defaultModel;
+								}
+								await this.plugin.saveSettings();
+								this.update();
+							});
+						});
+				}),
+				this.row('Active model', 'Select the model to use', (el) => {
+					const activeDef = PROVIDER_DEFINITIONS.find((d) => d.id === s.activeProvider);
+					if (!activeDef) return;
+					new Setting(el)
+						.setName('Active model')
+						.setDesc('Select the model to use')
+						.addDropdown((dd) => {
+							const provider = this.plugin.providerRegistry.getProvider(activeDef.id);
+							const models = provider?.models || activeDef.models;
+							for (const m of models) {
+								dd.addOption(m.id, `${m.name} (${(m.contextLength / 1000).toFixed(0)}K)`);
+							}
+							dd.setValue(s.activeModel);
+							dd.onChange(async (val) => {
+								s.activeModel = val;
+								await this.plugin.saveSettings();
+							});
+						});
+				}),
+			],
+		};
+	}
 
-		new Setting(containerEl)
-			.setName('Active provider')
-			.setDesc('Select the AI provider to use for chat')
-			.addDropdown((dd) => {
-				dd.addOption('', 'None configured');
-				for (const def of enabledProviders) {
-					dd.addOption(def.id, def.name);
-				}
-				dd.setValue(this.plugin.settings.activeProvider);
-				dd.onChange(async (val) => {
-					this.plugin.settings.activeProvider = val;
-					const config = this.plugin.settings.providerConfigs[val];
-					if (config?.defaultModel) {
-						this.plugin.settings.activeModel = config.defaultModel;
-					}
+	// ---- Provider configuration ----
+
+	private providerConfigGroup(): SettingDefinitionItem {
+		const items: SettingDefinitionRender[] = [
+			this.row('Privacy', undefined, (el) => {
+				const privacyNote = el.createEl('p', { cls: 'ai-setting-hint ai-privacy-note' });
+				privacyNote.createEl('strong', { text: 'Privacy:' });
+				privacyNote.appendText(' Cloud providers (Anthropic, OpenAI, Gemini, etc.) send your chat content to their servers. For fully private, offline AI, enable ');
+				privacyNote.createEl('em', { text: 'Ollama (local)' });
+				privacyNote.appendText(' — nothing leaves your machine.');
+			}),
+		];
+		for (const def of PROVIDER_DEFINITIONS) {
+			items.push(this.renderProviderCard(def));
+		}
+		return {
+			type: 'group',
+			name: 'Provider configuration',
+			heading: 'Provider configuration',
+			items,
+		};
+	}
+
+	/** One built-in provider's configuration card. */
+	private renderProviderCard(def: ProviderDefinition): SettingDefinitionRender {
+		return {
+			name: def.name,
+			desc: def.authType === 'none' ? 'Local provider — no API key required' : undefined,
+			render: (setting) => {
+				const el = setting.settingEl;
+				el.empty();
+				el.addClass('ai-provider-settings');
+				this.buildProviderCardRows(el, def);
+			},
+		};
+	}
+
+	private buildProviderCardRows(el: HTMLElement, def: ProviderDefinition): void {
+		const config = this.plugin.settings.providerConfigs[def.id] || {
+			enabled: false,
+			apiKey: '',
+		};
+		this.plugin.settings.providerConfigs[def.id] = config;
+
+		new Setting(el).setName(def.name).setHeading();
+
+		new Setting(el)
+			.setName('Enable')
+			.addToggle((toggle) => {
+				toggle.setValue(config.enabled);
+				toggle.onChange(async (val) => {
+					config.enabled = val;
 					await this.plugin.saveSettings();
-					this.display();
+					this.plugin.providerRegistry.updateConfig(def.id, config);
+					this.update();
 				});
 			});
 
-		const activeDef = PROVIDER_DEFINITIONS.find((d) => d.id === this.plugin.settings.activeProvider);
-		if (activeDef) {
-			new Setting(containerEl)
-				.setName('Active model')
-				.setDesc('Select the model to use')
-				.addDropdown((dd) => {
-					const provider = this.plugin.providerRegistry.getProvider(activeDef.id);
-					const models = provider?.models || activeDef.models;
-					for (const m of models) {
-						dd.addOption(m.id, `${m.name} (${(m.contextLength / 1000).toFixed(0)}K)`);
-					}
-					dd.setValue(this.plugin.settings.activeModel);
-					dd.onChange(async (val) => {
-						this.plugin.settings.activeModel = val;
-						await this.plugin.saveSettings();
-					});
-				});
-		}
-
-		// ---- Provider Configuration ----
-		new Setting(containerEl).setName('Provider configuration').setHeading();
-		const privacyNote = containerEl.createEl('p', {
-			cls: 'ai-setting-hint ai-privacy-note',
-		});
-		privacyNote.createEl('strong', { text: 'Privacy:' });
-		privacyNote.appendText(' Cloud providers (Anthropic, OpenAI, Gemini, etc.) send your chat content to their servers. For fully private, offline AI, enable ');
-			privacyNote.createEl('em', { text: 'Ollama (local)' });
-		privacyNote.appendText(' — nothing leaves your machine.');
-
-		for (const def of PROVIDER_DEFINITIONS) {
-			const config = this.plugin.settings.providerConfigs[def.id] || {
-				enabled: false,
-				apiKey: '',
-			};
-			this.plugin.settings.providerConfigs[def.id] = config;
-
-			const details = containerEl.createDiv({ cls: 'ai-provider-settings' });
-			new Setting(details).setName(def.name).setHeading();
-
-			new Setting(details)
-				.setName('Enable')
-				.addToggle((toggle) => {
-					toggle.setValue(config.enabled);
-					toggle.onChange(async (val) => {
-						config.enabled = val;
-						await this.plugin.saveSettings();
-						this.plugin.providerRegistry.updateConfig(def.id, config);
-						this.display();
-					});
-				});
-
-			if (def.authType === 'anthropic') {
-				new Setting(details)
-					.setName('API key')
-					.setDesc('Anthropic API key — stored in os keychain when available')
-					.addText((text) => {
-						text.inputEl.type = 'password';
-						text.setPlaceholder('Sk-ant-...')
-							.setValue(config.apiKey || '')
-							.onChange(async (val) => {
-								setApiKeyForProvider(this.app, def.id, config, val);
-								await this.plugin.saveSettings();
-								this.plugin.providerRegistry.updateConfig(def.id, config);
-							});
-					});
-			} else if (def.authType === 'bearer') {
-				const keyDesc = getSecretStorage(this.app)
-					? `${def.name} API key — stored in os keychain`
-					: `${def.name} API key`;
-				new Setting(details)
-					.setName('API key')
-					.setDesc(keyDesc)
-					.addText((text) => {
-						text.inputEl.type = 'password';
-						text.setPlaceholder('Enter API key')
-							.setValue(config.apiKey || '')
-							.onChange(async (val) => {
-								setApiKeyForProvider(this.app, def.id, config, val);
-								await this.plugin.saveSettings();
-								this.plugin.providerRegistry.updateConfig(def.id, config);
-							});
-					});
-			}
-			// 'none' auth (Ollama, LM Studio) skips the API key field entirely.
-
-			// Endpoint override applies to ALL auth types — Ollama and LM Studio
-			// need this for non-default hosts; Azure requires a deployment URL.
-			if (def.id === 'ollama' || def.id === 'lmstudio' || def.id === 'azure-openai') {
-				const placeholder =
-					def.id === 'azure-openai'
-						? 'https://<resource>.openai.azure.com/openai/deployments/<dep>/chat/completions?api-version=2024-10-21'
-						: def.endpoint;
-				new Setting(details)
-					.setName(def.id === 'azure-openai' ? 'Deployment URL' : 'Custom endpoint')
-					.setDesc(
-						def.id === 'azure-openai'
-							? 'Required. Full Azure deployment URL including api-version.'
-							: 'Override default endpoint URL'
-					)
-					.addText((text) => {
-						text.setPlaceholder(placeholder)
-							.setValue(config.customEndpoint || '')
-							.onChange(async (val) => {
-								config.customEndpoint = val || undefined;
-								await this.plugin.saveSettings();
-								this.plugin.providerRegistry.updateConfig(def.id, config);
-							});
-					});
-			}
-
-			// Default model selector per provider
-			if (config.enabled) {
-				const providerInstance = this.plugin.providerRegistry.getProvider(def.id);
-				const modelList = providerInstance?.models || def.models;
-				new Setting(details)
-					.setName('Default model')
-					.setDesc(modelList.length > def.models.length
-						? `${modelList.length} models (auto-discovered)`
-						: 'Pick the default model for new chats')
-					.addDropdown((dd) => {
-						for (const m of modelList) {
-							dd.addOption(m.id, m.name);
-						}
-						dd.setValue(config.defaultModel || modelList[0]?.id || '');
-						dd.onChange(async (val) => {
-							config.defaultModel = val;
-							await this.plugin.saveSettings();
-						});
-					})
-					.addExtraButton((btn) => {
-						if (!def.autoDiscoverModels) {
-							btn.setDisabled(true).setTooltip('Auto-discovery not supported for this provider');
-							return;
-						}
-						btn.setIcon('refresh-cw')
-							.setTooltip('Refresh model list from provider')
-							.onClick(async () => {
-								new Notice(`Refreshing ${def.name} models...`);
-								try {
-									const discovered = await this.plugin.providerRegistry.discoverModels(def);
-									if (discovered.length > 0) {
-										new Notice(`${def.name}: ${discovered.length} models available`);
-										this.display();
-									} else {
-										new Notice(`${def.name}: no models discovered. Check API key.`);
-									}
-								} catch (e) {
-									new Notice(`${def.name} refresh failed: ${(e as Error).message}`);
-								}
-							});
-					})
-					.addExtraButton((btn) => {
-						btn.setIcon('crosshair')
-							.setTooltip('Test connection')
-							.onClick(async () => {
-								new Notice(`Testing ${def.name}...`);
-								const result = await testProviderConnection(def, config, this.app);
-								new Notice(result.message, 8000);
-							});
-					});
-			}
-		}
-
-		// ---- Custom Providers ----
-		new Setting(containerEl).setName('Custom providers').setHeading();
-		containerEl.createEl('p', {
-			cls: 'ai-setting-hint',
-			text: 'Add any OpenAI-compatible endpoint (litellm, llama.cpp, novita, deepinfra, portkey, helicone, self-hosted servers, etc.).',
-		});
-
-		const customProviders = this.plugin.settings.customProviders;
-		for (const def of customProviders) {
-			const config = this.plugin.settings.providerConfigs[def.id] || { enabled: true, apiKey: '' };
-			this.plugin.settings.providerConfigs[def.id] = config;
-
-			const details = containerEl.createDiv({ cls: 'ai-provider-settings' });
-			new Setting(details).setName(def.name).setHeading();
-
-			new Setting(details)
-				.setName('Enable')
-				.addToggle((t) => {
-					t.setValue(config.enabled);
-					t.onChange(async (val) => {
-						config.enabled = val;
-						await this.plugin.saveSettings();
-						this.plugin.providerRegistry.updateConfig(def.id, config);
-						this.display();
-					});
-				});
-
-			new Setting(details)
+		if (def.authType === 'anthropic') {
+			new Setting(el)
 				.setName('API key')
-				.setDesc(getSecretStorage(this.app) ? 'Stored in os keychain' : '')
-				.addText((t) => {
-					t.inputEl.type = 'password';
-					t.setPlaceholder('Bearer token')
+				.setDesc('Anthropic API key — stored in os keychain when available')
+				.addText((text) => {
+					text.inputEl.type = 'password';
+					text.setPlaceholder('Sk-ant-...')
 						.setValue(config.apiKey || '')
 						.onChange(async (val) => {
 							setApiKeyForProvider(this.app, def.id, config, val);
@@ -326,455 +253,701 @@ export class CurtisSettingTab extends PluginSettingTab {
 							this.plugin.providerRegistry.updateConfig(def.id, config);
 						});
 				});
+		} else if (def.authType === 'bearer') {
+			const keyDesc = getSecretStorage(this.app)
+				? `${def.name} API key — stored in os keychain`
+				: `${def.name} API key`;
+			new Setting(el)
+				.setName('API key')
+				.setDesc(keyDesc)
+				.addText((text) => {
+					text.inputEl.type = 'password';
+					text.setPlaceholder('Enter API key')
+						.setValue(config.apiKey || '')
+						.onChange(async (val) => {
+							setApiKeyForProvider(this.app, def.id, config, val);
+							await this.plugin.saveSettings();
+							this.plugin.providerRegistry.updateConfig(def.id, config);
+						});
+				});
+		}
+		// 'none' auth (Ollama, LM Studio) skips the API key field entirely.
 
-			new Setting(details)
-				.setName('Endpoint')
-				.setDesc(def.endpoint)
-				.addButton((b) => {
-					b.setButtonText('Edit')
-						.onClick(() => this.openCustomProviderModal(def, config.apiKey));
-				})
-				.addButton((b) => {
-					b.setButtonText('Delete');
-					b.buttonEl.addClass('mod-destructive');
-					b.onClick(async () => {
-						this.plugin.providerRegistry.removeCustomProvider(def.id);
-						this.plugin.settings.customProviders = this.plugin.settings.customProviders.filter((p) => p.id !== def.id);
-						delete this.plugin.settings.providerConfigs[def.id];
-						await this.plugin.saveSettings();
-						this.display();
-						new Notice(`Deleted ${def.name}`);
-					});
+		// Endpoint override applies to ALL auth types — Ollama and LM Studio
+		// need this for non-default hosts; Azure requires a deployment URL.
+		if (def.id === 'ollama' || def.id === 'lmstudio' || def.id === 'azure-openai') {
+			const placeholder =
+				def.id === 'azure-openai'
+					? 'https://<resource>.openai.azure.com/openai/deployments/<dep>/chat/completions?api-version=2024-10-21'
+					: def.endpoint;
+			new Setting(el)
+				.setName(def.id === 'azure-openai' ? 'Deployment URL' : 'Custom endpoint')
+				.setDesc(
+					def.id === 'azure-openai'
+						? 'Required. Full Azure deployment URL including api-version.'
+						: 'Override default endpoint URL'
+				)
+				.addText((text) => {
+					text.setPlaceholder(placeholder)
+						.setValue(config.customEndpoint || '')
+						.onChange(async (val) => {
+							config.customEndpoint = val || undefined;
+							await this.plugin.saveSettings();
+							this.plugin.providerRegistry.updateConfig(def.id, config);
+						});
 				});
 		}
 
-		new Setting(containerEl)
-			.setName('Add custom provider')
-			.setDesc('Configure any OpenAI-compatible endpoint')
-			.addButton((b) => {
-				b.setButtonText('Add')
-					.setClass('mod-cta')
-					.onClick(() => this.openCustomProviderModal());
-			});
-
-		// ---- Generation Settings ----
-		new Setting(containerEl).setName('Generation').setHeading();
-
-		new Setting(containerEl)
-			.setName('Temperature')
-			.setDesc('Higher = more creative, lower = more focused (0.0 - 2.0)')
-			.addSlider((slider) => {
-				slider
-					.setLimits(0, 2, 0.1)
-					.setValue(this.plugin.settings.temperature)
-					.onChange(async (val) => {
-						this.plugin.settings.temperature = val;
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(containerEl)
-			.setName('Max tokens')
-			.setDesc('Maximum response length')
-			.addText((text) => {
-				text
-					.setValue(String(this.plugin.settings.maxTokens))
-					.onChange(async (val) => {
-						const n = parseInt(val, 10);
-						if (!isNaN(n) && n > 0) {
-							this.plugin.settings.maxTokens = n;
-							await this.plugin.saveSettings();
-						}
-					});
-			});
-
-		new Setting(containerEl)
-			.setName('Curtis identity (read-only)')
-			.setDesc('The non-negotiable core prompt — defines who curtis is, what tools are available, and the operating principles. Appended automatically to every conversation.')
-			.addTextArea((text) => {
-				text
-					.setValue(CORE_SYSTEM_PROMPT)
-					.setDisabled(true);
-				text.inputEl.rows = 10;
-				text.inputEl.addClass('ai-system-prompt-core');
-			});
-
-		new Setting(containerEl)
-			.setName('Additional instructions')
-			.setDesc('Your own context layered on top of curtis\'s core — project specifics, tone preferences, domain knowledge. Optional.')
-			.addTextArea((text) => {
-				text
-					.setPlaceholder('E.g., "you are my rust coding assistant. Prefer the 2021 edition. Always explain lifetimes when introducing them."')
-					.setValue(this.plugin.settings.systemPrompt)
-					.onChange(async (val) => {
-						this.plugin.settings.systemPrompt = val;
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.rows = 4;
-			})
-			.addExtraButton((btn) => {
-				btn.setIcon('reset')
-					.setTooltip('Reset to defaults')
-					.onClick(async () => {
-						this.plugin.settings.systemPrompt = '';
-						await this.plugin.saveSettings();
-						this.display();
-					});
-			});
-
-		new Setting(containerEl)
-			.setName('Stream responses')
-			.setDesc('Show AI responses as they are generated')
-			.addToggle((toggle) => {
-				toggle.setValue(this.plugin.settings.streamResponse);
-				toggle.onChange(async (val) => {
-					this.plugin.settings.streamResponse = val;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName('Show token usage')
-			.setDesc('Display token counts after each response')
-			.addToggle((toggle) => {
-				toggle.setValue(this.plugin.settings.showTokenUsage);
-				toggle.onChange(async (val) => {
-					this.plugin.settings.showTokenUsage = val;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		// ---- Agent ----
-		new Setting(containerEl).setName('Agent').setHeading();
-
-		new Setting(containerEl)
-			.setName('Enable agent mode')
-			.setDesc('Let the AI call tools to read/create/modify your vault notes. Works with every major provider, cloud and local — the model itself must support tool calling.')
-			.addToggle((toggle) => {
-				toggle.setValue(this.plugin.settings.enableAgent);
-				toggle.onChange(async (val) => {
-					this.plugin.settings.enableAgent = val;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName('Max tool calls per message')
-			.setDesc('Safety limit — prevents infinite agent loops')
-			.addDropdown((dd) => {
-				for (const n of [1, 3, 5, 10]) {
-					dd.addOption(String(n), String(n));
-				}
-				dd.setValue(String(this.plugin.settings.agentMaxTurns));
-				dd.onChange(async (val) => {
-					this.plugin.settings.agentMaxTurns = Number(val);
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName('Enable web tools')
-			.setDesc('Adds web_search (duckduckgo) + read_URL (jina reader) tools so the AI can look things up online. Free, no API key. Requires agent mode on. Off by default — curtis is vault-first.')
-			.addToggle((toggle) => {
-				toggle.setValue(this.plugin.settings.enableWebSearch);
-				toggle.onChange(async (val) => {
-					this.plugin.settings.enableWebSearch = val;
-					await this.plugin.saveSettings();
-					// Hot-reload the tool registry so the change takes effect on
-					// the next agent send — no Obsidian reload required.
-					this.plugin.toolRegistry.setWebToolsEnabled(val);
-					new Notice(val
-						? 'Web tools enabled'
-						: 'Web tools disabled');
-				});
-			});
-
-		// ---- Chat UI ----
-		new Setting(containerEl).setName('Chat UI').setHeading();
-
-		new Setting(containerEl)
-			.setName('Day separators')
-			.setDesc('Show "today", "yesterday", or the date between messages on different days.')
-			.addToggle((toggle) => {
-				toggle.setValue(this.plugin.settings.showDaySeparators !== false);
-				toggle.onChange(async (val) => {
-					this.plugin.settings.showDaySeparators = val;
-					await this.plugin.saveSettings();
-					this.plugin.refreshChatViews();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName('Enter key behavior')
-			.setDesc('Choose what enter does in the chat input.')
-			.addDropdown((dd) => {
-				dd.addOption('send', 'Enter = send · Shift+Enter = newline');
-				dd.addOption('newline', 'Enter = newline · Ctrl/Cmd+Enter = send');
-				dd.setValue(this.plugin.settings.enterKeyBehavior);
-				dd.onChange(async (val) => {
-					this.plugin.settings.enterKeyBehavior = val as 'send' | 'newline';
-					await this.plugin.saveSettings();
-					this.plugin.refreshAllChatViews();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName('Chat panel position')
-			.addDropdown((dd) => {
-				dd.addOption('right', 'Right');
-				dd.addOption('left', 'Left');
-				dd.setValue(this.plugin.settings.chatViewPosition);
-				dd.onChange(async (val) => {
-					this.plugin.settings.chatViewPosition = val as 'right' | 'left';
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName('Chat panel width')
-			.setDesc('Width in pixels')
-			.addText((text) => {
-				text.setValue(String(this.plugin.settings.chatWidth)).onChange(async (val) => {
-					const n = parseInt(val, 10);
-					if (!isNaN(n) && n >= 200) {
-						this.plugin.settings.chatWidth = n;
-						await this.plugin.saveSettings();
+		// Default model selector per provider
+		if (config.enabled) {
+			const providerInstance = this.plugin.providerRegistry.getProvider(def.id);
+			const modelList = providerInstance?.models || def.models;
+			new Setting(el)
+				.setName('Default model')
+				.setDesc(modelList.length > def.models.length
+					? `${modelList.length} models (auto-discovered)`
+					: 'Pick the default model for new chats')
+				.addDropdown((dd) => {
+					for (const m of modelList) {
+						dd.addOption(m.id, m.name);
 					}
-				});
-			});
-
-		// ---- Notes ----
-		new Setting(containerEl).setName('Notes').setHeading();
-
-		new Setting(containerEl)
-			.setName('Note save folder')
-			.setDesc('Where "save as note" and the /note slash command save new notes. Empty = vault root.')
-			.addText((text) => {
-				text.setPlaceholder('AI notes')
-					.setValue(this.plugin.settings.noteSaveFolder)
-					.onChange(async (val) => {
-						this.plugin.settings.noteSaveFolder = val.trim();
+					dd.setValue(config.defaultModel || modelList[0]?.id || '');
+					dd.onChange(async (val) => {
+						config.defaultModel = val;
 						await this.plugin.saveSettings();
 					});
-			})
-			.addButton((btn) => {
-				btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
-					new FolderSuggestModal(this.app, (path) => {
-						void (async () => {
-							this.plugin.settings.noteSaveFolder = path;
-							await this.plugin.saveSettings();
-							this.display();
-						})();
-					}).open();
+				})
+				.addExtraButton((btn) => {
+					if (!def.autoDiscoverModels) {
+						btn.setDisabled(true).setTooltip('Auto-discovery not supported for this provider');
+						return;
+					}
+					btn.setIcon('refresh-cw')
+						.setTooltip('Refresh model list from provider')
+						.onClick(async () => {
+							new Notice(`Refreshing ${def.name} models...`);
+							try {
+								const discovered = await this.plugin.providerRegistry.discoverModels(def);
+								if (discovered.length > 0) {
+									new Notice(`${def.name}: ${discovered.length} models available`);
+									this.update();
+								} else {
+									new Notice(`${def.name}: no models discovered. Check API key.`);
+								}
+							} catch (e) {
+								new Notice(`${def.name} refresh failed: ${(e as Error).message}`);
+							}
+						});
+				})
+				.addExtraButton((btn) => {
+					btn.setIcon('crosshair')
+						.setTooltip('Test connection')
+						.onClick(async () => {
+							new Notice(`Testing ${def.name}...`);
+							const result = await testProviderConnection(def, config, this.app);
+							new Notice(result.message, 8000);
+						});
 				});
-			});
+		}
+	}
 
-		new Setting(containerEl)
-			.setName('Auto-save assistant responses')
-			.setDesc('Silently save each completed assistant message as a note. Folder below.')
-			.addToggle((toggle) => {
-				toggle.setValue(this.plugin.settings.autoSaveAssistantResponses);
-				toggle.onChange(async (val) => {
-					this.plugin.settings.autoSaveAssistantResponses = val;
+	// ---- Custom providers ----
+
+	private customProvidersGroup(): SettingDefinitionItem {
+		const items: SettingDefinitionRender[] = [
+			this.row('Custom providers', undefined, (el) => {
+				el.createEl('p', {
+					cls: 'ai-setting-hint',
+					text: 'Add any OpenAI-compatible endpoint (litellm, llama.cpp, novita, deepinfra, portkey, helicone, self-hosted servers, etc.).',
+				});
+			}),
+		];
+		for (const def of this.plugin.settings.customProviders) {
+			items.push({
+				name: def.name,
+				desc: def.endpoint,
+				render: (setting) => {
+					const el = setting.settingEl;
+					el.empty();
+					el.addClass('ai-provider-settings');
+					this.buildCustomProviderCardRows(el, def);
+				},
+			});
+		}
+		items.push(this.row('Add custom provider', 'Configure any OpenAI-compatible endpoint', (el) => {
+			new Setting(el)
+				.setName('Add custom provider')
+				.setDesc('Configure any OpenAI-compatible endpoint')
+				.addButton((b) => {
+					b.setButtonText('Add')
+						.setClass('mod-cta')
+						.onClick(() => this.openCustomProviderModal());
+				});
+		}));
+		return { type: 'group', name: 'Custom providers', heading: 'Custom providers', items };
+	}
+
+	private buildCustomProviderCardRows(el: HTMLElement, def: ProviderDefinition): void {
+		const config = this.plugin.settings.providerConfigs[def.id] || { enabled: true, apiKey: '' };
+		this.plugin.settings.providerConfigs[def.id] = config;
+
+		new Setting(el).setName(def.name).setHeading();
+
+		new Setting(el)
+			.setName('Enable')
+			.addToggle((t) => {
+				t.setValue(config.enabled);
+				t.onChange(async (val) => {
+					config.enabled = val;
 					await this.plugin.saveSettings();
+					this.plugin.providerRegistry.updateConfig(def.id, config);
+					this.update();
 				});
 			});
 
-		new Setting(containerEl)
-			.setName('Auto-save folder')
-			.setDesc('Defaults to the note save folder above when empty.')
-			.addText((text) => {
-				text.setPlaceholder('AI responses')
-					.setValue(this.plugin.settings.autoSaveFolder)
+		new Setting(el)
+			.setName('API key')
+			.setDesc(getSecretStorage(this.app) ? 'Stored in os keychain' : '')
+			.addText((t) => {
+				t.inputEl.type = 'password';
+				t.setPlaceholder('Bearer token')
+					.setValue(config.apiKey || '')
 					.onChange(async (val) => {
-						this.plugin.settings.autoSaveFolder = val.trim();
+						setApiKeyForProvider(this.app, def.id, config, val);
 						await this.plugin.saveSettings();
+						this.plugin.providerRegistry.updateConfig(def.id, config);
 					});
-			})
-			.addButton((btn) => {
-				btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
-					new FolderSuggestModal(this.app, (path) => {
-						void (async () => {
-							this.plugin.settings.autoSaveFolder = path;
-							await this.plugin.saveSettings();
-							this.display();
-						})();
-					}).open();
-				});
 			});
 
-		// ---- Chat Background ----
-		new Setting(containerEl).setName('Chat background').setHeading();
-
-		new Setting(containerEl)
-			.setName('Background style')
-			.setDesc('"theme" uses your Obsidian theme colors. "wallpaper" uses the image picked below.')
-			.addDropdown((dd) => {
-				dd.addOption('theme', 'Theme (default)');
-				dd.addOption('wallpaper', 'Wallpaper image');
-				dd.setValue(this.plugin.settings.chatBackground);
-				dd.onChange(async (val) => {
-					this.plugin.settings.chatBackground = val as 'theme' | 'wallpaper';
+		new Setting(el)
+			.setName('Endpoint')
+			.setDesc(def.endpoint)
+			.addButton((b) => {
+				b.setButtonText('Edit')
+					.onClick(() => this.openCustomProviderModal(def, config.apiKey));
+			})
+			.addButton((b) => {
+				b.setButtonText('Delete');
+				b.buttonEl.addClass('mod-destructive');
+				b.onClick(async () => {
+					this.plugin.providerRegistry.removeCustomProvider(def.id);
+					this.plugin.settings.customProviders = this.plugin.settings.customProviders.filter((p) => p.id !== def.id);
+					delete this.plugin.settings.providerConfigs[def.id];
 					await this.plugin.saveSettings();
-					this.plugin.refreshAllChatViews();
+					this.update();
+					new Notice(`Deleted ${def.name}`);
 				});
 			});
+	}
 
-		new Setting(containerEl)
-			.setName('Wallpaper image')
-			.setDesc('Pick any image file in your vault.')
-			.addText((text) => {
-				text.setPlaceholder('attachments/wallpaper.png')
-					.setValue(this.plugin.settings.chatWallpaperPath)
-					.onChange(async (val) => {
-						this.plugin.settings.chatWallpaperPath = val.trim();
-						await this.plugin.saveSettings();
-						this.plugin.refreshAllChatViews();
-					});
-			})
-			.addButton((btn) => {
-				btn.setIcon('image').setTooltip('Pick image from vault').onClick(() => {
-					new ImageSuggestModal(this.app, (path) => {
-						void (async () => {
-							this.plugin.settings.chatWallpaperPath = path;
-							this.plugin.settings.chatBackground = 'wallpaper';
-							await this.plugin.saveSettings();
-							this.display();
-							this.plugin.refreshAllChatViews();
-						})();
-					}).open();
-				});
-			});
+	// ---- Generation ----
 
-		// ---- Memory ----
-		new Setting(containerEl).setName('Memory').setHeading();
-
-		new Setting(containerEl)
-			.setName('Enable memory')
-			.setDesc('Inject remembered facts about the user into each prompt')
-			.addToggle((toggle) => {
-				toggle.setValue(this.plugin.settings.enableMemory);
-				toggle.onChange(async (val) => {
-					this.plugin.settings.enableMemory = val;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName('Auto-capture facts')
-			.setDesc('After each turn, ask the model to extract durable facts. Off = manual only (/remember, right-click).')
-			.addDropdown((dd) => {
-				dd.addOption('off', 'Off (manual only)');
-				dd.addOption('auto', 'Auto-extract after each turn');
-				dd.setValue(this.plugin.settings.memoryCaptureMode);
-				dd.onChange(async (val) => {
-					this.plugin.settings.memoryCaptureMode = val as 'off' | 'auto';
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName('Memory file path')
-			.setDesc('Markdown file where facts are stored. Editable by hand.')
-			.addText((text) => {
-				text.setPlaceholder('AI/Curtis Memory.md')
-					.setValue(this.plugin.settings.memoryFilePath)
-					.onChange(async (val) => {
-						this.plugin.settings.memoryFilePath = val.trim() || 'AI/Curtis Memory.md';
-						await this.plugin.saveSettings();
-						await this.plugin.memoryStore.reload(this.plugin);
-					});
-			})
-			.addButton((btn) => {
-				btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
-					new FolderSuggestModal(this.app, (path) => {
-						void (async () => {
-							// FolderSuggestModal picks a folder; append default filename.
-							const fname = 'Curtis Memory.md';
-							this.plugin.settings.memoryFilePath = path ? `${path}/${fname}` : fname;
-							await this.plugin.saveSettings();
-							await this.plugin.memoryStore.reload(this.plugin);
-							this.display();
-						})();
-					}).open();
-				});
-			})
-			.addButton((btn) => {
-				btn.setButtonText('Open').setTooltip('Open memory file').onClick(async () => {
-					await this.plugin.memoryStore.ensureFile();
-					const p = this.plugin.settings.memoryFilePath;
-					const file = this.app.vault.getAbstractFileByPath(p);
-					if (file) await this.app.workspace.openLinkText(p, '', false);
-				});
-			})
-			.addButton((btn) => {
-				btn.setButtonText('Clear').setTooltip('Delete all facts');
-				btn.buttonEl.addClass('mod-destructive');
-				btn.onClick(async () => {
-					await this.plugin.memoryStore.clear();
-					new Notice('Memory cleared');
-				});
-			});
-
-		// Fact list — only when memory is enabled.
-		if (this.plugin.settings.enableMemory) {
-			const facts = this.plugin.memoryStore.getFacts();
-			if (facts.length === 0) {
-				new Setting(containerEl)
-					.setName('No facts yet')
-					.setDesc('Memory facts will appear here once captured.');
-			} else {
-				new Setting(containerEl).setName('Facts').setHeading();
-				for (const fact of facts) {
-					const preview = fact.content.length > 80 ? fact.content.slice(0, 80) + '…' : fact.content;
-					new Setting(containerEl)
-						.setName(preview)
-						.setDesc(fact.category ? `Category: ${fact.category}` : 'Uncategorized')
-						.addButton((btn) => btn.setButtonText('Edit').onClick(() => {
-							new EditFactModal(this.app, fact, (content, category) => {
-								void (async () => {
-									await this.plugin.memoryStore.updateFact(fact.id, content, category || undefined);
-									this.display();
-								})();
-							}).open();
-						}))
-						.addButton((btn) => {
-							btn.setButtonText('Delete');
-							btn.buttonEl.addClass('mod-destructive');
-							btn.onClick(async () => {
-								await this.plugin.memoryStore.deleteFact(fact.id);
-								this.display();
+	private generationGroup(): SettingDefinitionItem {
+		const s = this.plugin.settings;
+		return {
+			type: 'group',
+			name: 'Generation',
+			heading: 'Generation',
+			items: [
+				this.row('Temperature', 'Higher = more creative, lower = more focused (0.0 - 2.0)', (el) => {
+					new Setting(el)
+						.setName('Temperature')
+						.setDesc('Higher = more creative, lower = more focused (0.0 - 2.0)')
+						.addSlider((slider) => {
+							slider
+								.setLimits(0, 2, 0.1)
+								.setValue(s.temperature)
+								.onChange(async (val) => {
+									s.temperature = val;
+									await this.plugin.saveSettings();
+								});
+						});
+				}),
+				this.row('Max tokens', 'Maximum response length', (el) => {
+					new Setting(el)
+						.setName('Max tokens')
+						.setDesc('Maximum response length')
+						.addText((text) => {
+							text
+								.setValue(String(s.maxTokens))
+								.onChange(async (val) => {
+									const n = parseInt(val, 10);
+									if (!isNaN(n) && n > 0) {
+										s.maxTokens = n;
+										await this.plugin.saveSettings();
+									}
+								});
+						});
+				}),
+				this.row('Curtis identity (read-only)', 'The non-negotiable core prompt — defines who curtis is, what tools are available, and the operating principles. Appended automatically to every conversation.', (el) => {
+					new Setting(el)
+						.setName('Curtis identity (read-only)')
+						.setDesc('The non-negotiable core prompt — defines who curtis is, what tools are available, and the operating principles. Appended automatically to every conversation.')
+						.addTextArea((text) => {
+							text
+								.setValue(CORE_SYSTEM_PROMPT)
+								.setDisabled(true);
+							text.inputEl.rows = 10;
+							text.inputEl.addClass('ai-system-prompt-core');
+						});
+				}),
+				this.row('Additional instructions', 'Your own context layered on top of curtis\'s core — project specifics, tone preferences, domain knowledge. Optional.', (el) => {
+					new Setting(el)
+						.setName('Additional instructions')
+						.setDesc('Your own context layered on top of curtis\'s core — project specifics, tone preferences, domain knowledge. Optional.')
+						.addTextArea((text) => {
+							text
+								.setPlaceholder('E.g., "you are my rust coding assistant. Prefer the 2021 edition. Always explain lifetimes when introducing them."')
+								.setValue(s.systemPrompt)
+								.onChange(async (val) => {
+									s.systemPrompt = val;
+									await this.plugin.saveSettings();
+								});
+							text.inputEl.rows = 4;
+						})
+						.addExtraButton((btn) => {
+							btn.setIcon('reset')
+								.setTooltip('Reset to defaults')
+								.onClick(async () => {
+									s.systemPrompt = '';
+									await this.plugin.saveSettings();
+									this.update();
+								});
+						});
+				}),
+				this.row('Stream responses', 'Show AI responses as they are generated', (el) => {
+					new Setting(el)
+						.setName('Stream responses')
+						.setDesc('Show AI responses as they are generated')
+						.addToggle((toggle) => {
+							toggle.setValue(s.streamResponse);
+							toggle.onChange(async (val) => {
+								s.streamResponse = val;
+								await this.plugin.saveSettings();
 							});
 						});
+				}),
+				this.row('Show token usage', 'Display token counts after each response', (el) => {
+					new Setting(el)
+						.setName('Show token usage')
+						.setDesc('Display token counts after each response')
+						.addToggle((toggle) => {
+							toggle.setValue(s.showTokenUsage);
+							toggle.onChange(async (val) => {
+								s.showTokenUsage = val;
+								await this.plugin.saveSettings();
+							});
+						});
+				}),
+			],
+		};
+	}
+
+	// ---- Agent ----
+
+	private agentGroup(): SettingDefinitionItem {
+		const s = this.plugin.settings;
+		return {
+			type: 'group',
+			name: 'Agent',
+			heading: 'Agent',
+			items: [
+				this.row('Enable agent mode', 'Let the AI call tools to read/create/modify your vault notes. Works with every major provider, cloud and local — the model itself must support tool calling.', (el) => {
+					new Setting(el)
+						.setName('Enable agent mode')
+						.setDesc('Let the AI call tools to read/create/modify your vault notes. Works with every major provider, cloud and local — the model itself must support tool calling.')
+						.addToggle((toggle) => {
+							toggle.setValue(s.enableAgent);
+							toggle.onChange(async (val) => {
+								s.enableAgent = val;
+								await this.plugin.saveSettings();
+							});
+						});
+				}),
+				this.row('Max tool calls per message', 'Safety limit — prevents infinite agent loops', (el) => {
+					new Setting(el)
+						.setName('Max tool calls per message')
+						.setDesc('Safety limit — prevents infinite agent loops')
+						.addDropdown((dd) => {
+							for (const n of [1, 3, 5, 10]) {
+								dd.addOption(String(n), String(n));
+							}
+							dd.setValue(String(s.agentMaxTurns));
+							dd.onChange(async (val) => {
+								s.agentMaxTurns = Number(val);
+								await this.plugin.saveSettings();
+							});
+						});
+				}),
+				this.row('Enable web tools', 'Adds web_search (duckduckgo) + read_URL (jina reader) tools so the AI can look things up online. Free, no API key. Requires agent mode on. Off by default — curtis is vault-first.', (el) => {
+					new Setting(el)
+						.setName('Enable web tools')
+						.setDesc('Adds web_search (duckduckgo) + read_URL (jina reader) tools so the AI can look things up online. Free, no API key. Requires agent mode on. Off by default — curtis is vault-first.')
+						.addToggle((toggle) => {
+							toggle.setValue(s.enableWebSearch);
+							toggle.onChange(async (val) => {
+								s.enableWebSearch = val;
+								await this.plugin.saveSettings();
+								// Hot-reload the tool registry so the change takes effect on
+								// the next agent send — no Obsidian reload required.
+								this.plugin.toolRegistry.setWebToolsEnabled(val);
+								new Notice(val
+									? 'Web tools enabled'
+									: 'Web tools disabled');
+							});
+						});
+				}),
+			],
+		};
+	}
+
+	// ---- Chat UI ----
+
+	private chatUIGroup(): SettingDefinitionItem {
+		const s = this.plugin.settings;
+		return {
+			type: 'group',
+			name: 'Chat UI',
+			heading: 'Chat UI',
+			items: [
+				this.row('Day separators', 'Show "today", "yesterday", or the date between messages on different days.', (el) => {
+					new Setting(el)
+						.setName('Day separators')
+						.setDesc('Show "today", "yesterday", or the date between messages on different days.')
+						.addToggle((toggle) => {
+							toggle.setValue(s.showDaySeparators !== false);
+							toggle.onChange(async (val) => {
+								s.showDaySeparators = val;
+								await this.plugin.saveSettings();
+								this.plugin.refreshChatViews();
+							});
+						});
+				}),
+				this.row('Enter key behavior', 'Choose what enter does in the chat input.', (el) => {
+					new Setting(el)
+						.setName('Enter key behavior')
+						.setDesc('Choose what enter does in the chat input.')
+						.addDropdown((dd) => {
+							dd.addOption('send', 'Enter = send · Shift+Enter = newline');
+							dd.addOption('newline', 'Enter = newline · Ctrl/Cmd+Enter = send');
+							dd.setValue(s.enterKeyBehavior);
+							dd.onChange(async (val) => {
+								s.enterKeyBehavior = val as 'send' | 'newline';
+								await this.plugin.saveSettings();
+								this.plugin.refreshAllChatViews();
+							});
+						});
+				}),
+				this.row('Chat panel position', undefined, (el) => {
+					new Setting(el)
+						.setName('Chat panel position')
+						.addDropdown((dd) => {
+							dd.addOption('right', 'Right');
+							dd.addOption('left', 'Left');
+							dd.setValue(s.chatViewPosition);
+							dd.onChange(async (val) => {
+								s.chatViewPosition = val as 'right' | 'left';
+								await this.plugin.saveSettings();
+							});
+						});
+				}),
+				this.row('Chat panel width', 'Width in pixels', (el) => {
+					new Setting(el)
+						.setName('Chat panel width')
+						.setDesc('Width in pixels')
+						.addText((text) => {
+							text.setValue(String(s.chatWidth)).onChange(async (val) => {
+								const n = parseInt(val, 10);
+								if (!isNaN(n) && n >= 200) {
+									s.chatWidth = n;
+									await this.plugin.saveSettings();
+								}
+							});
+						});
+				}),
+			],
+		};
+	}
+
+	// ---- Notes ----
+
+	private notesGroup(): SettingDefinitionItem {
+		const s = this.plugin.settings;
+		return {
+			type: 'group',
+			name: 'Notes',
+			heading: 'Notes',
+			items: [
+				this.row('Note save folder', 'Where "save as note" and the /note slash command save new notes. Empty = vault root.', (el) => {
+					new Setting(el)
+						.setName('Note save folder')
+						.setDesc('Where "save as note" and the /note slash command save new notes. Empty = vault root.')
+						.addText((text) => {
+							text.setPlaceholder('AI notes')
+								.setValue(s.noteSaveFolder)
+								.onChange(async (val) => {
+									s.noteSaveFolder = val.trim();
+									await this.plugin.saveSettings();
+								});
+						})
+						.addButton((btn) => {
+							btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
+								new FolderSuggestModal(this.app, (path) => {
+									void (async () => {
+										s.noteSaveFolder = path;
+										await this.plugin.saveSettings();
+										this.update();
+									})();
+								}).open();
+							});
+						});
+				}),
+				this.row('Auto-save assistant responses', 'Silently save each completed assistant message as a note. Folder below.', (el) => {
+					new Setting(el)
+						.setName('Auto-save assistant responses')
+						.setDesc('Silently save each completed assistant message as a note. Folder below.')
+						.addToggle((toggle) => {
+							toggle.setValue(s.autoSaveAssistantResponses);
+							toggle.onChange(async (val) => {
+								s.autoSaveAssistantResponses = val;
+								await this.plugin.saveSettings();
+							});
+						});
+				}),
+				this.row('Auto-save folder', 'Defaults to the note save folder above when empty.', (el) => {
+					new Setting(el)
+						.setName('Auto-save folder')
+						.setDesc('Defaults to the note save folder above when empty.')
+						.addText((text) => {
+							text.setPlaceholder('AI responses')
+								.setValue(s.autoSaveFolder)
+								.onChange(async (val) => {
+									s.autoSaveFolder = val.trim();
+									await this.plugin.saveSettings();
+								});
+						})
+						.addButton((btn) => {
+							btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
+								new FolderSuggestModal(this.app, (path) => {
+									void (async () => {
+										s.autoSaveFolder = path;
+										await this.plugin.saveSettings();
+										this.update();
+									})();
+								}).open();
+							});
+						});
+				}),
+			],
+		};
+	}
+
+	// ---- Chat background ----
+
+	private backgroundGroup(): SettingDefinitionItem {
+		const s = this.plugin.settings;
+		return {
+			type: 'group',
+			name: 'Chat background',
+			heading: 'Chat background',
+			items: [
+				this.row('Background style', '"theme" uses your Obsidian theme colors. "wallpaper" uses the image picked below.', (el) => {
+					new Setting(el)
+						.setName('Background style')
+						.setDesc('"theme" uses your Obsidian theme colors. "wallpaper" uses the image picked below.')
+						.addDropdown((dd) => {
+							dd.addOption('theme', 'Theme (default)');
+							dd.addOption('wallpaper', 'Wallpaper image');
+							dd.setValue(s.chatBackground);
+							dd.onChange(async (val) => {
+								s.chatBackground = val as 'theme' | 'wallpaper';
+								await this.plugin.saveSettings();
+								this.plugin.refreshAllChatViews();
+							});
+						});
+				}),
+				this.row('Wallpaper image', 'Pick any image file in your vault.', (el) => {
+					new Setting(el)
+						.setName('Wallpaper image')
+						.setDesc('Pick any image file in your vault.')
+						.addText((text) => {
+							text.setPlaceholder('attachments/wallpaper.png')
+								.setValue(s.chatWallpaperPath)
+								.onChange(async (val) => {
+									s.chatWallpaperPath = val.trim();
+									await this.plugin.saveSettings();
+									this.plugin.refreshAllChatViews();
+								});
+						})
+						.addButton((btn) => {
+							btn.setIcon('image').setTooltip('Pick image from vault').onClick(() => {
+								new ImageSuggestModal(this.app, (path) => {
+									void (async () => {
+										s.chatWallpaperPath = path;
+										s.chatBackground = 'wallpaper';
+										await this.plugin.saveSettings();
+										this.update();
+										this.plugin.refreshAllChatViews();
+									})();
+								}).open();
+							});
+						});
+				}),
+			],
+		};
+	}
+
+	// ---- Memory ----
+
+	private memoryGroup(): SettingDefinitionItem {
+		const s = this.plugin.settings;
+		const items: SettingDefinitionRender[] = [
+			this.row('Enable memory', 'Inject remembered facts about the user into each prompt', (el) => {
+				new Setting(el)
+					.setName('Enable memory')
+					.setDesc('Inject remembered facts about the user into each prompt')
+					.addToggle((toggle) => {
+						toggle.setValue(s.enableMemory);
+						toggle.onChange(async (val) => {
+							s.enableMemory = val;
+							await this.plugin.saveSettings();
+						});
+					});
+			}),
+			this.row('Auto-capture facts', 'After each turn, ask the model to extract durable facts. Off = manual only (/remember, right-click).', (el) => {
+				new Setting(el)
+					.setName('Auto-capture facts')
+					.setDesc('After each turn, ask the model to extract durable facts. Off = manual only (/remember, right-click).')
+					.addDropdown((dd) => {
+						dd.addOption('off', 'Off (manual only)');
+						dd.addOption('auto', 'Auto-extract after each turn');
+						dd.setValue(s.memoryCaptureMode);
+						dd.onChange(async (val) => {
+							s.memoryCaptureMode = val as 'off' | 'auto';
+							await this.plugin.saveSettings();
+						});
+					});
+			}),
+			this.row('Memory file path', 'Markdown file where facts are stored. Editable by hand.', (el) => {
+				new Setting(el)
+					.setName('Memory file path')
+					.setDesc('Markdown file where facts are stored. Editable by hand.')
+					.addText((text) => {
+						text.setPlaceholder('AI/Curtis Memory.md')
+							.setValue(s.memoryFilePath)
+							.onChange(async (val) => {
+								s.memoryFilePath = val.trim() || 'AI/Curtis Memory.md';
+								await this.plugin.saveSettings();
+								await this.plugin.memoryStore.reload(this.plugin);
+							});
+					})
+					.addButton((btn) => {
+						btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
+							new FolderSuggestModal(this.app, (path) => {
+								void (async () => {
+									// FolderSuggestModal picks a folder; append default filename.
+									const fname = 'Curtis Memory.md';
+									s.memoryFilePath = path ? `${path}/${fname}` : fname;
+									await this.plugin.saveSettings();
+									await this.plugin.memoryStore.reload(this.plugin);
+									this.update();
+								})();
+							}).open();
+						});
+					})
+					.addButton((btn) => {
+						btn.setButtonText('Open').setTooltip('Open memory file').onClick(async () => {
+							await this.plugin.memoryStore.ensureFile();
+							const p = s.memoryFilePath;
+							const file = this.app.vault.getAbstractFileByPath(p);
+							if (file) await this.app.workspace.openLinkText(p, '', false);
+						});
+					})
+					.addButton((btn) => {
+						btn.setButtonText('Clear').setTooltip('Delete all facts');
+						btn.buttonEl.addClass('mod-destructive');
+						btn.onClick(async () => {
+							await this.plugin.memoryStore.clear();
+							new Notice('Memory cleared');
+						});
+					});
+			}),
+		];
+
+		// Fact list — only when memory is enabled.
+		if (s.enableMemory) {
+			const facts = this.plugin.memoryStore.getFacts();
+			if (facts.length === 0) {
+				items.push(this.row('No facts yet', 'Memory facts will appear here once captured.', (el) => {
+					new Setting(el)
+						.setName('No facts yet')
+						.setDesc('Memory facts will appear here once captured.');
+				}));
+			} else {
+				for (const fact of facts) {
+					const preview = fact.content.length > 80 ? fact.content.slice(0, 80) + '…' : fact.content;
+					items.push(this.row(preview, fact.category ? `Category: ${fact.category}` : 'Uncategorized', (el) => {
+						new Setting(el)
+							.setName(preview)
+							.setDesc(fact.category ? `Category: ${fact.category}` : 'Uncategorized')
+							.addButton((btn) => btn.setButtonText('Edit').onClick(() => {
+								new EditFactModal(this.app, fact, (content, category) => {
+									void (async () => {
+										await this.plugin.memoryStore.updateFact(fact.id, content, category || undefined);
+										this.update();
+									})();
+								}).open();
+							}))
+							.addButton((btn) => {
+								btn.setButtonText('Delete');
+								btn.buttonEl.addClass('mod-destructive');
+								btn.onClick(async () => {
+									await this.plugin.memoryStore.deleteFact(fact.id);
+									this.update();
+								});
+							});
+					}));
 				}
 			}
 		}
+		return { type: 'group', name: 'Memory', heading: 'Memory', items };
+	}
 
-		// ---- Support ----
-		new Setting(containerEl).setName('🙏 Support').setHeading();
-		const supportBlurb = containerEl.createEl('p', {
-			cls: 'ai-setting-hint ai-support-blurb',
-		});
-		supportBlurb.setText(
-			'Curtis is free and open source. If it saves you time, consider buying me a coffee or sponsoring the project on GitHub. Every contribution funds the next feature.'
-		);
+	// ---- Support ----
 
-		new Setting(containerEl)
-			.setName('Buy me a coffee')
-			.setDesc('Buymeacoffee.com/jordannewell')
-			.addButton((btn) => {
-				btn.setButtonText('☕ Buy me a coffee')
-					.setClass('mod-cta')
-					.onClick(() => window.open('https://www.buymeacoffee.com/jordannewell', '_blank'));
-			});
-
-		new Setting(containerEl)
-			.setName('GitHub sponsors')
-			.setDesc('GitHub.com/sponsors/jordannewell')
-			.addButton((btn) => {
-				btn.setButtonText('💛 Sponsor on GitHub')
-					.onClick(() => window.open('https://github.com/sponsors/jordannewell', '_blank'));
-			});
+	private supportGroup(): SettingDefinitionItem {
+		return {
+			type: 'group',
+			name: 'Support',
+			heading: '🙏 Support',
+			items: [
+				this.row('Support curtis', undefined, (el) => {
+					const supportBlurb = el.createEl('p', { cls: 'ai-setting-hint ai-support-blurb' });
+					supportBlurb.setText(
+						'Curtis is free and open source. If it saves you time, consider buying me a coffee or sponsoring the project on GitHub. Every contribution funds the next feature.'
+					);
+				}),
+				this.row('Buy me a coffee', 'Buymeacoffee.com/jordannewell', (el) => {
+					new Setting(el)
+						.setName('Buy me a coffee')
+						.setDesc('Buymeacoffee.com/jordannewell')
+						.addButton((btn) => {
+							btn.setButtonText('☕ Buy me a coffee')
+								.setClass('mod-cta')
+								.onClick(() => window.open('https://www.buymeacoffee.com/jordannewell', '_blank'));
+						});
+				}),
+				this.row('GitHub sponsors', 'GitHub.com/sponsors/jordannewell', (el) => {
+					new Setting(el)
+						.setName('GitHub sponsors')
+						.setDesc('GitHub.com/sponsors/jordannewell')
+						.addButton((btn) => {
+							btn.setButtonText('💛 Sponsor on GitHub')
+								.onClick(() => window.open('https://github.com/sponsors/jordannewell', '_blank'));
+						});
+				}),
+			],
+		};
 	}
 
 	private openCustomProviderModal(existing?: ProviderDefinition, existingKey?: string): void {
@@ -798,7 +971,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 					// Recreate the registry with new config
 					this.plugin.providerRegistry.addCustomProvider(definition);
 					this.plugin.providerRegistry.updateConfig(definition.id, config);
-					this.display();
+					this.update();
 					new Notice(`Saved ${definition.name}`);
 				})();
 			},

@@ -11,7 +11,7 @@
   <a href="https://jordannewell.github.io/curtis-ai-chat/"><img src="https://img.shields.io/badge/website-live-00FF41" alt="Live site"></a>
   <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/badge/release-1.0.5-blue" alt="Latest release"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Obsidian-1.11.4%2B-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian 1.11.4+">
+  <img src="https://img.shields.io/badge/Obsidian-1.13%2B-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian 1.13+">
   <img src="https://img.shields.io/badge/providers-30%2B-8B5CF6" alt="30+ providers">
   <img src="https://img.shields.io/badge/build-0%20warnings-10B981" alt="Zero lint warnings">
   <a href="https://github.com/JordanNewell/curtis-ai-chat/discussions"><img src="https://img.shields.io/github/discussions/JordanNewell/curtis-ai-chat?label=discussions&color=34D399" alt="GitHub Discussions"></a>
@@ -35,7 +35,7 @@
 
 1. **Install** — download the [latest release][releases] (`main.js`, `manifest.json`, `styles.css`) into `<vault>/.obsidian/plugins/curtis-ai-chat/`, then enable it under **Settings → Community plugins**. Or use [BRAT][brat] for auto-updates during the beta.
 
-2. **Configure one provider** — open **Settings → Curtis AI Chat → Provider Configuration**, enable a provider, paste an API key. Keys are stored in your OS keychain via the Obsidian `SecretStorage` API (1.11.4+).
+2. **Configure one provider** — open **Settings → Curtis AI Chat → Provider Configuration**, enable a provider, paste an API key. Keys are stored in your OS keychain via the Obsidian `SecretStorage` API.
 
 3. **Send a message** — click the **robot icon** in the ribbon (or `Ctrl+Shift+G`), pick a model from the header dropdown, type, hit Enter.
 
@@ -288,7 +288,7 @@ Curtis AI Chat works on iOS and Android with a few caveats:
 
 - [x] Curtis Agent: Anthropic, Gemini, and Ollama provider support (v1.1)
 - [ ] Inline diff rewrite: word-level diff and inline editor decorations (v1.1)
-- [ ] Settings: migrate to declarative `getSettingDefinitions()` once Obsidian 1.13 reaches stable (see [ADR: settings API](#settings-api))
+- [x] Settings: declarative `getSettingDefinitions()` — shipped in v1.2.0 (see [ADR: settings API](#settings-api))
 - [ ] Voice: streaming TTS, wake-word detection
 - [ ] Conversation branching UI
 - [ ] Plugin settings import/export
@@ -309,11 +309,9 @@ PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style
 
 ### Settings API
 
-Curtis targets Obsidian 1.11.4+ (set by the `SecretStorage` API used for per-provider key storage). The settings tab therefore uses the **imperative `display()` API**, which works on every supported version including 1.13+.
+Since v1.2.0 Curtis targets Obsidian **1.13.0+** and uses the **declarative `getSettingDefinitions()` API** for its settings tab. Every section and row is indexed by Obsidian's settings search; dynamic re-renders go through the sanctioned `SettingTab.update()`.
 
-Obsidian 1.13.0 introduced a declarative `getSettingDefinitions()` API that also powers the new settings-search panel, and marked `display()` as `@deprecated`. Migrating to it fully would drop the floor to 1.13.0 — but **1.13.x is still Catalyst/early-access as of July 2026; the stable line is 1.12.x.** Adopting it now would make the plugin uninstallable for every user on stable.
-
-The dual-path (`getSettingDefinitions()` + `display()` fallback) was evaluated and rejected: on 1.13+ the declarative path needs `SettingTab.update()` for re-renders, which is also 1.13-only and trips the `no-unsupported-api` lint rule regardless of runtime guards. The migration will be adopted once 1.13 reaches stable — tracked in the [Roadmap](#roadmap).
+History: through v1.1.x the floor was 1.11.4 (set by the `SecretStorage` API for per-provider key storage) and the tab used the imperative `display()` API, which Obsidian 1.13 deprecated. The dual-path (`getSettingDefinitions()` + `display()` fallback) was evaluated and rejected — the declarative path's `SettingTab.update()` is 1.13-only, so supporting both meant either shipping a broken tab on older versions or tripping the `no-unsupported-api` lint rule. When Obsidian 1.13.6 reached the stable channel for all desktop and mobile users (August 2026), the migration shipped as v1.2.0: a single declarative path, zero deprecation warnings, and settings search that actually finds things.
 
 The 13 `display is deprecated` lint warnings this produces are expected, justified, and non-blocking for plugin review.
 

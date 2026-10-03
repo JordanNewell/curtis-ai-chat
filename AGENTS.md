@@ -10,7 +10,7 @@ Obsidian plugin (id: `curtis-ai-chat`), TypeScript + esbuild bundled to `main.js
 
 ## Hard constraints
 
-- `minAppVersion` is **1.11.4** — the Obsidian API floor. Releases before 2026-07 shipped broken installs because this was wrong; do not regress it.
+- `minAppVersion` is **1.13.0** — set by the declarative `getSettingDefinitions()` settings API (adopted v1.2.0, after 1.13.6 hit the stable channel for all users in Aug 2026; before that the floor was 1.11.4). Whatever the floor is at any moment, `manifest.json` and `versions.json` must match reality — releases before 2026-07 shipped broken installs because they lied; never do that again.
 - `versions.json` maps plugin version → minimum Obsidian version; every release needs its entry.
 - Release notes and marketplace copy: terse, no emoji.
 

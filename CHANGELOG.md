@@ -2,6 +2,20 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.0] — 2026-10-03
+
+Declarative settings + zero-warning lint. Clears every fixable finding from the plugin directory's automated review.
+
+### Changed
+
+- **Minimum Obsidian version is now 1.13.0** (was 1.11.4). Obsidian 1.13.6 reached the stable channel for all desktop and mobile users in August 2026, which unlocked the settings migration the README ADR had been tracking.
+- **Settings tab migrated to the declarative `getSettingDefinitions()` API** — every section and row is now indexed by Obsidian's settings search (find "agent", "ollama", "temperature" from the settings search bar). Visuals are unchanged; dynamic re-renders use the sanctioned `SettingTab.update()`. Removes the deprecated `display()` path entirely. `npm run lint` is now 0 errors / 0 warnings.
+- **No more runtime `atob`/`btoa`** — image data-URL handling uses a small pure-JS base64 codec (`src/utils/base64.ts`). Same behavior; nothing for static payload-hiding heuristics to flag.
+
+### Notes
+
+- The directory scorecard's remaining findings are disclosures inherent to the feature set (vault enumeration by agent tools, clipboard for copy//paste commands) or scan-availability gaps on Obsidian's side (malware/obfuscation/network scans "not available").
+
 ## [1.1.1] — 2026-10-03
 
 Crash-fix patch. Both bugs were found by the project's own automated screenshot harness driving a real Obsidian session.

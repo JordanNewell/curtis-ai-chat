@@ -2,6 +2,7 @@
 
 import { ItemView, Notice, WorkspaceLeaf, setIcon, TFile, debounce } from 'obsidian';
 import type { Conversation, ConversationMessage, AIMessage, MessageContent, TokenUsage, ToolCall } from '../types';
+import { toBase64 } from '../utils/base64';
 import { MessageRenderer } from './message-renderer';
 import { ConversationStore } from './conversation-store';
 import { ModelPickerModal, buildModelPickerEntries } from '../ui/modals/model-picker-modal';
@@ -86,13 +87,7 @@ function imageMimeFromExt(ext: string): string {
 
 /** ArrayBuffer → base64 string (Obsidian's readBinary returns ArrayBuffer). */
 function bytesToBase64(buf: ArrayBuffer): string {
-	const bytes = new Uint8Array(buf);
-	let binary = '';
-	const chunk = 0x8000; // Avoid call-stack limits on large arrays.
-	for (let i = 0; i < bytes.length; i += chunk) {
-		binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-	}
-	return btoa(binary);
+	return toBase64(new Uint8Array(buf));
 }
 
 /**
