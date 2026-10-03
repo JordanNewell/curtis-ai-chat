@@ -29,6 +29,17 @@
 
 ---
 
+## Screenshots
+
+Real captures, regenerated any time with `npm run shots && npm run mockups` (Playwright driving Obsidian over the DevTools protocol).
+
+| | |
+|---|---|
+| <img src="assets/screenshots/desktop-chat.png" alt="Desktop — vault open, agent conversation on a local Ollama model with tool call and result" width="100%"> | |
+| <img src="assets/screenshots/phone-chat-framed.png" alt="Phone — the agent conversation at phone width" width="270"> | <img src="assets/screenshots/ollama-provider-settings.png" alt="Ollama provider settings — enabled, no API key field by design" width="270"> |
+
+---
+
 ## Quick start
 
 **60 seconds to your first message.**
@@ -240,7 +251,7 @@ Curtis is vault-first — no background telemetry, no analytics, no auto-update 
 | You use voice transcription | `api.openai.com` | Whisper API (only when voice input is on) |
 | The agent calls `web_search` (opt-in) | `html.duckduckgo.com` | DuckDuckGo search |
 | The agent calls `read_url` (opt-in) | `r.jina.ai` | URL → markdown reader |
-| You click a sponsor link | `buymeacoffee.com`, `github.com` | Opens in your browser, off the plugin |
+| You click a sponsor link | `www.buymeacoffee.com`, `github.com` | Opens in your browser, off the plugin |
 
 The two web tools (`web_search`, `read_url`) and voice transcription are off by default. Without them, the only external calls are to whichever AI provider you configured — or none, if you're on Ollama.
 
