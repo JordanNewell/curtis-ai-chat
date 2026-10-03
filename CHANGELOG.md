@@ -2,6 +2,19 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.1] — 2026-10-03
+
+Crash-fix patch. Both bugs were found by the project's own automated screenshot harness driving a real Obsidian session.
+
+### Fixed
+
+- **Plugin fails to load when the memory file exists and the vault index is cold** — `MemoryStore.ensureFile()` checked the vault index, which can lag the filesystem during boot; `vault.create()` then threw `File already exists` and killed the entire plugin `onload` (no chat, no commands, no settings tab until the file was deleted). The check now reads the filesystem via the adapter, and create races are tolerated. Anyone who reloaded Obsidian with an existing `AI/Curtis Memory.md` could hit this intermittently.
+- **Chat view render crash when refreshed mid-open** — `renderCurrentConversation()` dereferenced `messagesContainer` before the view's `onOpen` finished constructing it; a `refreshChatViews()` call racing view construction (e.g. open-chat command plus a settings change in the same tick) crashed the renderer. Now guarded — the half-constructed view simply renders on its own once open.
+
+### Added
+
+- **Automated screenshot harness** (dev tooling) — `npm run shots` + `npm run mockups` regenerate all marketing screenshots by driving Obsidian over the Chrome DevTools Protocol with Playwright. Not shipped in the plugin bundle.
+
 ## [1.1.0] — 2026-10-02
 
 Agent mode for every provider. The headline v1.1 roadmap item ships; the "OpenAI-compat only" restriction is gone.
