@@ -59,20 +59,6 @@ export interface OpenAIToolCall {
   function: { name: string; arguments: string };
 }
 
-// Model listing
-export interface OpenAIModel {
-  id: string;
-  // 'model' in practice; string allows provider variants.
-  object: string;
-  created?: number;
-  owned_by?: string;
-}
-
-export interface OpenAIModelList {
-  object: 'list';
-  data: OpenAIModel[];
-}
-
 // Type guards
 import { isRecord, hasStringProp, hasArrayProp } from '../../core/types/json-helpers';
 
@@ -82,8 +68,4 @@ export function isOpenAIChatCompletion(v: unknown): v is OpenAIChatCompletion {
 
 export function isOpenAIChunk(v: unknown): v is OpenAIChatCompletionChunk {
   return isRecord(v) && hasStringProp(v, 'id') && hasArrayProp(v, 'choices');
-}
-
-export function isOpenAIModelList(v: unknown): v is OpenAIModelList {
-  return isRecord(v) && hasStringProp(v, 'object') && hasArrayProp(v, 'data');
 }

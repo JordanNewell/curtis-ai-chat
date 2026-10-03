@@ -13,7 +13,7 @@
 
 import type { ProviderConfig } from '../types';
 
-export const CURRENT_VERSION = 4;
+export const CURRENT_VERSION = 5;
 
 /**
  * Pre-v4.0.0 default system prompt. Used to detect users upgrading from
@@ -209,9 +209,30 @@ export const MIGRATIONS: Migration[] = [
 				currentPrompt === LEGACY_V4_FIRST_DRAFT_SYSTEM_PROMPT ||
 				currentPrompt === V4_DEFAULT_SYSTEM_PROMPT
 			) {
-				settings.systemPrompt = '';
-			}
-			settings._version = 4;
+			settings.systemPrompt = '';
+		}
+		settings._version = 4;
+		return settings;
+	},
+	},
+	{
+		version: 5,
+		description: 'v1.4.0 — purge settings that never had a reader (dead code cleanup)',
+		migrate: (settings: SettingsData): SettingsData => {
+			// These keys shipped in DEFAULT_SETTINGS but no code path ever read
+			// them. Defaults are gone; purge the inert copies from saved data so
+			// data.json stops carrying dead surface.
+			const DEAD_KEYS = [
+				'hotkeys',
+				'budgetLimit',
+				'enableCostTracking',
+				'enableDailyNotesAssistant',
+				'dailyNotesFolder',
+				'dailyNotesFormat',
+				'chatWidth',
+			];
+			for (const key of DEAD_KEYS) delete settings[key];
+			settings._version = 5;
 			return settings;
 		},
 	},
@@ -232,17 +253,21 @@ export function runMigrations(settings: SettingsData): SettingsData {
 	pending.sort((a, b) => a.version - b.version);
 
 	let result: SettingsData = { ...settings };
+	let lastGoodVersion = currentVersion;
 
 	for (const migration of pending) {
 		try {
 			result = migration.migrate(result);
 			result._version = migration.version;
+			lastGoodVersion = migration.version;
 		} catch (err) {
 			console.error(`[Curtis] Migration v${migration.version} failed:`, err);
-			// Don't abort — save what we have and continue
+			// Stop here. Later migrations assume earlier shapes, and stamping
+			// CURRENT_VERSION anyway would permanently skip the failed step.
+			break;
 		}
 	}
 
-	result._version = CURRENT_VERSION;
+	result._version = lastGoodVersion;
 	return result;
 }

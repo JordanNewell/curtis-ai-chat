@@ -1,5 +1,6 @@
 import { Editor, Notice } from 'obsidian';
 import type CurtisPlugin from '../main';
+import { rebuildIndexWithProgress } from '../rag';
 
 export function registerCommands(plugin: CurtisPlugin): void {
 	// ── Chat Commands ──
@@ -106,4 +107,15 @@ export function registerCommands(plugin: CurtisPlugin): void {
 			editorCallback: (editor) => plugin.processSelection(editor, action),
 		});
 	}
+
+	// ── Vault retrieval (RAG) ──
+	plugin.addCommand({
+		id: 'rebuild-vault-index',
+		name: 'Rebuild vault index (vault retrieval)',
+		checkCallback: (checking: boolean) => {
+			if (!plugin.settings.enableRag) return false;
+			if (!checking) void rebuildIndexWithProgress(plugin);
+			return true;
+		},
+	});
 }

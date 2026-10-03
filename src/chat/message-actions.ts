@@ -27,8 +27,6 @@ export interface AttachActionsOptions {
 	message: ConversationMessage;
 	/** Folder for Save-as-note. */
 	saveFolder: string;
-	/** Whether to show the regenerate/edit-resend controls (false during streaming). */
-	allowBranching?: boolean;
 	callbacks?: MessageActionCallbacks;
 }
 
@@ -37,7 +35,7 @@ export interface AttachActionsOptions {
  * Idempotent — safe to call multiple times (skips if already attached).
  */
 export function attachMessageActions(opts: AttachActionsOptions): void {
-	const { wrapper, message, saveFolder, app, allowBranching = true, callbacks } = opts;
+	const { wrapper, message, saveFolder, app, callbacks } = opts;
 
 	if (wrapper.querySelector('.ai-message-actions')) return;
 
@@ -95,10 +93,8 @@ export function attachMessageActions(opts: AttachActionsOptions): void {
 		new Notice(`Inserted into ${view.file?.basename ?? 'note'}`);
 	});
 
-	if (allowBranching) {
-		if (callbacks?.onRegenerate) {
-			addAction('refresh-cw', 'Regenerate', () => callbacks.onRegenerate!(message));
-		}
+	if (callbacks?.onRegenerate) {
+		addAction('refresh-cw', 'Regenerate', () => callbacks.onRegenerate!(message));
 	}
 }
 

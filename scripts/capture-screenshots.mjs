@@ -98,6 +98,9 @@ function bootstrapVault() {
 	}
 }
 
+/** The vault that was open before registerDemoVault claimed the slot. */
+let originalLaunchVault = null;
+
 /**
  * Register the demo vault in Obsidian's registry and make it the vault the
  * app restores on launch. Without this, Obsidian ignores the vault-folder
@@ -111,6 +114,11 @@ function registerDemoVault() {
 	try { d = JSON.parse(readFileSync(p, 'utf8')); } catch { /* fresh */ }
 	if (!d || typeof d !== 'object' || Array.isArray(d)) d = {};
 	const vaults = (d.vaults ??= {});
+	// Remember the currently-open vault so restoreLaunchVault can put back
+	// exactly that one — the user's vault is machine-specific, never hardcoded.
+	for (const [id, v] of Object.entries(vaults)) {
+		if (v && typeof v === 'object' && v.open) originalLaunchVault = { id, path: v.path };
+	}
 	let id = Object.keys(vaults).find((k) => vaults[k] && vaults[k].path === VAULT);
 	if (!id) {
 		id = randomUUID();
@@ -123,20 +131,32 @@ function registerDemoVault() {
 	writeFileSync(p, JSON.stringify(d, null, 2));
 }
 
-/** Put the user's original launch-vault selection back (newell > demo). */
+/** Put the user's original launch-vault selection back. */
 function restoreLaunchVault() {
 	try {
 		const p = resolve(process.env.APPDATA, 'obsidian', 'obsidian.json');
 		const d = JSON.parse(readFileSync(p, 'utf8'));
-		let hasOther = false;
-		for (const v of Object.values(d.vaults || {})) {
-			if (v && typeof v === 'object') {
-				v.open = v.path === 'E:\\vaults\\newell';
-				if (v.open) hasOther = true;
+		const vaults = d.vaults || {};
+		for (const v of Object.values(vaults)) {
+			if (v && typeof v === 'object') v.open = false;
+		}
+		let restored = false;
+		if (originalLaunchVault) {
+			const byId = vaults[originalLaunchVault.id];
+			if (byId && byId.path === originalLaunchVault.path) {
+				byId.open = true;
+				restored = true;
+			} else {
+				// Registry entry re-keyed since capture — fall back to path.
+				for (const v of Object.values(vaults)) {
+					if (v && v.path === originalLaunchVault.path) { v.open = true; restored = true; break; }
+				}
 			}
 		}
-		if (!hasOther) {
-			for (const v of Object.values(d.vaults || {})) {
+		if (!restored) {
+			// Nothing captured (fresh/corrupt obsidian.json) — open any vault
+			// other than the demo one.
+			for (const v of Object.values(vaults)) {
 				if (v && v.path !== VAULT) { v.open = true; break; }
 			}
 		}

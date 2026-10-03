@@ -104,10 +104,9 @@ export class ArenaModelPickerModal extends Modal {
 		// Footer with Cancel + Start buttons.
 		const footer = contentEl.createDiv({ cls: 'ai-arena-picker-footer' });
 		const cancelBtn = footer.createEl('button', { cls: 'ai-arena-picker-cancel', text: 'Cancel' });
-		cancelBtn.addEventListener('click', () => {
-			this.onCancel?.();
-			this.close();
-		});
+		// onClose fires onCancel (submitted=false) — calling it here too would
+		// invoke the cancel callback twice per click.
+		cancelBtn.addEventListener('click', () => this.close());
 		this.startBtn = footer.createEl('button', {
 			cls: 'mod-cta ai-arena-picker-start',
 			text: 'Start arena',

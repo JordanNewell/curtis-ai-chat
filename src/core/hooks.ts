@@ -5,15 +5,9 @@
 // Unlike events (fire-and-forget notifications), hooks allow interception
 // and modification of data at defined points in the pipeline.
 //
-// Built-in hooks:
-//   messages:before-send  — Modify messages before sending to AI
-//   response:after-receive — Modify AI response before display
-//   system-prompt:build   — Modify system prompt before use
-//   context:build        — Add/modify vault context injected into messages
-//   provider:request      — Modify HTTP request before sending
-//   provider:response     — Modify HTTP response before parsing
-//   chat:render-message  — Modify message DOM before it's inserted
-//   settings:validate     — Validate/modify settings before save
+// Built-in hooks (runPipeline call sites in main.ts):
+//   messages:before-send — Modify messages before sending to AI
+//   provider:request     — Modify HTTP request before sending
 // ============================================================================
 
 type HookHandler<T = unknown, R = unknown> = (data: T, context: HookContext) => R | Promise<R>;
@@ -34,13 +28,7 @@ interface HookAIMessage {
 // Hook registry — typed by hook name
 export interface HookDefinitions {
 	'messages:before-send': HookAIMessage[];
-	'response:after-receive': string;
-	'system-prompt:build': string;
-	'context:build': Array<{ role: string; content: string }>;
 	'provider:request': RequestInit;
-	'provider:response': Response;
-	'chat:render-message': HTMLElement;
-	'settings:validate': Record<string, unknown>;
 }
 
 export class HookSystem {
@@ -93,7 +81,12 @@ export class HookSystem {
 		let result = data;
 		for (const { handler } of handlers) {
 			try {
-				result = (await handler(result, ctx)) as HookDefinitions[K];
+				const next = await handler(result, ctx);
+				// A void-returning handler passes data through — only an explicit
+				// return value replaces it. Nullifying on undefined would crash
+				// main.ts, which feeds the result straight into
+				// provider.formatRequest.
+				if (next !== undefined) result = next as HookDefinitions[K];
 			} catch (err) {
 				console.error(`[Curtis] Hook error in "${hook}":`, err);
 				// Continue pipeline even if one hook fails
@@ -101,13 +94,5 @@ export class HookSystem {
 		}
 
 		return result;
-	}
-
-	hasHook(hook: string): boolean {
-		return (this.hooks.get(hook)?.length || 0) > 0;
-	}
-
-	getHookCount(hook: string): number {
-		return this.hooks.get(hook)?.length || 0;
 	}
 }

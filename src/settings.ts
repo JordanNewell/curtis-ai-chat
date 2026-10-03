@@ -2,14 +2,16 @@
 
 import { App, Notice, PluginSettingTab, Setting, requestUrl } from 'obsidian';
 import type { SettingDefinitionItem, SettingDefinitionRender } from 'obsidian';
-import type { CurtisSettings, ProviderConfig, ProviderDefinition } from './types';
+import type { CurtisSettings, ProviderConfig, ProviderDefinition, McpServerConfig } from './types';
 import { PROVIDER_DEFINITIONS } from './providers/registry';
 import { CustomProviderModal } from './ui/modals/custom-provider-modal';
+import { McpServerModal } from './ui/modals/mcp-server-modal';
 import { FolderSuggestModal } from './ui/modals/folder-suggest-modal';
 import { ImageSuggestModal } from './ui/modals/image-suggest-modal';
 import { EditFactModal } from './ui/modals/edit-fact-modal';
 import { CORE_SYSTEM_PROMPT } from './core/system-prompt';
 import { setApiKeyForProvider, getSecretStorage, resolveApiKey } from './core/secrets';
+import { rebuildIndexWithProgress } from './rag';
 import type CurtisPlugin from './main';
 
 export const DEFAULT_SETTINGS: CurtisSettings = {
@@ -42,7 +44,6 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 	showTokenUsage: true,
 
 	chatViewPosition: 'right',
-	chatWidth: 400,
 
 	noteSaveFolder: 'AI Notes',
 	autoSaveAssistantResponses: false,
@@ -52,15 +53,11 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 	chatBackground: 'theme',
 	chatWallpaperPath: '',
 
-	enableCostTracking: true,
-
 	enableMemory: true,
 	memoryCaptureMode: 'auto',
 	memoryFilePath: 'AI/Curtis Memory.md',
 
-	enableDailyNotesAssistant: false,
-	dailyNotesFolder: 'Daily Notes',
-	dailyNotesFormat: 'YYYY-MM-DD',
+	conversationsFolder: 'AI/Conversations',
 
 	enableRag: false,
 	ragChunkSize: 500,
@@ -72,13 +69,9 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 	enableAgent: false,
 	agentMaxTurns: 5,
 	enableWebSearch: false,
+	enableMcp: false,
+	mcpServers: [],
 	showDaySeparators: true,
-
-	hotkeys: {
-		toggleChat: 'Ctrl+Shift+G',
-		quickAction: 'Ctrl+Shift+A',
-		explainSelection: 'Ctrl+Shift+E',
-	},
 };
 
 export class CurtisSettingTab extends PluginSettingTab {
@@ -104,10 +97,13 @@ export class CurtisSettingTab extends PluginSettingTab {
 			this.customProvidersGroup(),
 			this.generationGroup(),
 			this.agentGroup(),
+			this.mcpGroup(),
 			this.chatUIGroup(),
 			this.notesGroup(),
 			this.backgroundGroup(),
-			this.memoryGroup(),
+				this.memoryGroup(),
+				this.ragGroup(),
+				this.conversationsGroup(),
 			this.supportGroup(),
 		];
 	}
@@ -129,7 +125,10 @@ export class CurtisSettingTab extends PluginSettingTab {
 
 	private activeProviderGroup(): SettingDefinitionItem {
 		const s = this.plugin.settings;
-		const enabledProviders = PROVIDER_DEFINITIONS.filter(
+		// Built-ins AND customs — a custom provider can legitimately be active
+		// (model picker, /model, /provider); listing only built-ins rendered a
+		// blank dropdown and an empty Active-model row.
+		const enabledProviders = this.plugin.providerRegistry.getAllDefinitions().filter(
 			(d) => s.providerConfigs[d.id]?.enabled
 		);
 		return {
@@ -159,7 +158,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 						});
 				}),
 				this.row('Active model', 'Select the model to use', (el) => {
-					const activeDef = PROVIDER_DEFINITIONS.find((d) => d.id === s.activeProvider);
+					const activeDef = this.plugin.providerRegistry.getDefinition(s.activeProvider);
 					if (!activeDef) return;
 					new Setting(el)
 						.setName('Active model')
@@ -235,6 +234,15 @@ export class CurtisSettingTab extends PluginSettingTab {
 					config.enabled = val;
 					await this.plugin.saveSettings();
 					this.plugin.providerRegistry.updateConfig(def.id, config);
+					// Enabling at runtime must also fill the model list — defs
+					// with no static models (ollama, lmstudio, azure…) would
+					// otherwise show empty dropdowns until a manual refresh.
+					if (val && def.autoDiscoverModels) {
+						void this.plugin.providerRegistry
+							.discoverModels(def)
+							.then(() => this.update())
+							.catch(() => undefined);
+					}
 					this.update();
 				});
 			});
@@ -245,7 +253,8 @@ export class CurtisSettingTab extends PluginSettingTab {
 				.setDesc('Anthropic API key — stored in os keychain when available')
 				.addText((text) => {
 					text.inputEl.type = 'password';
-					text.setPlaceholder('Sk-ant-...')
+					const storedInKeychain = !config.apiKey && !!config.apiKeyRef;
+					text.setPlaceholder(storedInKeychain ? '•••• stored — type a new key to replace' : 'Sk-ant-...')
 						.setValue(config.apiKey || '')
 						.onChange(async (val) => {
 							setApiKeyForProvider(this.app, def.id, config, val);
@@ -262,7 +271,8 @@ export class CurtisSettingTab extends PluginSettingTab {
 				.setDesc(keyDesc)
 				.addText((text) => {
 					text.inputEl.type = 'password';
-					text.setPlaceholder('Enter API key')
+					const storedInKeychain = !config.apiKey && !!config.apiKeyRef;
+					text.setPlaceholder(storedInKeychain ? '•••• stored — type a new key to replace' : 'Enter API key')
 						.setValue(config.apiKey || '')
 						.onChange(async (val) => {
 							setApiKeyForProvider(this.app, def.id, config, val);
@@ -585,20 +595,186 @@ export class CurtisSettingTab extends PluginSettingTab {
 						.setDesc('Adds web_search (duckduckgo) + read_URL (jina reader) tools so the AI can look things up online. Free, no API key. Requires agent mode on. Off by default — curtis is vault-first.')
 						.addToggle((toggle) => {
 							toggle.setValue(s.enableWebSearch);
-							toggle.onChange(async (val) => {
-								s.enableWebSearch = val;
-								await this.plugin.saveSettings();
-								// Hot-reload the tool registry so the change takes effect on
-								// the next agent send — no Obsidian reload required.
-								this.plugin.toolRegistry.setWebToolsEnabled(val);
-								new Notice(val
-									? 'Web tools enabled'
-									: 'Web tools disabled');
+								toggle.onChange(async (val) => {
+									s.enableWebSearch = val;
+									await this.plugin.saveSettings();
+									// Hot-reload the tool registry so the change takes effect on
+									// the next agent send — no Obsidian reload required.
+									this.plugin.toolRegistry.setWebToolsEnabled(val);
+									new Notice(val
+										? 'Web tools enabled'
+										: 'Web tools disabled');
+								});
 							});
+					}),
+				],
+			};
+		}
+
+	// ---- MCP servers ----
+
+	private mcpGroup(): SettingDefinitionItem {
+		const s = this.plugin.settings;
+		const items: SettingDefinitionRender[] = [
+			this.row('MCP servers', undefined, (el) => {
+				const hint = el.createEl('p', { cls: 'ai-setting-hint' });
+				hint.appendText(
+					'MCP (Model Context Protocol) lets Curtis call tools from servers you already run — browsers, databases, APIs — instead of a fixed built-in catalog. '
+				);
+				hint.createEl('strong', { text: 'Requires agent mode.' });
+				hint.appendText(
+					' Curtis speaks the Streamable HTTP transport (desktop + mobile); local stdio servers need an HTTP bridge such as mcp-proxy or supergateway.'
+				);
+			}),
+			this.row('Enable MCP', 'Connect to MCP servers and offer their tools alongside the built-in vault tools', (el) => {
+				new Setting(el)
+					.setName('Enable MCP')
+					.setDesc('Connect to MCP servers and offer their tools alongside the built-in vault tools')
+					.addToggle((toggle) => {
+						toggle.setValue(s.enableMcp);
+						toggle.onChange(async (val) => {
+							s.enableMcp = val;
+							await this.plugin.saveSettings();
+							// Connect/disconnect in the background — a slow server
+							// must never block the settings tab.
+							void this.plugin.mcpManager.setEnabled(val);
+							new Notice(val ? 'MCP enabled — connecting servers' : 'MCP disabled');
 						});
-				}),
-			],
+					});
+			}),
+		];
+
+		for (const server of s.mcpServers) {
+			items.push(this.renderMcpServerCard(server));
+		}
+
+		items.push(this.row('Add MCP server', 'Connect to any MCP server over Streamable HTTP', (el) => {
+			new Setting(el)
+				.setName('Add MCP server')
+				.setDesc('Connect to any MCP server over Streamable HTTP')
+				.addButton((b) => {
+					b.setButtonText('Add')
+						.setClass('mod-cta')
+						.onClick(() => {
+							new McpServerModal(this.app, (result) => {
+								void (async () => {
+									this.plugin.settings.mcpServers.push(result.config);
+									await this.plugin.saveSettings();
+									if (s.enableMcp && result.config.enabled) {
+										void this.plugin.mcpManager.refreshServer(result.config.id);
+									}
+									this.update();
+								})();
+							}).open();
+						});
+				});
+		}));
+
+		return { type: 'group', name: 'MCP servers', heading: 'MCP servers', items };
+	}
+
+	private renderMcpServerCard(server: McpServerConfig): SettingDefinitionRender {
+		return {
+			name: server.name,
+			desc: server.url,
+			render: (setting) => {
+				const el = setting.settingEl;
+				el.empty();
+				el.addClass('ai-provider-settings');
+				this.buildMcpServerCardRows(el, server);
+			},
 		};
+	}
+
+	private buildMcpServerCardRows(el: HTMLElement, server: McpServerConfig): void {
+		const manager = this.plugin.mcpManager;
+		new Setting(el).setName(server.name).setHeading();
+
+		// Connection status — reflects live manager state, not just config.
+		const statusRow = new Setting(el).setName('Status');
+		const status = manager.statusOf(server.id);
+		const toolWord = status.toolCount === 1 ? 'tool' : 'tools';
+		let statusText: string;
+		switch (status.state) {
+			case 'connecting':
+				statusText = 'Connecting…';
+				break;
+			case 'connected': {
+				const info = status.serverName ? `${status.serverName}${status.serverVersion ? ` v${status.serverVersion}` : ''} — ` : '';
+				statusText = `Connected (${info}${status.toolCount} ${toolWord})`;
+				break;
+			}
+			case 'error':
+				statusText = `Error: ${status.error || 'unknown error'}`;
+				break;
+			default:
+				statusText = server.enabled ? 'Not connected' : 'Disabled';
+		}
+		statusRow.setDesc(statusText);
+		if (status.state === 'connected') statusRow.descEl.addClass('ai-mcp-status-connected');
+		if (status.state === 'error') statusRow.descEl.addClass('ai-mcp-status-error');
+
+		new Setting(el)
+			.setName('Enable')
+			.addToggle((toggle) => {
+				toggle.setValue(server.enabled);
+				toggle.onChange(async (val) => {
+					server.enabled = val;
+					await this.plugin.saveSettings();
+					void this.plugin.mcpManager.refreshServer(server.id);
+					// Status is async — give the connection a beat, then repaint.
+					window.setTimeout(() => this.update(), 50);
+				});
+			});
+
+		new Setting(el)
+			.setName('Endpoint')
+			.setDesc(server.url)
+			.addButton((b) => {
+				b.setButtonText('Edit').onClick(() => {
+					new McpServerModal(this.app, (result) => {
+						void (async () => {
+							const servers = this.plugin.settings.mcpServers;
+							const idx = servers.findIndex((s) => s.id === server.id);
+							if (idx >= 0) servers[idx] = result.config;
+							await this.plugin.saveSettings();
+							await this.plugin.mcpManager.refreshServer(server.id);
+							this.update();
+							new Notice(`Saved ${result.config.name}`);
+						})();
+					}, server).open();
+				});
+			})
+			.addButton((b) => {
+				b.setIcon('refresh-cw').setTooltip('Connect / refresh tools').onClick(() => {
+					void (async () => {
+						if (!this.plugin.settings.enableMcp) {
+							new Notice('Enable MCP first (toggle above).');
+							return;
+						}
+						new Notice(`Connecting to ${server.name}…`);
+						const st = await this.plugin.mcpManager.refreshServer(server.id);
+						new Notice(
+							st.state === 'connected'
+								? `${server.name}: connected, ${st.toolCount} tools`
+								: `${server.name}: ${st.state === 'error' ? st.error : st.state}`,
+							8000
+						);
+						this.update();
+					})();
+				});
+			})
+			.addButton((b) => {
+				b.setButtonText('Delete');
+				b.buttonEl.addClass('mod-destructive');
+				b.onClick(async () => {
+					await this.plugin.mcpManager.disconnectServer(server.id);
+					this.plugin.settings.mcpServers = this.plugin.settings.mcpServers.filter((s) => s.id !== server.id);
+					await this.plugin.saveSettings();
+					this.update();
+					new Notice(`Deleted ${server.name}`);
+				});
+			});
 	}
 
 	// ---- Chat UI ----
@@ -638,9 +814,10 @@ export class CurtisSettingTab extends PluginSettingTab {
 							});
 						});
 				}),
-				this.row('Chat panel position', undefined, (el) => {
+				this.row('Chat panel position', 'Side of the workspace for the chat panel — applies to newly opened panels (an already-open panel does not move)', (el) => {
 					new Setting(el)
 						.setName('Chat panel position')
+						.setDesc('Side of the workspace for the chat panel — applies to newly opened panels (an already-open panel does not move)')
 						.addDropdown((dd) => {
 							dd.addOption('right', 'Right');
 							dd.addOption('left', 'Left');
@@ -651,20 +828,9 @@ export class CurtisSettingTab extends PluginSettingTab {
 							});
 						});
 				}),
-				this.row('Chat panel width', 'Width in pixels', (el) => {
-					new Setting(el)
-						.setName('Chat panel width')
-						.setDesc('Width in pixels')
-						.addText((text) => {
-							text.setValue(String(s.chatWidth)).onChange(async (val) => {
-								const n = parseInt(val, 10);
-								if (!isNaN(n) && n >= 200) {
-									s.chatWidth = n;
-									await this.plugin.saveSettings();
-								}
-							});
-						});
-				}),
+				// "Chat panel width" intentionally not offered: Obsidian's API
+				// exposes no way to resize a docked sidebar leaf, so the value
+				// could be saved but never take effect. Drag the panel edge.
 			],
 		};
 	}
@@ -913,6 +1079,178 @@ export class CurtisSettingTab extends PluginSettingTab {
 		return { type: 'group', name: 'Memory', heading: 'Memory', items };
 	}
 
+	// ---- Conversations ----
+
+	private conversationsGroup(): SettingDefinitionItem {
+		const s = this.plugin.settings;
+		return {
+			type: 'group',
+			name: 'Conversations',
+			heading: 'Conversations',
+			items: [
+				this.row('Conversations folder', 'Each chat is saved as a Markdown note in this folder — synced with your vault, searchable, and readable by the agent. New chats are stored here.', (el) => {
+					new Setting(el)
+						.setName('Conversations folder')
+						.setDesc('Each chat is saved as a Markdown note in this folder — synced with your vault, searchable, and readable by the agent. New chats are stored here.')
+						.addText((text) => {
+							text.setPlaceholder('AI/conversations')
+								.setValue(s.conversationsFolder)
+								.onChange(async (val) => {
+									s.conversationsFolder = val.trim() || 'AI/Conversations';
+									await this.plugin.saveSettings();
+								});
+						})
+						.addButton((btn) => {
+							btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
+								new FolderSuggestModal(this.app, (path) => {
+									void (async () => {
+										s.conversationsFolder = path || 'AI/Conversations';
+										await this.plugin.saveSettings();
+										this.update();
+									})();
+								}).open();
+							});
+						});
+				}),
+			],
+		};
+	}
+
+	// ---- Vault retrieval (RAG) ----
+
+	private ragGroup(): SettingDefinitionItem {
+		const s = this.plugin.settings;
+		const items: SettingDefinitionRender[] = [
+			this.row('Enable vault retrieval', 'Index your notes with embeddings and inject relevant excerpts into each prompt automatically.', (el) => {
+				new Setting(el)
+					.setName('Enable vault retrieval')
+					.setDesc('Index your notes with embeddings and inject relevant excerpts into each prompt automatically.')
+					.addToggle((toggle) => {
+						toggle.setValue(s.enableRag);
+						toggle.onChange(async (val) => {
+							s.enableRag = val;
+							await this.plugin.saveSettings();
+							// Hot-reload the agent tool — no Obsidian reload needed.
+							this.plugin.toolRegistry.setRagToolEnabled(val);
+							this.update();
+						});
+					});
+			}),
+			this.row('Embedding provider', 'Any OpenAI-compatible /embeddings endpoint. Local (ollama, lm studio) works fully offline. Anthropic has no embeddings API.', (el) => {
+				new Setting(el)
+					.setName('Embedding provider')
+					.setDesc('Any OpenAI-compatible /embeddings endpoint. Local (ollama, lm studio) works fully offline. Anthropic has no embeddings API.')
+					.addDropdown((dd) => {
+						for (const def of this.plugin.providerRegistry.getAllDefinitions()) {
+							if (def.authType === 'anthropic') continue;
+							dd.addOption(def.id, def.name);
+						}
+						dd.setValue(s.ragEmbeddingProvider);
+						dd.onChange(async (val) => {
+							s.ragEmbeddingProvider = val;
+							s.ragEmbeddingModel = defaultEmbeddingModel(val);
+							await this.plugin.saveSettings();
+							this.update();
+						});
+					});
+			}),
+			this.row('Embedding model', 'Model ID sent to the /embeddings endpoint.', (el) => {
+				new Setting(el)
+					.setName('Embedding model')
+					.setDesc('Model ID sent to the /embeddings endpoint.')
+				.addText((text) => {
+					text.setPlaceholder('Model ID')
+						.setValue(s.ragEmbeddingModel)
+							.onChange(async (val) => {
+								s.ragEmbeddingModel = val.trim() || 'text-embedding-3-small';
+								await this.plugin.saveSettings();
+							});
+					});
+			}),
+		];
+
+		if (s.enableRag) {
+			items.push(
+				this.row('Chunk size', 'Characters per note chunk (default 500).', (el) => {
+					new Setting(el)
+						.setName('Chunk size')
+						.setDesc('Characters per note chunk (default 500).')
+						.addText((text) => {
+							text.setValue(String(s.ragChunkSize)).onChange(async (val) => {
+								const n = parseInt(val, 10);
+								if (!isNaN(n) && n >= 100) {
+									s.ragChunkSize = n;
+									await this.plugin.saveSettings();
+								}
+							});
+						});
+				}),
+				this.row('Chunk overlap', 'Characters of overlap between consecutive chunks (default 50).', (el) => {
+					new Setting(el)
+						.setName('Chunk overlap')
+						.setDesc('Characters of overlap between consecutive chunks (default 50).')
+						.addText((text) => {
+							text.setValue(String(s.ragChunkOverlap)).onChange(async (val) => {
+								const n = parseInt(val, 10);
+								if (!isNaN(n) && n >= 0 && n < s.ragChunkSize / 2) {
+									s.ragChunkOverlap = n;
+									await this.plugin.saveSettings();
+								}
+							});
+						});
+				}),
+				this.row('Results per query', 'How many excerpts to inject into each prompt (default 5).', (el) => {
+					new Setting(el)
+						.setName('Results per query')
+						.setDesc('How many excerpts to inject into each prompt (default 5).')
+						.addDropdown((dd) => {
+							for (const n of [3, 5, 8, 12]) dd.addOption(String(n), String(n));
+							dd.setValue(String(s.ragTopK));
+							dd.onChange(async (val) => {
+								s.ragTopK = Number(val);
+								await this.plugin.saveSettings();
+							});
+						});
+				})
+			);
+
+			// Index status + actions. Rebuilt on every this.update() so the
+			// counts refresh after a build finishes.
+			const status = this.plugin.ragIndex.getStatus();
+			const statusText = status.modelMismatch
+				? `Index built with ${status.embeddingProvider}/${status.embeddingModel} — rebuild to use the provider selected above.`
+				: status.lastBuilt
+					? `${status.fileCount} notes · ${status.chunkCount} chunks · built ${new Date(status.lastBuilt).toLocaleString()}`
+					: 'No index yet — build one to activate retrieval.';
+			items.push(
+				this.row('Index status', statusText, (el) => {
+					new Setting(el)
+						.setName('Index status')
+						.setDesc(statusText)
+						.addButton((btn) => {
+							btn.setButtonText(status.building ? 'Building…' : 'Rebuild index')
+								.setClass('mod-cta')
+								.setDisabled(status.building)
+								.onClick(async () => {
+									await rebuildIndexWithProgress(this.plugin);
+									this.update();
+								});
+						})
+						.addButton((btn) => {
+							btn.setButtonText('Delete index').setTooltip('Remove the stored embedding index');
+							btn.buttonEl.addClass('mod-destructive');
+							btn.onClick(async () => {
+								await this.plugin.ragIndex.clear();
+								new Notice('Vault index deleted');
+								this.update();
+							});
+						});
+				})
+			);
+		}
+		return { type: 'group', name: 'Vault retrieval', heading: 'Vault retrieval', items };
+	}
+
 	// ---- Support ----
 
 	private supportGroup(): SettingDefinitionItem {
@@ -951,6 +1289,12 @@ export class CurtisSettingTab extends PluginSettingTab {
 	}
 
 	private openCustomProviderModal(existing?: ProviderDefinition, existingKey?: string): void {
+		// Prefill from the keychain when the stored plaintext was wiped (by
+		// design, secrets.ts) — a blank prefill silently cleared the stored
+		// key the moment the user saved any edit.
+		const resolvedKey = existing
+			? (existingKey || resolveApiKey(this.app, this.plugin.settings.providerConfigs[existing.id]) || '')
+			: undefined;
 		new CustomProviderModal(
 			this.app,
 			(result) => {
@@ -968,17 +1312,44 @@ export class CurtisSettingTab extends PluginSettingTab {
 					setApiKeyForProvider(this.app, definition.id, config, apiKey);
 					this.plugin.settings.providerConfigs[definition.id] = config;
 					await this.plugin.saveSettings();
-					// Recreate the registry with new config
+					// Recreate the registry entry — without removing the old def
+					// first, the registry holds two definitions with the same id
+					// and updateConfig() recreates from the STALE one.
+					this.plugin.providerRegistry.removeCustomProvider(definition.id);
 					this.plugin.providerRegistry.addCustomProvider(definition);
 					this.plugin.providerRegistry.updateConfig(definition.id, config);
+					if (definition.autoDiscoverModels && !definition.models.length) {
+						void this.plugin.providerRegistry
+							.discoverModels(definition)
+							.then(() => this.update())
+							.catch(() => undefined);
+					}
 					this.update();
 					new Notice(`Saved ${definition.name}`);
 				})();
 			},
 			existing,
-			existingKey
+			resolvedKey
 		).open();
 	}
+}
+
+// ============================================================================
+// Vault retrieval helpers
+// ============================================================================
+
+/** Sensible default embedding model per provider when the user switches
+ *  ragEmbeddingProvider. Anything unknown keeps the OpenAI default — the
+ *  field is editable and the /embeddings shape is identical. */
+function defaultEmbeddingModel(providerId: string): string {
+	const defaults: Record<string, string> = {
+		openai: 'text-embedding-3-small',
+		google: 'gemini-embedding-001',
+		'zai-glm': 'embedding-3',
+		ollama: 'nomic-embed-text',
+		lmstudio: 'text-embedding-nomic-embed-text-v1.5',
+	};
+	return defaults[providerId] || 'text-embedding-3-small';
 }
 
 // ============================================================================
@@ -1012,20 +1383,14 @@ async function testProviderConnection(
 	}
 
 	const modelId = config.defaultModel || def.models[0]?.id || 'gpt-3.5-turbo';
-	let body: string;
-	if (isAnthropic) {
-		body = JSON.stringify({
-			model: modelId,
-			max_tokens: 16,
-			messages: [{ role: 'user', content: 'say ok' }],
-		});
-	} else {
-		body = JSON.stringify({
-			model: modelId,
-			max_tokens: 16,
-			messages: [{ role: 'user', content: 'say ok' }],
-		});
-	}
+	// Same minimal body for both dialects (model + max_tokens + messages is
+	// valid OpenAI-compat AND Anthropic shape) — auth + reachability is all
+	// this test validates.
+	const body = JSON.stringify({
+		model: modelId,
+		max_tokens: 16,
+		messages: [{ role: 'user', content: 'say ok' }],
+	});
 
 	const start = Date.now();
 	try {

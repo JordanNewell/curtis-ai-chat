@@ -1,6 +1,6 @@
 // Curtis — Main Plugin Entry Point
 
-import { Editor, Notice, Plugin, requestUrl } from 'obsidian';
+import { Editor, Notice, Plugin, requestUrl, TFile } from 'obsidian';
 import type { CurtisSettings, AIMessage, TokenUsage, AIProvider, ToolCall, ToolDefinition } from './types';
 import { DEFAULT_SETTINGS, CurtisSettingTab } from './settings';
 import { ProviderRegistry } from './providers/registry';
@@ -8,11 +8,12 @@ import { chatStream, flattenHeaders } from './providers/transport';
 import { EventBus } from './core/events';
 import { HookSystem } from './core/hooks';
 import { ToolRegistry } from './core/tools';
+import { McpManager } from './mcp/manager';
+import { RagIndexManager } from './rag';
 import { runMigrations } from './core/migration';
 import type { SettingsData } from './core/migration';
 import { migrateSecretsToKeychain, resolveApiKey } from './core/secrets';
 import { MemoryStore } from './memory';
-import { TemplateManager } from './templates';
 import { ConversationStore } from './chat/conversation-store';
 import { ChatSearchModal } from './ui/modals/chat-search-modal';
 import { DiffRewriteModal } from './ui/modals/diff-rewrite-modal';
@@ -26,10 +27,11 @@ export default class CurtisPlugin extends Plugin {
 	eventBus!: EventBus;
 	hookSystem!: HookSystem;
 	toolRegistry!: ToolRegistry;
+	mcpManager!: McpManager;
 	memoryStore!: MemoryStore;
-	templateManager!: TemplateManager;
 	providerRegistry!: ProviderRegistry;
 	conversationStore!: ConversationStore;
+	ragIndex!: RagIndexManager;
 
 	async onload(): Promise<void> {
 		// 1. Load settings with migration
@@ -48,14 +50,40 @@ export default class CurtisPlugin extends Plugin {
 		// 3. Initialize core services
 		this.eventBus = new EventBus();
 		this.hookSystem = new HookSystem();
+		// Vault retrieval (RAG) — constructed before the tool registry so agent
+		// mode can be handed semantic_search at boot. Loading the on-disk index
+		// is lazy + idempotent; it must not delay boot.
+		this.ragIndex = new RagIndexManager(this.app, this.manifest, this);
+		void this.ragIndex.ensureLoaded();
 		this.toolRegistry = new ToolRegistry(this.app, {
 			enableWebSearch: this.settings.enableWebSearch,
+			enableRag: this.settings.enableRag,
+			ragIndex: this.ragIndex,
 		});
+		// MCP: connect user-configured servers in the background — a slow or
+		// dead server must never delay plugin boot. Tools join the registry
+		// via onToolsChanged as connections come up.
+		this.mcpManager = new McpManager({
+			getServers: () => this.settings.mcpServers,
+			isEnabled: () => this.settings.enableMcp,
+			clientVersion: this.manifest.version,
+		});
+		this.mcpManager.onToolsChanged = () => this.mcpManager.syncTools(this.toolRegistry);
+		this.mcpManager.syncTools(this.toolRegistry);
+		if (this.settings.enableMcp) void this.mcpManager.connectAll();
 		this.memoryStore = new MemoryStore(this.app);
-		await this.memoryStore.load(this);
-		this.templateManager = new TemplateManager();
+		try {
+			await this.memoryStore.load(this);
+		} catch (e) {
+			// A bad memory-file path (or a read-only vault) must not kill the
+			// whole plugin — degrade to an empty in-memory store instead.
+			console.error('[Curtis] Memory store failed to load — memory disabled this session:', e);
+			new Notice('Curtis: memory file could not be opened — memory is disabled this session.');
+		}
 		this.conversationStore = new ConversationStore(this.app);
-		this.conversationStore.load();
+		// Loads vault-file conversations, watches for hand edits, and imports
+		// any history still stored in localStorage (pre-1.3 format).
+		await this.conversationStore.load(this);
 
 		// 4. Initialize provider registry (with keychain-aware key resolver)
 		const resolveKey = (providerId: string, config?: import('./types').ProviderConfig): string => {
@@ -66,7 +94,12 @@ export default class CurtisPlugin extends Plugin {
 			this.settings.customProviders,
 			resolveKey
 		);
-		await this.providerRegistry.initializeProviders();
+		// Discovery hits each enabled provider's /models endpoint sequentially —
+		// awaiting it here would block commands, ribbon, view registration and
+		// the settings tab behind network calls (or one hung endpoint). Provider
+		// instances are created synchronously up to the first await inside, so
+		// chat works immediately; model lists fill in as discovery lands.
+		void this.providerRegistry.initializeProviders();
 
 		// 4. Register views
 		this.registerView(CHAT_VIEW_TYPE, (leaf) => new ChatView(leaf, this));
@@ -76,6 +109,11 @@ export default class CurtisPlugin extends Plugin {
 
 		// 6. Register context menu
 		registerContextMenu(this);
+
+		// 6b. Vault file listeners keep the RAG index in step with edits.
+		//     Registered unconditionally — the manager no-ops when vault
+		//     retrieval is disabled or the index was never built.
+		this.registerVaultIndexListeners();
 
 		// 7. Settings tab
 		this.addSettingTab(new CurtisSettingTab(this.app, this));
@@ -87,8 +125,39 @@ export default class CurtisPlugin extends Plugin {
 	}
 
 	onunload(): void {
-		this.conversationStore.save();
-		void this.memoryStore.save(this);
+		// Flush any debounced conversation-file writes (best-effort — each
+		// mutation already schedules its own write 200ms out). Guarded: onload
+		// may have aborted before a service was constructed.
+		this.conversationStore?.save();
+		void this.memoryStore?.save(this);
+		void this.mcpManager?.disconnectAll();
+		void this.ragIndex?.dispose();
+	}
+
+	/**
+	 * Keep the RAG index in step with the vault: edits re-embed the note
+	 * (debounced inside the manager), deletes/renames update paths. All
+	 * handlers no-op unless vault retrieval is enabled AND an index exists,
+	 * so an idle vault never spends embeddings calls in the background.
+	 */
+	private registerVaultIndexListeners(): void {
+		this.registerEvent(
+			this.app.vault.on('modify', (file) => {
+				if (file instanceof TFile && file.extension === 'md') this.ragIndex.scheduleFileUpdate(file);
+			})
+		);
+		this.registerEvent(
+			this.app.vault.on('delete', (file) => {
+				if (file instanceof TFile && file.extension === 'md') void this.ragIndex.removeFile(file.path);
+			})
+		);
+		this.registerEvent(
+			this.app.vault.on('rename', (file, oldPath) => {
+				if (file instanceof TFile && file.extension === 'md') {
+					void this.ragIndex.renameFile(oldPath, file.path);
+				}
+			})
+		);
 	}
 
 	async loadSettings(): Promise<void> {
@@ -96,17 +165,18 @@ export default class CurtisPlugin extends Plugin {
 		const migrated = runMigrations(data || {});
 
 		// Deep-merge defaults over stored data so nested objects (e.g. providerConfigs)
-		// don't get wiped when the stored copy is partial/empty.
+		// don't get wiped when the stored copy is partial/empty. Default inner
+		// configs are cloned so in-place mutation in the settings UI can never
+		// pollute the module-level defaults.
+		const defaultConfigs = Object.fromEntries(
+			Object.entries(DEFAULT_SETTINGS.providerConfigs).map(([id, cfg]) => [id, { ...cfg }])
+		);
 		this.settings = {
 			...DEFAULT_SETTINGS,
 			...(migrated as Partial<CurtisSettings>),
 			providerConfigs: {
-				...DEFAULT_SETTINGS.providerConfigs,
+				...defaultConfigs,
 				...(migrated.providerConfigs || {}),
-			},
-			hotkeys: {
-				...DEFAULT_SETTINGS.hotkeys,
-				...((migrated.hotkeys as CurtisSettings['hotkeys']) || {}),
 			},
 		};
 		await this.saveData(this.settings);
@@ -434,8 +504,8 @@ export default class CurtisPlugin extends Plugin {
 
 	// ---- Agent loop --------------------------------------------------------
 	//
-	// When agent mode is enabled AND the active provider speaks the OpenAI
-	// tool-calling dialect, callAI delegates here. The loop:
+	// Invoked from the chat view when agent mode is enabled AND the active
+	// provider speaks a tool-calling dialect. The loop:
 	//   1. Send messages + tool catalog (non-streaming) → AIResponse.
 	//   2. If response has tool_calls: execute the first one, append the
 	//      assistant tool_call message + the tool result message, loop.

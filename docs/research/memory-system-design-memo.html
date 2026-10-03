@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0A0A0A">
+  <!-- Rendered from research/memory-system-design-memo.md — edit the markdown, then this file. -->
+  <meta name="description" content="Curtis AI Research memo 01 — what the memory system actually ships, what it costs, what we're measuring next.">
+  <title>Memory system design memo — Curtis AI Research</title>
+  <style>
+    @font-face {
+      font-family: "JetBrains Mono";
+      src: url("../assets/fonts/jbmono-400.woff2") format("woff2");
+      font-weight: 400;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: "JetBrains Mono";
+      src: url("../assets/fonts/jbmono-500.woff2") format("woff2");
+      font-weight: 500;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: "JetBrains Mono";
+      src: url("../assets/fonts/jbmono-700.woff2") format("woff2");
+      font-weight: 700;
+      font-display: swap;
+    }
+    :root {
+      --bg:      #0A0A0A;
+      --surface: #0F0F0F;
+      --green:   #00FF41;
+      --lift:    #1AFF72;
+      --text:    #FFFFFF;
+      --muted:   #A0A0A0;
+      --border:  #1F1F1F;
+      --mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 15px;
+      line-height: 1.75;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--green); text-decoration: none; }
+    a:hover { color: var(--lift); }
+
+    .bar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 24px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+    .bar .back {
+      font-size: 0.72rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .bar .back:hover { color: var(--green); }
+    .bar .tag {
+      font-size: 0.68rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--green);
+    }
+
+    main { max-width: 860px; margin: 0 auto; padding: 64px 24px 96px; }
+
+    h1 {
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      line-height: 1.1;
+      margin-bottom: 12px;
+    }
+    .status {
+      font-size: 0.75rem;
+      color: var(--green);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding-bottom: 32px;
+      margin-bottom: 48px;
+      border-bottom: 1px solid var(--border);
+    }
+    h2 {
+      font-size: 0.8rem;
+      font-weight: 500;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 48px 0 16px;
+    }
+    h2 .idx { color: var(--green); margin-right: 12px; }
+    p { color: var(--text); margin-bottom: 16px; font-size: 0.88rem; }
+    p strong, li strong { color: var(--green); font-weight: 500; }
+    ol, ul { margin: 0 0 16px 24px; font-size: 0.88rem; }
+    li { margin-bottom: 12px; }
+    li::marker { color: var(--green); font-size: 0.75rem; }
+    code {
+      font-family: var(--mono);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      color: var(--green);
+      font-size: 0.78rem;
+      overflow-wrap: anywhere;
+    }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 16px;
+      margin: 0 0 16px;
+      overflow-x: auto;
+    }
+    pre code { background: none; border: none; padding: 0; color: var(--green); font-size: 0.78rem; }
+    .colophon {
+      margin-top: 64px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+    .colophon a { color: var(--muted); }
+    .colophon a:hover { color: var(--green); }
+    @media (max-width: 600px) {
+      main { padding: 48px 16px 64px; }
+      p, ol, ul { font-size: 0.84rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <a class="back" href="../index.html">&larr; Curtis AI</a>
+    <span class="tag">Research &middot; Memo 01</span>
+  </div>
+  <main>
+    <h1>Memory system design memo</h1>
+    <div class="status">Status: v0 draft &middot; October 2026 &middot; Curtis AI</div>
+
+    <h2><span class="idx">00</span>Abstract</h2>
+    <p>Curtis AI Chat ships a long-term memory layer built on a deliberately small bet: facts live in one human-editable markdown file inside the user's vault, recall is full injection into every system prompt, and the only intelligence sits at capture time — a background LLM pass over each completed chat turn. There is no retrieval, no ranking, no consolidation, and no forgetting except by hand. This memo describes what actually ships in v<span data-sync="version">1.2.0</span> (with file references), the tradeoffs that design accepts, and what we intend to measure before changing it. It is written against the code, not the roadmap: RAG settings and embedding types exist in the codebase, but <code>src/rag/</code> is empty and nothing implements them.</p>
+
+    <h2><span class="idx">01</span>Problem</h2>
+    <p>A chat agent embedded in someone's vault is long-running but stateless per conversation. For Curtis, memory has to solve five things at once:</p>
+    <ol>
+      <li><strong>Persistence across conversations</strong> without a hidden database — the data lives in the user's vault, not in an opaque <code>data.json</code> blob.</li>
+      <li><strong>Capture without nagging</strong> — the user should not have to curate by hand, but also should not have facts silently invented.</li>
+      <li><strong>Recall that personalizes answers</strong> without consuming the context window or resurrecting stale facts.</li>
+      <li><strong>User control</strong> — the user must be able to see, edit, and delete what the assistant "knows," with the same editor they use for everything else.</li>
+      <li><strong>A scale bound</strong> — this is a single-user plugin. The design assumes fact counts in the tens to low hundreds, not millions of rows.</li>
+    </ol>
+    <p>The current design answers those with one markdown file and a strict capture prompt. Everything else — selection, decay, consolidation — is deferred on purpose.</p>
+
+    <h2><span class="idx">02</span>Current design</h2>
+    <p><strong>Storage.</strong> <code>MemoryStore</code> in <code>src/memory/memory.ts</code> (311 lines, the entire memory system). Facts live in a single markdown file, default <code>AI/Curtis Memory.md</code>, path configurable via <code>memoryFilePath</code> in settings. One bullet per fact:</p>
+    <pre><code>- Prefers terse commit messages [preference] &lt;!-- id:2f0a... updated:1759460000000 --&gt;</code></pre>
+    <p>Five valid categories — <code>preference</code>, <code>identity</code>, <code>project</code>, <code>instruction</code>, <code>other</code> — validated during parse so arbitrary bracketed text (wikilinks, say) is not misread as a category. The file is auto-created with a header that explains the contract: "Delete a line to forget; edit a line to correct." (The shipped default is visible at <code>demo-vault/AI/Curtis Memory.md</code>.) An in-memory cache is rebuilt on Obsidian <code>modify</code> events for that path, so hand edits reach the next prompt; a <code>writing</code> flag suppresses the modify event the store itself triggers. File creation checks the filesystem adapter rather than the vault index, because a cold-boot index lag once made <code>vault.create()</code> throw and killed the entire plugin <code>onload</code> (fixed; see CHANGELOG).</p>
+    <p><strong>Data model.</strong> <code>MemoryFact</code> in <code>src/types.ts</code> (line 326): <code>id</code>, <code>content</code>, <code>category?</code>, <code>timestamp</code>, <code>accessCount</code>, <code>lastAccessed</code>. The last two are dead: <code>accessCount</code> is always 0 and <code>lastAccessed</code> only mirrors <code>timestamp</code>. They anticipate a usage-based ranking that was never built.</p>
+    <p><strong>Capture.</strong> Three paths, all funneling into <code>addFact</code> (exact, case-insensitive content dedupe; a match refreshes the timestamp but keeps the old wording — there is no semantic dedupe):</p>
+    <ol>
+      <li><strong>Auto-extraction.</strong> After each completed generation — normal sends (<code>sendMessage</code>, <code>src/chat/view.ts</code> line ~1694) and regenerations/edit-resends (<code>streamAssistantResponse</code>, line ~2061) — <code>maybeExtractFacts</code> hands the last user/assistant pair to <code>extractAndStoreFacts</code> in <code>src/main.ts</code> (line 612). That makes a background call on the <strong>active provider and model</strong> (no dedicated cheap extractor) with a strict prompt: 0–3 durable facts as a JSON array with a category each, "durable = true across future conversations," nothing ephemeral. User and assistant text are each truncated to 2,000 characters. Parsing is tolerant (<code>extractJsonArray</code>, handles code fences); failures log to <code>console.debug</code> and never surface. Defaults are <code>enableMemory: true</code> and <code>memoryCaptureMode: 'auto'</code> (<code>src/settings.ts</code> lines 57–58), so auto-capture is on out of the box.</li>
+      <li><strong><code>/remember &lt;fact&gt;</code></strong> slash command (<code>src/chat/slash-commands.ts</code>).</li>
+      <li><strong>"Save to memory"</strong> in the editor context menu — stores the selection verbatim, no model call, gated on <code>enableMemory</code> (<code>src/commands/context-menu.ts</code>).</li>
+    </ol>
+    <p><strong>Recall.</strong> Full injection. <code>formatFactsForPrompt()</code> renders every fact as a <code>## What you know about the user</code> bullet block, and <code>buildMessagesArray</code> (<code>src/chat/view.ts</code> lines 1736–1748) appends it to the system prompt on every request when <code>enableMemory</code> is on. No selection, no scoring, no cap, no token budget. The design comment at the top of <code>src/memory/memory.ts</code> states the load-bearing assumption outright: capture is signal-gated, so the fact set stays small enough that retrieval would be wasted work. That assumption has never been measured.</p>
+    <p><strong>User controls.</strong> Settings &rarr; Memory (<code>src/settings.ts</code> lines 800–914): enable toggle, capture-mode dropdown (off/auto), file path with browse/open/clear, and a per-fact list with Edit (content + category, via <code>src/ui/modals/edit-fact-modal.ts</code>) and Delete. Slash commands: <code>/memory</code> (summary of the last 8 facts, <code>open</code>, <code>clear</code>), <code>/forget &lt;substring&gt;</code> (deletes the first substring match). Hand-editing the file is a first-class path, not a workaround.</p>
+    <p><strong>Provenance.</strong> The file header says the design is lifted from obsidian-copilot's user-memory layer (reference checkout in <code>_research/copilot/</code>).</p>
+    <p><strong>Not in the build.</strong> Two things the codebase implies but does not deliver:</p>
+    <ul>
+      <li><code>src/rag/</code> is empty. <code>enableRag</code>, <code>ragChunkSize</code>, <code>ragTopK</code>, embedding provider/model settings (<code>src/types.ts</code> lines 269–274; defaults at <code>src/settings.ts</code> lines 65–70) and the <code>EmbeddingChunk</code>/<code>RetrievalResult</code> types exist, but no embeddings call, vector store, or chunk retrieval ships. RAG is a settings shell, default off.</li>
+      <li><code>memory:fact:stored</code> and <code>memory:fact:recalled</code> are declared in the EventBus type map (<code>src/core/events.ts</code> lines 51–52) and never emitted. Nothing in <code>src/</code> listens to <code>provider:response</code> either. There is currently <strong>zero telemetry on memory behavior</strong> — not even fact counts over time.</li>
+    </ul>
+
+    <h2><span class="idx">03</span>Tradeoffs</h2>
+    <p>What the design buys:</p>
+    <ul>
+      <li><strong>Total inspectability.</strong> Storage is a plain note in the vault: readable, greppable, synced by whatever syncs the vault, editable in the user's editor. "Delete a line to forget" is the literal deletion story, and it works.</li>
+      <li><strong>Zero retrieval infrastructure.</strong> No embedding dependency (works fully offline with a local provider), no index to invalidate, no schema migration. Recall is O(n) string concatenation and deterministic — the model sees the same facts every time, which makes behavior reproducible and debuggable.</li>
+      <li><strong>A small correctness surface.</strong> One 311-line file; the parse/serialize round-trip is the only invariant to maintain.</li>
+    </ul>
+    <p>What it costs — all visible in the code:</p>
+    <ul>
+      <li><strong>Unbounded prompt growth.</strong> Every fact is injected into every request until manually deleted. Nothing caps fact count or the memory block's share of the prompt.</li>
+      <li><strong>Duplicates and contradictions accumulate.</strong> Dedupe is exact-match, and the extractor sees only one turn (2,000 chars per side), so it cannot know the existing fact set, merge paraphrases, or retire facts that stopped being true. The site copy frames this research arm as "extract, consolidate, and deliberately forget" — only extraction ships; consolidation and deliberate forgetting are open problems, and we should say so.</li>
+      <li><strong>Silent per-turn overhead.</strong> Auto mode adds a second API call per turn on the active model — possibly an expensive one — with no review gate before a fact lands in the file, and no notification that capture happened. The token usage flows through the same <code>callAI</code> path as normal turns, but since nothing consumes the events, the user cannot see this cost anywhere.</li>
+      <li><strong>Dead schema.</strong> <code>accessCount</code>/<code>lastAccessed</code> are written but never read — a ranking layer that was sketched, not built.</li>
+      <li><strong>Small inconsistencies.</strong> The core system prompt hardcodes <code>AI/Curtis Memory.md</code> (<code>src/core/system-prompt.ts</code> line 20) even when the user changes the path in settings. <code>/remember</code> and <code>addFact</code> work with <code>enableMemory</code> off (facts are stored but never injected); only the context menu respects the flag. The parser is line-oriented: paste a nested list into the file and every line becomes a fact, and a fact whose text happens to end in a bracketed valid-category word (e.g. "...the [project] folder") gets silently reclassified on the next hand-edit reload.</li>
+    </ul>
+    <p>None of these are fatal at the assumed scale. All of them get worse with time, which is the property the measurements below target.</p>
+
+    <h2><span class="idx">04</span>Open questions</h2>
+    <ol>
+      <li><strong>Growth.</strong> Does the signal-gated-capture assumption hold? What fact count does a real single-user vault reach in 30 days of daily use, and at what point does full injection cost more than it returns?</li>
+      <li><strong>Capture quality.</strong> What fraction of auto-extracted facts would the user themselves keep? Nothing today measures extractor precision, and the failure mode is quiet clutter.</li>
+      <li><strong>Duplication rate.</strong> How fast do near-duplicates and stale facts accumulate under exact-match dedupe plus single-turn extraction?</li>
+      <li><strong>Consolidation within the constraint.</strong> Can a periodic compaction pass rewrite the memory file (merging paraphrases, retiring contradicted facts) with a user-visible diff, without introducing hidden state outside the vault?</li>
+      <li><strong>Selection vs. cap.</strong> If fact sets do grow, is per-prompt selection (recency/category) ever worth its complexity, or is a hard cap plus compaction strictly better?</li>
+      <li><strong>Extraction cost.</strong> Is reusing the active model acceptable, or does a dedicated cheaper extractor pay for its configuration surface?</li>
+    </ol>
+
+    <h2><span class="idx">05</span>What we're measuring next</h2>
+    <p>Concrete, falsifiable, in order:</p>
+    <ol>
+      <li><strong>Instrument first.</strong> Fire the already-declared <code>memory:fact:stored</code>/<code>memory:fact:recalled</code> events (<code>src/core/events.ts</code> lines 51–52) and log fact count plus the memory block's share of prompt tokens per conversation. Falsifiable claim: a single-user vault stabilizes under 50 facts in 30 days of daily use. If false, full injection has a clock on it.</li>
+      <li><strong>Label extractor output.</strong> Hand-label at least 200 auto-captured facts from real usage as keep/discard. Hypothesis: keeper rate &ge; 0.8, near-duplicate rate &lt; 10% within the first 7 days.</li>
+      <li><strong>Price the background call.</strong> Measure tokens and cost of <code>extractAndStoreFacts</code> per turn across three provider tiers. Hypothesis: under 5% of per-turn spend at current prompt sizes.</li>
+      <li><strong>Injection dose-response.</strong> Run a fixed personalized-task battery with the memory block artificially loaded to 0 / 25 / 100 facts. Hypothesis: no measurable answer-quality regression at 100 facts with current models. If false, cap + compaction moves up the queue.</li>
+    </ol>
+
+    <div class="colophon">
+      Curtis AI &middot; Research memo 01 &middot; written against the code, not the roadmap &middot; <a href="memory-system-design-memo.md">raw markdown</a> &middot; <a href="../index.html">curtis.ai</a>
+    </div>
+  </main>
+</body>
+</html>

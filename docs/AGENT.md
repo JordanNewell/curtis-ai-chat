@@ -69,6 +69,17 @@ Two network tools let the AI look things up outside your vault. **Off by default
 
 **Privacy:** `web_search` queries DuckDuckGo. `read_url` proxies through `r.jina.ai` to extract article content. Both leak the query/URL to those services. Vault contents are never sent — only the query string the model decides to issue.
 
+## MCP servers
+
+The agent's toolset isn't limited to what ships with Curtis. Through the [Model Context Protocol](https://modelcontextprotocol.io) (MCP), Curtis connects to MCP servers you already run — a browser controller, a database client, a GitHub integration — and offers every tool they expose to the model alongside the built-ins.
+
+- **Enable:** Settings → Curtis AI Chat → MCP servers → toggle **Enable MCP**, then **Add server** with a name and its Streamable HTTP URL. Static headers (e.g. `Authorization: Bearer …`) are configurable per server.
+- **Requires agent mode** — MCP tools ride the same loop and `agentMaxTurns` cap as the built-ins.
+- **Transport:** Streamable HTTP only, on desktop and mobile. Local stdio servers (the `npx some-mcp-server` kind) have no child process to attach to — bridge them with [`mcp-proxy`](https://github.com/sparfenyuk/mcp-proxy) or [`supergateway`](https://github.com/supercorp/supergateway) and point Curtis at the HTTP URL.
+- **Naming:** server tools are namespaced `mcp__<server>__<tool>` (e.g. `mcp__github__create_issue`), so they can never collide with the built-in vault tools.
+
+**Privacy:** MCP tool calls go to the server URLs you configure, with the headers you configure. Tool results travel through your AI provider like any other tool result. Curtis performs no MCP OAuth — use static headers against servers you trust.
+
 ## Example use cases
 
 **Research synthesis**

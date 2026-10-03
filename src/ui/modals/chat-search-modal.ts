@@ -6,7 +6,8 @@
 // "title — snippet" string, and Obsidian fuzzy-matches against that.
 // No need to bind to the input field ourselves.
 
-import { App, FuzzySuggestModal } from 'obsidian';
+import { App, FuzzySuggestModal, prepareFuzzySearch } from 'obsidian';
+import type { FuzzyMatch } from 'obsidian';
 import type CurtisPlugin from '../../main';
 import type { Conversation, ConversationMessage } from '../../types';
 
@@ -53,6 +54,41 @@ export class ChatSearchModal extends FuzzySuggestModal<ChatSearchResult> {
 			}
 		}
 		return results;
+	}
+
+	/**
+	 * Pre-filter with the raw query across ALL conversations before the
+	 * recency cap applies. The base class fuzzy-matches only over getItems(),
+	 * and getItems() truncates by recency — without this override, every
+	 * conversation older than the newest 200 messages is invisible to search
+	 * (title included), no matter what the user types.
+	 */
+	getSuggestions(query: string): FuzzyMatch<ChatSearchResult>[] {
+		const q = query.trim().toLowerCase();
+		if (!q) {
+			return this.getItems().map((item) => ({ item, match: { matches: [], score: 0 } }));
+		}
+		const results: ChatSearchResult[] = [];
+		for (const conv of this.plugin.conversationStore.getAllConversations()) {
+			const titleHit = conv.title.toLowerCase().includes(q);
+			for (const message of conv.messages) {
+				const content = typeof message.content === 'string' ? message.content : '';
+				if (!titleHit && !content.toLowerCase().includes(q)) continue;
+				const snippet = snippetOf(content);
+				if (!snippet) continue;
+				results.push({ conversation: conv, message, snippet });
+				if (results.length >= MAX_ITEMS) break;
+			}
+			if (results.length >= MAX_ITEMS) break;
+		}
+		const fuzzy = prepareFuzzySearch(query);
+		const scored: FuzzyMatch<ChatSearchResult>[] = [];
+		for (const item of results) {
+			const match = fuzzy(this.getItemText(item));
+			if (match) scored.push({ item, match });
+		}
+		scored.sort((a, b) => a.match.score - b.match.score);
+		return scored;
 	}
 
 	/** Plain text used for fuzzy scoring + filtering. */

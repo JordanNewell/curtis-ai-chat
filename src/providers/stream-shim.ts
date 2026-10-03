@@ -34,7 +34,6 @@ export class NodeIncomingReader implements ReadableReader {
 	private done = false;
 	private error: Error | null = null;
 	private waiters: Array<() => void> = [];
-	private locked = false;
 	private stream: NodeIncomingMessage | undefined;
 
 	constructor(stream: NodeIncomingMessage) {
@@ -75,7 +74,6 @@ export class NodeIncomingReader implements ReadableReader {
 	}
 
 	releaseLock(): void {
-		this.locked = false;
 		// Best-effort cleanup of the underlying stream
 		try {
 			this.stream?.destroy?.();

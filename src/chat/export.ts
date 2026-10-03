@@ -15,7 +15,9 @@ function formatTime(ts: number): string {
  *  - H1 title
  *  - Metadata block (provider, model, started, message count)
  *  - Each message as a section with role + timestamp + content
- *  - Attached images emitted as markdown image syntax (`![](path)`).
+ *  - Attached images emitted as markdown image syntax with an angle-bracket
+ *    destination (`![](<path>)`) — vault paths may contain spaces, which
+ *    break a bare CommonMark destination.
  *    msg.images holds vault paths — these render natively inside Obsidian
  *    and travel with the .md as portable references elsewhere. */
 export function formatConversationAsMarkdown(
@@ -52,7 +54,8 @@ export function formatConversationAsMarkdown(
 		}
 		if (msg.images && msg.images.length > 0) {
 			for (const img of msg.images) {
-				lines.push(`![](${img})`);
+				// Angle brackets: a bare destination breaks on paths with spaces.
+				lines.push(`![](<${img}>)`);
 			}
 			lines.push('');
 		}

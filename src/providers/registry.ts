@@ -46,6 +46,13 @@ interface GenericModelsResponse {
 
 type ModelsResponse = OpenAIModelsResponse | OllamaModelsResponse | GeminiModelsResponse | GenericModelsResponse;
 
+/**
+ * OpenAI-dialect providers known to accept `stream_options.include_usage` on
+ * streamed requests. Deliberately not enabled for custom/user-defined
+ * endpoints — strict-compat local servers may 400 on the unknown field.
+ */
+const STREAM_USAGE_PROVIDER_IDS = new Set(['openai', 'azure-openai', 'openrouter']);
+
 // ============================================================================
 // BUILT-IN PROVIDER DEFINITIONS
 // ============================================================================
@@ -490,8 +497,9 @@ export class ProviderRegistry {
 			}
 		}
 
-		// Auto-discover models for Ollama and LM Studio
-		for (const def of PROVIDER_DEFINITIONS) {
+		// Auto-discover models for every provider that asks for it (built-in
+		// definitions and custom providers alike).
+		for (const def of this.getAllDefinitions()) {
 			if (def.autoDiscoverModels && this.providers.has(def.id)) {
 				await this.discoverModels(def);
 			}
@@ -504,7 +512,9 @@ export class ProviderRegistry {
 		const endpoint = config?.customEndpoint || def.endpoint;
 
 		if (def.authType === 'anthropic') {
-			return new AnthropicProvider(apiKey);
+			// Custom endpoints (e.g. Claude-compatible gateways) must be honored —
+			// silently falling back to api.anthropic.com would leak the proxy key.
+			return new AnthropicProvider(apiKey, endpoint);
 		}
 
 		// Azure requires a user-supplied deployment URL — refuse to construct
@@ -523,6 +533,7 @@ export class ProviderRegistry {
 			models: def.models,
 			apiKey,
 			authType: def.authType,
+			supportsStreamUsage: STREAM_USAGE_PROVIDER_IDS.has(def.id),
 		});
 	}
 
@@ -559,8 +570,15 @@ export class ProviderRegistry {
 		}
 
 		const headers: Record<string, string> = {};
-		if (apiKey && def.authType === 'bearer') headers['Authorization'] = `Bearer ${apiKey}`;
-		else if (apiKey && def.authType === 'anthropic') headers['x-api-key'] = apiKey;
+		if (def.id === 'google' && apiKey) {
+			// The native v1beta/models endpoint rejects raw API keys as Bearer
+			// tokens — it only accepts x-goog-api-key / ?key=.
+			headers['x-goog-api-key'] = apiKey;
+		} else if (apiKey && def.authType === 'bearer') {
+			headers['Authorization'] = `Bearer ${apiKey}`;
+		} else if (apiKey && def.authType === 'anthropic') {
+			headers['x-api-key'] = apiKey;
+		}
 
 		try {
 			const resp = await requestUrl({
@@ -616,13 +634,16 @@ export class ProviderRegistry {
 	private parseModelsResponse(providerId: string, data: ModelsResponse): AIModel[] {
 		// OpenAI-compat: { data: [{ id, context_length? }] }
 		if ('data' in data && Array.isArray(data.data)) {
-			return data.data.map((m) => ({
-				id: m.id,
-				name: m.id,
-				contextLength: m.context_length || m.context_window || 0,
-				inputPrice: 0,
-				outputPrice: 0,
-			}));
+			return data.data
+				.filter((m): m is { id: string; context_length?: number; context_window?: number } =>
+					typeof m.id === 'string' && m.id.length > 0)
+				.map((m) => ({
+					id: m.id,
+					name: m.id,
+					contextLength: m.context_length || m.context_window || 0,
+					inputPrice: 0,
+					outputPrice: 0,
+				}));
 		}
 		// Ollama: { models: [{ name, ... }] } — names often have :tag suffix
 		if ('models' in data && Array.isArray(data.models) && providerId === 'ollama') {
@@ -648,7 +669,6 @@ export class ProviderRegistry {
 						contextLength: m.inputTokenLimit || 0,
 						inputPrice: 0,
 						outputPrice: 0,
-						visionSupported: true,
 					};
 				});
 		}

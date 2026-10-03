@@ -103,7 +103,9 @@ export const WEB_SEARCH_TOOL: ToolDefinition = {
 			);
 			return `Found ${results.length} results for "${query}":\n\n${lines.join('\n\n')}`;
 		} catch (e) {
-			return `Web search failed: ${e instanceof Error ? e.message : String(e)}`;
+			// Throw so executeTool marks the result is_error — a dead network
+			// must not render as a successful "Tool result:".
+			throw new Error(`Web search failed: ${e instanceof Error ? e.message : String(e)}`);
 		}
 	},
 };
@@ -124,6 +126,10 @@ export const READ_URL_TOOL: ToolDefinition = {
 		if (!/^https?:\/\//i.test(url)) {
 			return 'URL must start with http:// or https://';
 		}
+		// Truncate to keep tool result manageable — providers cap context.
+		const MAX = 8000;
+		const truncate = (text: string): string =>
+			text.length > MAX ? text.slice(0, MAX) + '\n\n…[truncated]' : text;
 
 		try {
 			const resp = await requestUrl({
@@ -147,7 +153,7 @@ export const READ_URL_TOOL: ToolDefinition = {
 						const nested = isRecord(parsed.data) ? parsed.data : parsed;
 						const content = typeof nested.content === 'string' ? nested.content : '';
 						const title = typeof nested.title === 'string' ? nested.title : '';
-						if (content) return title ? `# ${title}\n\n${content}` : content;
+						if (content) return title ? `# ${title}\n\n${truncate(content)}` : truncate(content);
 					}
 					return `No readable content at ${url}`;
 				} catch {
@@ -157,14 +163,10 @@ export const READ_URL_TOOL: ToolDefinition = {
 			if (!resp.text || resp.text.trim().length === 0) {
 				return `No readable content at ${url}`;
 			}
-			// Truncate to keep tool result manageable — providers cap context.
-			const MAX = 8000;
-			const body = resp.text.length > MAX
-				? resp.text.slice(0, MAX) + '\n\n…[truncated]'
-				: resp.text;
-			return body;
+			return truncate(resp.text);
 		} catch (e) {
-			return `URL fetch failed: ${e instanceof Error ? e.message : String(e)}`;
+			// Throw so executeTool marks the result is_error.
+			throw new Error(`URL fetch failed: ${e instanceof Error ? e.message : String(e)}`);
 		}
 	},
 };

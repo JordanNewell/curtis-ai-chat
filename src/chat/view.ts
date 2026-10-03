@@ -14,6 +14,7 @@ import { downloadConversationMarkdown } from './export';
 import { saveMessageAsNote, saveImageToVault } from '../vault/notes';
 import { getActiveNoteFile } from '../vault/active-note';
 import { composeSystemPrompt } from '../core/system-prompt';
+import { formatRetrievedContext } from '../rag';
 import {
 	VoiceRecorder,
 	transcribeAudio,
@@ -125,15 +126,15 @@ function friendlyError(error: Error, hasImages = false): { message: string; caus
 	return { message: error.message || 'Request failed' };
 }
 
-// Tracks whether the most recent send included images — passed into
-// friendlyError so it can disambiguate image-rejection errors.
-let currentSendHasImagesFlag = false;
-
 export class ChatView extends ItemView {
 	plugin: CurtisPlugin;
 	private renderer: MessageRenderer;
 	private store: ConversationStore;
 	private messagesContainer!: HTMLElement;
+	/** Tracks whether the most recent send included images — passed into
+	 *  friendlyError so it can disambiguate image-rejection errors. Instance
+	 *  field (not module-level) so two open ChatViews never cross-talk. */
+	private currentSendHasImages = false;
 	/** Persistent background layer (wallpaper + brand watermark). */
 	private backgroundLayer!: HTMLElement;
 	/** Hint row below input — text reflects current enterKeyBehavior setting. */
@@ -148,6 +149,13 @@ export class ChatView extends ItemView {
 	private slashMenu: HTMLElement | null = null;
 	/** @-mention autocomplete dropdown (created lazily). */
 	private mentionMenu: HTMLElement | null = null;
+	/** Offset of the last character of the most recently selected @-mention
+	 *  (its trailing space). Prose typed after a mention still matches the
+	 *  mention regex via the mention's own '@' — the menu may only reopen for
+	 *  a match that starts at/after this offset, i.e. a fresh '@' typed after
+	 *  the mention. Reset when the caret moves before it or the input is
+	 *  replaced/cleared. */
+	private mentionEndOffset = -1;
 	/** Debounced vault-scan for @-mention suggestions. The scan iterates every
 	 *  markdown file in the vault; coalescing rapid keystrokes prevents the
 	 *  input handler from blocking the main thread on large vaults. The hide
@@ -197,6 +205,12 @@ export class ChatView extends ItemView {
 	private arenaAbortControllers: Map<string, AbortController> = new Map();
 
 	startNewChat(): void {
+		// A new chat mid-stream would repoint the store's current conversation
+		// while callbacks are still writing — block like the history dropdown does.
+		if (this.isGenerating || this.arenaAbortControllers.size > 0) {
+			new Notice('Stop the current response before starting a new chat');
+			return;
+		}
 		const provider = this.plugin.providerRegistry.getActiveProvider(this.plugin.settings.activeProvider);
 		this.store.createConversation(
 			provider?.id || this.plugin.settings.activeProvider,
@@ -745,12 +759,24 @@ export class ChatView extends ItemView {
 	private maybeShowMentionMenu(): void {
 		const value = this.inputEl.value;
 		const cursorPos = this.inputEl.selectionStart ?? value.length;
+		// Caret moved before a selected mention (or the input was cleared) —
+		// the stale guard must not suppress a fresh mention typed there.
+		if (this.mentionEndOffset >= 0 && cursorPos < this.mentionEndOffset) {
+			this.mentionEndOffset = -1;
+		}
 		const beforeCursor = value.slice(0, cursorPos);
 		// Query chars: word chars, spaces, hyphens. Stop at the @ boundary.
 		const match = beforeCursor.match(/(?:^|\s)@([\w\s-]*)$/);
 		if (!match) {
 			// Cancel any in-flight debounced lookup so a stale scan can't
 			// re-open the menu after the user deleted the `@`.
+			this.debouncedMentionLookup.cancel();
+			this.hideMentionMenu();
+			return;
+		}
+		// Prose typed after a selected mention re-matches the regex through the
+		// mention's own '@'. Suppress it — Enter must send, not clobber text.
+		if (this.mentionEndOffset >= 0 && (match.index ?? 0) < this.mentionEndOffset) {
 			this.debouncedMentionLookup.cancel();
 			this.hideMentionMenu();
 			return;
@@ -855,6 +881,11 @@ export class ChatView extends ItemView {
 		// Cursor goes right after the trailing space so typing continues naturally.
 		const newCursor = atPos + insert.length;
 		this.inputEl.setSelectionRange(newCursor, newCursor);
+		// Arm the reopen guard — see mentionEndOffset. The trailing space is
+		// the mention's last character.
+		this.mentionEndOffset = newCursor - 1;
+		// Kill any in-flight scan scheduled just before the selection.
+		this.debouncedMentionLookup.cancel();
 		this.autoResizeInput();
 		// De-dupe — attaching the same note twice would just duplicate the context.
 		if (!this.pendingNoteAttachments.some((n) => n.path === file.path)) {
@@ -1071,6 +1102,27 @@ export class ChatView extends ItemView {
 		new Notice('Quoted into input');
 	}
 
+	/**
+	 * Cost for one response from the provider's published pricing; null when
+	 * the provider/model has no known pricing (local servers, undiscovered
+	 * models) — /stats totals simply skip unknown-cost messages.
+	 */
+	private estimateMessageCost(providerId: string, modelId: string, usage: TokenUsage): number | null {
+		return this.plugin.providerRegistry.estimateCost(providerId, modelId, usage.promptTokens, usage.completionTokens);
+	}
+
+	/**
+	 * Prefill the composer from outside the view (context menu's "Ask AI about
+	 * selection", external commands). Public API — replaces the input content.
+	 */
+	setInputValue(text: string): void {
+		this.inputEl.value = text;
+		this.mentionEndOffset = -1;
+		this.autoResizeInput();
+		this.inputEl.focus();
+		this.inputEl.setSelectionRange(this.inputEl.value.length, this.inputEl.value.length);
+	}
+
 	// --- Voice I/O --------------------------------------------------------
 
 	/**
@@ -1093,10 +1145,19 @@ export class ChatView extends ItemView {
 		if (!isMediaRecorderSupported() || !this.micBtn) return;
 
 		if (this.voiceRecorder) {
-			// Stop + transcribe
-			const blob = await this.voiceRecorder.stop();
+			// Null the field and clear the UI BEFORE awaiting stop — a second
+			// click inside the stop window must not re-enter this branch.
+			const recorder = this.voiceRecorder;
 			this.voiceRecorder = null;
 			this.micBtn.removeClass('is-recording');
+			let blob: Blob;
+			try {
+				blob = await recorder.stop();
+			} catch (e) {
+				console.error('[Curtis] Failed to stop recording:', e);
+				new Notice('Recording failed');
+				return;
+			}
 
 			if (blob.size === 0) {
 				new Notice('Recording was empty');
@@ -1289,7 +1350,12 @@ export class ChatView extends ItemView {
 		// Best-effort cleanup when the player is removed from the DOM (e.g.
 		// when the conversation re-renders). MutationObserver is overkill —
 		// a single onunload hook on the wrapper covers the common cases.
-		const cleanup = (): void => {
+		const cleanup = (e: Event): void => {
+			// DOMNodeRemoved bubbles — the player re-renders itself on every
+			// state change; only the WRAPPER's own removal ends the
+			// subscription (unsubscribing on descendant removal froze the
+			// player after its first re-render).
+			if (e.target !== wrapper) return;
 			unsub();
 			wrapper.removeEventListener('DOMNodeRemoved', cleanup);
 		};
@@ -1410,9 +1476,12 @@ export class ChatView extends ItemView {
 		if (this.arenaMode && this.arenaSelectedModels.length >= 2) {
 			// Slash commands still take precedence inside arena.
 			if (trimmed.startsWith('/')) {
+				const before = this.inputEl.value;
 				const consumed = await handleSlashCommand(trimmed, this.slashContext());
 				if (consumed) {
-					this.inputEl.value = '';
+					// Only clear when the command left the input untouched — /paste
+					// REPLACES the input with the clipboard text.
+					if (this.inputEl.value === before) this.inputEl.value = '';
 					this.autoResizeInput();
 					return;
 				}
@@ -1426,9 +1495,13 @@ export class ChatView extends ItemView {
 
 		// Slash command interception — consumed commands suppress the send.
 		if (trimmed.startsWith('/')) {
+			const before = this.inputEl.value;
 			const consumed = await handleSlashCommand(trimmed, this.slashContext());
 			if (consumed) {
-				this.inputEl.value = '';
+				// Only clear when the command left the input untouched — /paste
+				// REPLACES the input with the clipboard text (clearing here used
+				// to wipe it in the same tick, making /paste a no-op).
+				if (this.inputEl.value === before) this.inputEl.value = '';
 				this.autoResizeInput();
 				return;
 			}
@@ -1463,13 +1536,14 @@ export class ChatView extends ItemView {
 			attachedNotes: notePaths.length > 0 ? notePaths : undefined,
 		});
 		// Track for error-reporting (so we can suggest vision model if it fails).
-		currentSendHasImagesFlag = imagePaths.length > 0;
+		this.currentSendHasImages = imagePaths.length > 0;
 		// Clear the pending strips — images + notes are now persisted on the message.
 		this.pendingImages = [];
 		this.renderImageStrip();
 		this.pendingNoteAttachments = [];
 		this.renderAttachmentChips();
 		this.inputEl.value = '';
+		this.mentionEndOffset = -1;
 		this.autoResizeInput();
 
 		// Re-render to show user message
@@ -1482,6 +1556,9 @@ export class ChatView extends ItemView {
 
 		// Create assistant message placeholder with role label + "Thinking…" state
 		const conv = this.store.getCurrentConversation()!;
+		// Pin every store write below to THIS conversation — the user may start
+		// a new chat or switch conversations while the stream is in flight.
+		const convId = conv.id;
 		const assistantWrapper = this.messagesContainer.createDiv({
 			cls: 'ai-message ai-message-assistant ai-message-thinking',
 		});
@@ -1534,26 +1611,31 @@ export class ChatView extends ItemView {
 					},
 					onUsage: (usage: TokenUsage) => {
 						if (!assistantStored) {
-							const stored = this.store.addMessage({
+							const stored = this.store.addMessageTo(convId, {
 								role: 'assistant',
 								content: this.streamingContent,
 								tokens: usage,
+								cost: this.estimateMessageCost(provider.id, this.plugin.settings.activeModel, usage) ?? undefined,
 								provider: provider.id,
 								model: this.plugin.settings.activeModel,
 							});
-							storedMessageId = stored.id;
-							assistantStored = true;
+							if (stored) {
+								storedMessageId = stored.id;
+								assistantStored = true;
+							}
 						}
-						const info = assistantWrapper.querySelector('.ai-message-info');
-						if (info instanceof HTMLElement) {
-							info.setText(`${usage.totalTokens} tok`);
-						} else {
-							meta.createDiv({ cls: 'ai-message-info', text: `${usage.totalTokens} tok` });
+						if (this.plugin.settings.showTokenUsage) {
+							const info = assistantWrapper.querySelector('.ai-message-info');
+							if (info instanceof HTMLElement) {
+								info.setText(`${usage.totalTokens} tok`);
+							} else {
+								meta.createDiv({ cls: 'ai-message-info', text: `${usage.totalTokens} tok` });
+							}
 						}
 					},
 					onError: (error: Error) => {
 						console.error('[Curtis] Agent error:', error);
-						const friendly = friendlyError(error, currentSendHasImagesFlag);
+						const friendly = friendlyError(error, this.currentSendHasImages);
 						new Notice(friendly.message, 8000);
 						this.streamingContent += `\n\n*⚠️ ${friendly.message}*`;
 						this.renderer.renderStreamedMessage(assistantContent, this.streamingContent);
@@ -1561,7 +1643,7 @@ export class ChatView extends ItemView {
 					onToolCall: (call: ToolCall) => {
 						// Render the invocation as a stored assistant message + a
 						// live bubble inserted before the streaming assistant wrapper.
-						this.store.addMessage({
+						this.store.addMessageTo(convId, {
 							role: 'assistant',
 							content: '',
 							tool_calls: [call],
@@ -1574,7 +1656,7 @@ export class ChatView extends ItemView {
 						this.scrollToBottom();
 					},
 					onToolResult: (call: ToolCall, result: { content: string; isError: boolean }) => {
-						this.store.addMessage({
+						this.store.addMessageTo(convId, {
 							role: 'tool',
 							content: result.content,
 							tool_call_id: call.id,
@@ -1603,27 +1685,34 @@ export class ChatView extends ItemView {
 					},
 					onUsage: (usage: TokenUsage) => {
 						if (!assistantStored) {
-							const stored = this.store.addMessage({
+							const stored = this.store.addMessageTo(convId, {
 								role: 'assistant',
 								content: this.streamingContent,
 								tokens: usage,
+								cost: this.estimateMessageCost(provider.id, this.plugin.settings.activeModel, usage) ?? undefined,
 								provider: provider.id,
 								model: this.plugin.settings.activeModel,
 							});
-							storedMessageId = stored.id;
-							assistantStored = true;
+							if (stored) {
+								storedMessageId = stored.id;
+								assistantStored = true;
+							}
 						}
-						// Update token count in the meta row
-						const info = assistantWrapper.querySelector('.ai-message-info');
-						if (info instanceof HTMLElement) {
-							info.setText(`${usage.totalTokens} tok`);
-						} else {
-							meta.createDiv({ cls: 'ai-message-info', text: `${usage.totalTokens} tok` });
+						if (this.plugin.settings.showTokenUsage) {
+							// Update token count in the meta row (same gate as the
+							// persisted-message badge so the count doesn't flash
+							// for users who turned token display off).
+							const info = assistantWrapper.querySelector('.ai-message-info');
+							if (info instanceof HTMLElement) {
+								info.setText(`${usage.totalTokens} tok`);
+							} else {
+								meta.createDiv({ cls: 'ai-message-info', text: `${usage.totalTokens} tok` });
+							}
 						}
 					},
 					onError: (error: Error) => {
 						console.error('[Curtis] Stream error:', error);
-						const friendly = friendlyError(error, currentSendHasImagesFlag);
+						const friendly = friendlyError(error, this.currentSendHasImages);
 						new Notice(friendly.message, 8000);
 						this.streamingContent += `\n\n*⚠️ ${friendly.message}*`;
 						this.renderer.renderStreamedMessage(assistantContent, this.streamingContent);
@@ -1634,14 +1723,16 @@ export class ChatView extends ItemView {
 
 			// If no usage callback fired, store the message without token counts
 			if (!assistantStored && this.streamingContent) {
-				const stored = this.store.addMessage({
+				const stored = this.store.addMessageTo(convId, {
 					role: 'assistant',
 					content: this.streamingContent,
 					provider: provider.id,
 					model: this.plugin.settings.activeModel,
 				});
-				storedMessageId = stored.id;
-				assistantStored = true;
+				if (stored) {
+					storedMessageId = stored.id;
+					assistantStored = true;
+				}
 			}
 		} catch (e) {
 			if ((e as Error).name !== 'AbortError') {
@@ -1690,7 +1781,7 @@ export class ChatView extends ItemView {
 			}
 			// Background fact extraction — fire-and-forget.
 			// Reset image-flag + extract facts.
-			currentSendHasImagesFlag = false;
+			this.currentSendHasImages = false;
 			this.maybeExtractFacts();
 		}
 	}
@@ -1745,6 +1836,8 @@ export class ChatView extends ItemView {
 			const memBlock = this.plugin.memoryStore.formatFactsForPrompt();
 			if (memBlock) sysParts.push(memBlock);
 		}
+		const ragBlock = await this.buildRetrievedContextBlock(conv);
+		if (ragBlock) sysParts.push(ragBlock);
 		messages.push({ role: 'system', content: sysParts.join('\n\n') });
 
 		// Conversation history — user messages with attached images become
@@ -1774,6 +1867,9 @@ export class ChatView extends ItemView {
 					role: 'tool',
 					content: msg.content,
 					tool_call_id: msg.tool_call_id,
+					// Anthropic replays tool_result blocks with is_error; without
+					// it, past failures look like successes in history.
+					is_error: msg.tool_error || undefined,
 				});
 			} else if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
 				// Assistant tool-invocation messages carry the tool_calls array.
@@ -1788,6 +1884,39 @@ export class ChatView extends ItemView {
 		}
 
 		return messages;
+	}
+
+	/**
+	 * Vault retrieval (RAG): embed the latest user message and pull the most
+	 * relevant note excerpts into the system prompt. Returns null (no block)
+	 * when retrieval is off, the last turn carries an explicit @-mention
+	 * attachment (curated context wins — same precedence rule the agent loop
+	 * applies to read_note/search_notes), there is nothing to query, or the
+	 * search fails. Retrieval problems must never block a send.
+	 */
+	private async buildRetrievedContextBlock(conv: Conversation): Promise<string | null> {
+		if (!this.plugin.settings.enableRag) return null;
+		const lastUser = [...conv.messages].reverse().find((m) => m.role === 'user');
+		if (!lastUser) return null;
+		// Explicit attachment on the current turn — the user already chose the
+		// context; don't pile retrieved excerpts on top of it.
+		if (lastUser.attachedNotes && lastUser.attachedNotes.length > 0) return null;
+		const query = lastUser.content.trim();
+		if (!query || query.startsWith('/')) return null;
+		try {
+			const results = await this.plugin.ragIndex.search(query, this.plugin.settings.ragTopK);
+			// Notes attached anywhere in the conversation are already in-context
+			// as full [Attached note: …] blocks — excerpting them again just
+			// burns context.
+			const attached = new Set<string>();
+			for (const m of conv.messages) {
+				for (const p of m.attachedNotes || []) attached.add(p);
+			}
+			return formatRetrievedContext(results, attached);
+		} catch (e) {
+			console.warn('[Curtis] Vault retrieval failed (non-fatal, sending without):', e);
+			return null;
+		}
 	}
 
 	/**
@@ -1858,50 +1987,25 @@ export class ChatView extends ItemView {
 			return;
 		}
 
-		// Truncate the conversation so the last message is the user prompt
-		// immediately preceding this assistant message.
-		conv.messages = conv.messages.slice(0, idx);
-		conv.updatedAt = Date.now();
-		this.store.save();
+		// Authenticate BEFORE truncating — the auth check inside the re-stream
+		// only shows a Notice, and by then the old reply is already deleted
+		// (data loss with no replacement when the key is gone).
+		try {
+			this.plugin.getAuthenticatedProvider();
+		} catch {
+			new Notice('No AI provider configured or authenticated. Check settings.');
+			return;
+		}
+
+		// Truncate the conversation so the dropped assistant message and
+		// everything after it are removed; the re-stream replaces them.
+		this.store.truncateFromMessage(assistantMessageId);
 		this.renderCurrentConversation();
 
 		// Trigger a no-op "user" send path: we re-use sendMessage's body by
 		// synthesizing an empty user input — but that path early-returns on empty.
 		// Instead, inline the assistant-stream logic by calling a dedicated helper.
 		await this.streamAssistantResponse();
-	}
-
-	/**
-	 * Load the user message preceding the given assistant message into the
-	 * input box for editing; on next Send the truncateAfterMessage hook (fired
-	 * when the user message matches) will drop the old branch.
-	 */
-	private editResendForAssistant(assistantMessageId: string): void {
-		const conv = this.store.getCurrentConversation();
-		if (!conv) return;
-		const idx = conv.messages.findIndex((m) => m.id === assistantMessageId);
-		if (idx <= 0) {
-			new Notice('No prior user message to edit');
-			return;
-		}
-		// Find the immediately-preceding user message.
-		let userIdx = idx - 1;
-		while (userIdx >= 0 && conv.messages[userIdx].role !== 'user') userIdx--;
-		if (userIdx < 0) {
-			new Notice('No prior user message to edit');
-			return;
-		}
-		const userMsg = conv.messages[userIdx];
-		// Truncate everything AFTER the user message — the old assistant reply
-		// goes away; the next send replaces the user message text.
-		this.store.truncateAfterMessage(userMsg.id);
-		// Also remove the user message itself so the new send isn't duplicated.
-		this.store.deleteMessage(userMsg.id);
-		this.renderCurrentConversation();
-		this.inputEl.value = userMsg.content;
-		this.autoResizeInput();
-		this.inputEl.focus();
-		new Notice('Edit the prompt and send');
 	}
 
 	/**
@@ -1918,8 +2022,26 @@ export class ChatView extends ItemView {
 		if (userMsg.role !== 'user') return;
 		this.store.truncateAfterMessage(userMsg.id);
 		this.store.deleteMessage(userMsg.id);
+		// Restore the message's attachments into the pending strips — an
+		// edit-resend used to silently drop images and @-noted notes.
+		this.pendingImages = [];
+		for (const imgPath of userMsg.images || []) {
+			const file = this.app.vault.getAbstractFileByPath(imgPath);
+			if (!(file instanceof TFile)) continue;
+			this.pendingImages.push({
+				path: file.path,
+				thumbUrl: this.app.vault.getResourcePath(file),
+				name: file.name,
+			});
+		}
+		this.pendingNoteAttachments = (userMsg.attachedNotes || [])
+			.map((p) => this.app.vault.getAbstractFileByPath(p))
+			.filter((f): f is TFile => f instanceof TFile);
+		this.renderImageStrip();
+		this.renderAttachmentChips();
 		this.renderCurrentConversation();
 		this.inputEl.value = userMsg.content;
+		this.mentionEndOffset = -1;
 		this.autoResizeInput();
 		this.inputEl.focus();
 		new Notice('Edit the prompt and send');
@@ -1939,11 +2061,13 @@ export class ChatView extends ItemView {
 		}
 		const conv = this.store.getCurrentConversation();
 		if (!conv) return;
+		// Pin store writes to this conversation for the whole re-stream.
+		const convId = conv.id;
 
 		// Set the image flag based on the last user message (it may have
 		// attached images that an error would blame).
 		const lastUser = this.store.getLastUserMessage();
-		currentSendHasImagesFlag = !!(lastUser?.images && lastUser.images.length > 0);
+		this.currentSendHasImages = !!(lastUser?.images && lastUser.images.length > 0);
 
 		this.isGenerating = true;
 		this.setGeneratingUI(true);
@@ -1986,20 +2110,23 @@ export class ChatView extends ItemView {
 				},
 				onUsage: (usage: TokenUsage) => {
 					if (!assistantStored) {
-						const stored = this.store.addMessage({
+						const stored = this.store.addMessageTo(convId, {
 							role: 'assistant',
 							content: this.streamingContent,
 							tokens: usage,
+							cost: this.estimateMessageCost(provider.id, this.plugin.settings.activeModel, usage) ?? undefined,
 							provider: provider.id,
 							model: this.plugin.settings.activeModel,
 						});
-						storedMessageId = stored.id;
-						assistantStored = true;
+						if (stored) {
+							storedMessageId = stored.id;
+							assistantStored = true;
+						}
 					}
 				},
 				onError: (error: Error) => {
 					console.error('[Curtis] Stream error:', error);
-					const friendly = friendlyError(error, currentSendHasImagesFlag);
+					const friendly = friendlyError(error, this.currentSendHasImages);
 					new Notice(friendly.message, 8000);
 					this.streamingContent += `\n\n*⚠️ ${friendly.message}*`;
 					this.renderer.renderStreamedMessage(assistantContent, this.streamingContent);
@@ -2007,14 +2134,16 @@ export class ChatView extends ItemView {
 				signal: this.abortController.signal,
 			});
 			if (!assistantStored && this.streamingContent) {
-				const stored = this.store.addMessage({
+				const stored = this.store.addMessageTo(convId, {
 					role: 'assistant',
 					content: this.streamingContent,
 					provider: provider.id,
 					model: this.plugin.settings.activeModel,
 				});
-				storedMessageId = stored.id;
-				assistantStored = true;
+				if (stored) {
+					storedMessageId = stored.id;
+					assistantStored = true;
+				}
 			}
 		} catch (e) {
 			if ((e as Error).name !== 'AbortError') {
@@ -2057,7 +2186,7 @@ export class ChatView extends ItemView {
 			}
 			// Background fact extraction — fire-and-forget.
 			// Reset image-flag + extract facts.
-			currentSendHasImagesFlag = false;
+			this.currentSendHasImages = false;
 			this.maybeExtractFacts();
 		}
 	}
@@ -2263,6 +2392,7 @@ export class ChatView extends ItemView {
 		let streamed = '';
 		let firstChunkReceived = false;
 		let assistantStored = false;
+		let storedArenaMessageId: string | null = null;
 
 		try {
 			await this.plugin.callAI(messages, sel.modelId, {
@@ -2294,13 +2424,15 @@ export class ChatView extends ItemView {
 					// tag provider/model on each so the conversation history
 					// shows which model produced which answer.
 					if (!assistantStored) {
-						this.store.addMessage({
+						const stored = this.store.addMessage({
 							role: 'assistant',
 							content: streamed,
 							tokens: usage,
+							cost: this.estimateMessageCost(sel.providerId, sel.modelId, usage) ?? undefined,
 							provider: sel.providerId,
 							model: sel.modelId,
 						});
+						storedArenaMessageId = stored.id;
 						assistantStored = true;
 					}
 				},
@@ -2321,13 +2453,19 @@ export class ChatView extends ItemView {
 				// omit token counts on stream completion). Guard against the
 				// usage path having already stored.
 				if (!assistantStored) {
-					this.store.addMessage({
+					const stored = this.store.addMessage({
 						role: 'assistant',
 						content: streamed,
 						provider: sel.providerId,
 						model: sel.modelId,
 					});
+					storedArenaMessageId = stored.id;
 					assistantStored = true;
+				}
+				// Sync the full text in case usage fired before the final chunk
+				// and the persisted snapshot is stale (mirrors the normal path).
+				if (storedArenaMessageId) {
+					this.store.updateMessage(storedArenaMessageId, { content: streamed });
 				}
 			}
 		} catch (e) {
@@ -2402,6 +2540,19 @@ export class ChatView extends ItemView {
 		const currentId = this.store.getCurrentConversation()?.id;
 		const dropdown = this.containerEl.createDiv({ cls: 'ai-history-dropdown' });
 
+		// Close on outside click. handler + closeDropdown form one close path —
+		// item click, delete, and outside click all funnel through it so the
+		// document listener never outlives the dropdown.
+		const handler = (e: MouseEvent) => {
+			if (!dropdown.contains(e.target as Node) && e.target !== anchor) {
+				closeDropdown();
+			}
+		};
+		const closeDropdown = (): void => {
+			dropdown.remove();
+			document.removeEventListener('click', handler);
+		};
+
 		for (const conv of conversations) {
 			const item = dropdown.createDiv({ cls: 'ai-history-item' });
 			if (conv.id === currentId) item.addClass('is-active');
@@ -2411,10 +2562,24 @@ export class ChatView extends ItemView {
 				text: `${conv.messages.length} msgs · ${new Date(conv.updatedAt).toLocaleDateString()}`,
 			});
 
+			// Delete moves the conversation's vault file to the trash
+			// (recoverable). Deleting the current chat starts a fresh one.
+			const deleteBtn = item.createEl('button', { cls: 'ai-history-delete-btn' });
+			setIcon(deleteBtn, 'trash-2');
+			deleteBtn.title = 'Delete conversation';
+			deleteBtn.setAttribute('aria-label', `Delete ${conv.title}`);
+			deleteBtn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				this.store.deleteConversation(conv.id);
+				new Notice('Deleted');
+				closeDropdown();
+				if (conv.id === currentId) this.startNewChat();
+			});
+
 			item.addEventListener('click', () => {
 				this.store.setCurrentConversation(conv.id);
 				this.renderCurrentConversation();
-				dropdown.remove();
+				closeDropdown();
 			});
 		}
 
@@ -2422,14 +2587,6 @@ export class ChatView extends ItemView {
 		const rect = anchor.getBoundingClientRect();
 		const containerRect = this.containerEl.getBoundingClientRect();
 		dropdown.setCssProps({ top: `${rect.bottom - containerRect.top + 4}px` });
-
-		// Close on outside click
-		const handler = (e: MouseEvent) => {
-			if (!dropdown.contains(e.target as Node) && e.target !== anchor) {
-				dropdown.remove();
-				document.removeEventListener('click', handler);
-			}
-		};
 		window.setTimeout(() => document.addEventListener('click', handler), 10);
 	}
 }

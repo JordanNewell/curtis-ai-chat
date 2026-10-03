@@ -18,6 +18,7 @@ export class CustomProviderModal extends Modal {
 	private defaultModel = '';
 	private onSubmit: (result: CustomProviderResult) => void;
 	private existing?: ProviderDefinition;
+	private errorEl: HTMLElement | null = null;
 
 	constructor(
 		app: App,
@@ -100,7 +101,23 @@ export class CustomProviderModal extends Modal {
 	}
 
 	private submit(): void {
-		if (!this.name.trim() || !this.endpoint.trim()) return;
+		const name = this.name.trim();
+		const endpoint = this.endpoint.trim();
+		if (!name || !endpoint) {
+			this.showError('Name and endpoint URL are required.');
+			return;
+		}
+		let parsed: URL;
+		try {
+			parsed = new URL(endpoint);
+		} catch {
+			this.showError('Endpoint is not a valid URL.');
+			return;
+		}
+		if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+			this.showError('Endpoint must start with http:// or https://.');
+			return;
+		}
 
 		const id = this.existing?.id || `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 		const models = this.defaultModel.trim()
@@ -109,8 +126,8 @@ export class CustomProviderModal extends Modal {
 
 		const definition: ProviderDefinition = {
 			id,
-			name: this.name.trim(),
-			endpoint: this.endpoint.trim(),
+			name,
+			endpoint,
 			authType: this.authType,
 			models,
 			autoDiscoverModels: true,
@@ -118,6 +135,11 @@ export class CustomProviderModal extends Modal {
 
 		this.onSubmit({ definition, apiKey: this.apiKey });
 		this.close();
+	}
+
+	private showError(message: string): void {
+		this.errorEl?.remove();
+		this.errorEl = this.contentEl.createEl('p', { cls: 'ai-modal-error', text: message });
 	}
 
 	onClose(): void {

@@ -6,9 +6,11 @@ import type { App } from 'obsidian';
 export class MessageRenderer {
 	private app: App;
 	private component: Component;
-	private pendingStreamContainer: HTMLElement | null = null;
-	private pendingStreamContent = '';
-	private pendingStreamFinal = false;
+	/** Per-container pending stream state — arena mode streams into several
+	 *  containers at once; a single shared slot would drop all but the last
+	 *  writer each frame (and could overwrite a final render with a stale
+	 *  non-final one). */
+	private pendingStreams = new Map<HTMLElement, { content: string; final: boolean }>();
 	private streamRafId: number | null = null;
 
 	constructor(app: App) {
@@ -46,26 +48,24 @@ export class MessageRenderer {
 	 */
 	renderStreamedMessage(container: HTMLElement, content: string, final = false): void {
 		// Always update the pending content; the rAF callback renders the latest.
-		this.pendingStreamContent = content;
-		this.pendingStreamContainer = container;
-		this.pendingStreamFinal = final;
+		this.pendingStreams.set(container, { content, final });
 
 		if (this.streamRafId !== null) return; // already scheduled
 		this.streamRafId = window.requestAnimationFrame(() => {
 			this.streamRafId = null;
-			const c = this.pendingStreamContainer;
-			const text = this.pendingStreamContent;
-			const isFinal = this.pendingStreamFinal;
-			if (!c) return;
-			if (isFinal) {
-				// Full markdown render on completion.
-				void this.renderMessage(c, text);
-			} else {
-				// Cheap path during streaming: plain text in a <pre> so whitespace
-				// and newlines are preserved without re-running MarkdownRenderer.
-				c.empty();
-				const pre = c.createEl('pre', { cls: 'ai-message-streaming-text' });
-				pre.setText(text);
+			const entries = Array.from(this.pendingStreams.entries());
+			this.pendingStreams.clear();
+			for (const [c, { content: text, final: isFinal }] of entries) {
+				if (isFinal) {
+					// Full markdown render on completion.
+					void this.renderMessage(c, text);
+				} else {
+					// Cheap path during streaming: plain text in a <pre> so whitespace
+					// and newlines are preserved without re-running MarkdownRenderer.
+					c.empty();
+					const pre = c.createEl('pre', { cls: 'ai-message-streaming-text' });
+					pre.setText(text);
+				}
 			}
 		});
 	}
@@ -90,6 +90,13 @@ export class MessageRenderer {
 				const code = block.textContent || '';
 				void navigator.clipboard.writeText(code).then(() => {
 					btn.textContent = 'Copied!';
+					window.setTimeout(() => {
+						btn.textContent = 'Copy';
+					}, 2000);
+				}).catch(() => {
+					// Clipboard denied — reset the label instead of leaving a
+					// silent dead button and an unhandled rejection.
+					btn.textContent = 'Copy failed';
 					window.setTimeout(() => {
 						btn.textContent = 'Copy';
 					}, 2000);

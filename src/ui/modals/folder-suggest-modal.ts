@@ -15,8 +15,17 @@ export class FolderSuggestModal extends FuzzySuggestModal<TFolder | null> {
 	}
 
 	getItems(): (TFolder | null)[] {
-		// null entry at top == vault root
-		return [null, ...this.app.vault.getAllLoadedFiles().filter((f): f is TFolder => f instanceof TFolder)];
+		// null entry at top == vault root. getAllLoadedFiles() also returns the
+		// root TFolder itself (path '/') — that duplicate row would hand back
+		// '/' and break the "empty string for root" contract downstream
+		// (conversation folder resolution strips it to '' but settings saves
+		// the raw '/', making the folder scan match nothing).
+		return [
+			null,
+			...this.app.vault
+				.getAllLoadedFiles()
+				.filter((f): f is TFolder => f instanceof TFolder && f.path !== '/'),
+		];
 	}
 
 	getItemText(item: TFolder | null): string {

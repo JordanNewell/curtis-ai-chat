@@ -2,6 +2,10 @@ import { App, TFile } from 'obsidian';
 import { asStringArray, isRecord } from './types/json-helpers';
 import { getActiveNoteFile } from '../vault/active-note';
 import { WEB_SEARCH_TOOL, READ_URL_TOOL } from './web-tools';
+import type { RagIndexManager } from '../rag/index-manager';
+
+/** Registry key of the vault-retrieval tool (Settings → Vault retrieval). */
+const SEMANTIC_SEARCH_TOOL_NAME = 'semantic_search';
 
 // ============================================================================
 // Tool/Function Calling Framework
@@ -25,6 +29,14 @@ import { WEB_SEARCH_TOOL, READ_URL_TOOL } from './web-tools';
 // Optional web tools (settings toggle):
 //   web_search       — Search the web (DuckDuckGo)
 //   read_url         — Fetch and read a URL
+//
+// MCP tools (Settings → MCP servers, via McpManager):
+//   mcp__<server>__<tool> — any tool exposed by a user-configured MCP server.
+//   Not enumerated here: the registry's MCP slice is replaced wholesale
+//   (setMcpTools) whenever connections change.
+//
+// Optional vault retrieval tool (Settings → Vault retrieval):
+//   semantic_search  — Embedding-based search over the RAG index
 // ============================================================================
 
 export interface ToolDefinition {
@@ -32,6 +44,23 @@ export interface ToolDefinition {
 	description: string;
 	parameters: Record<string, ToolParameter>;
 	execute: (params: Record<string, unknown>, context: ToolContext) => Promise<string>;
+	/**
+	 * Full JSON Schema override for `parameters` — used by MCP tools, whose
+	 * argument schemas come from the server and can be arbitrarily nested.
+	 * When set, buildToolParametersSchema emits this verbatim and the
+	 * registry skips its flat required-param pre-check (the MCP server
+	 * validates its own arguments).
+	 */
+	inputSchema?: JsonSchemaObject;
+}
+
+/** JSON Schema object shape — deliberately loose so server-provided schemas
+ *  ($defs, oneOf, nested arrays…) pass through untouched. */
+export interface JsonSchemaObject {
+	type: 'object';
+	properties?: Record<string, unknown>;
+	required?: string[];
+	[key: string]: unknown;
 }
 
 export interface ToolParameter {
@@ -68,11 +97,10 @@ function num(v: unknown): number {
  * every provider dialect: OpenAI-compat sends it as `parameters`, Anthropic
  * as `input_schema`, Gemini as the function-declaration body.
  */
-export function buildToolParametersSchema(tool: ToolDefinition): {
-	type: 'object';
-	properties: Record<string, Record<string, unknown>>;
-	required: string[];
-} {
+export function buildToolParametersSchema(tool: ToolDefinition): JsonSchemaObject {
+	// MCP tools (and anything else with a server-provided schema) bypass the
+	// flat builder — their schemas are already wire-ready JSON Schema.
+	if (tool.inputSchema) return tool.inputSchema;
 	const properties: Record<string, Record<string, unknown>> = {};
 	const required: string[] = [];
 	for (const key of Object.keys(tool.parameters)) {
@@ -97,14 +125,23 @@ export interface ToolResult {
 
 export class ToolRegistry {
 	private tools: Map<string, ToolDefinition> = new Map();
+	private mcpToolNames: Set<string> = new Set();
 	private app: App;
+	private ragIndex: RagIndexManager | null = null;
 
-	constructor(app: App, opts: { enableWebSearch?: boolean } = {}) {
+	constructor(
+		app: App,
+		opts: { enableWebSearch?: boolean; enableRag?: boolean; ragIndex?: RagIndexManager } = {}
+	) {
 		this.app = app;
+		if (opts.ragIndex) this.ragIndex = opts.ragIndex;
 		this.registerBuiltinTools();
 		if (opts.enableWebSearch) {
 			this.register(WEB_SEARCH_TOOL);
 			this.register(READ_URL_TOOL);
+		}
+		if (opts.enableRag) {
+			this.setRagToolEnabled(true);
 		}
 	}
 
@@ -132,6 +169,60 @@ export class ToolRegistry {
 		}
 	}
 
+	/**
+	 * Replace the MCP tool slice of the registry (tools from user-configured
+	 * MCP servers, namespaced mcp__*). Idempotent: clears the previous MCP
+	 * set first so removed servers/tools disappear. The manager calls this
+	 * whenever connection state changes.
+	 */
+	setMcpTools(defs: ToolDefinition[]): void {
+		for (const name of this.mcpToolNames) this.tools.delete(name);
+		this.mcpToolNames.clear();
+		for (const def of defs) {
+			this.tools.set(def.name, def);
+			this.mcpToolNames.add(def.name);
+		}
+	}
+
+	/**
+	 * Hot-reload the semantic_search tool (Settings → Vault retrieval) without
+	 * rebuilding the rest of the registry — same pattern as setWebToolsEnabled
+	 * so the toggle takes effect on the next agent send.
+	 */
+	setRagToolEnabled(enabled: boolean): void {
+		if (enabled && this.ragIndex) {
+			if (!this.tools.has(SEMANTIC_SEARCH_TOOL_NAME)) {
+				this.register(this.buildSemanticSearchTool());
+			}
+		} else {
+			this.unregister(SEMANTIC_SEARCH_TOOL_NAME);
+		}
+	}
+
+	private buildSemanticSearchTool(): ToolDefinition {
+		const ragIndex = this.ragIndex as RagIndexManager;
+		return {
+			name: SEMANTIC_SEARCH_TOOL_NAME,
+			description:
+				'Semantic search over the user\'s vault notes (embedding-based). Returns the most relevant note ' +
+				'excerpts for a natural-language query. Prefer this over search_notes when the query is ' +
+				'conceptual or meaning-based rather than an exact keyword or filename.',
+			parameters: {
+				query: { type: 'string', description: 'Natural-language search query', required: true },
+				max_results: { type: 'number', description: 'Maximum number of excerpts to return (default: 5)', default: 5 },
+			},
+			execute: async (params) => {
+				const results = await ragIndex.search(str(params.query), num(params.max_results) || 5);
+				if (results.length === 0) {
+					return 'No semantic matches. If the vault index has never been built, the user can build it in Settings → Vault retrieval → Rebuild index.';
+				}
+				return results
+					.map((r) => `[Excerpt: ${r.chunk.filePath}]\n${r.chunk.content.trim()}`)
+					.join('\n\n---\n\n');
+			},
+		};
+	}
+
 	getTool(name: string): ToolDefinition | undefined {
 		return this.tools.get(name);
 	}
@@ -154,16 +245,31 @@ export class ToolRegistry {
 		}
 
 		try {
-			// Validate required parameters
-			const params = tool.parameters;
-			for (const key of Object.keys(params)) {
-				const param: ToolParameter = params[key];
-				if (param.required && call.arguments[key] === undefined) {
-					return {
-						tool_call_id: call.id,
-						content: `Missing required parameter: ${key}`,
-						is_error: true,
-					};
+			// Validate required parameters. MCP tools (inputSchema set) are
+			// exempt — their schemas aren't flat and the MCP server validates
+			// its own arguments, surfacing failures as isError results.
+			if (!tool.inputSchema) {
+				const params = tool.parameters;
+				for (const key of Object.keys(params)) {
+					const param: ToolParameter = params[key];
+					if (!param.required) continue;
+					const value: unknown = call.arguments[key];
+					if (value === undefined) {
+						return {
+							tool_call_id: call.id,
+							content: `Missing required parameter: ${key}`,
+							is_error: true,
+						};
+					}
+					// Type-check against the declared type — coercing garbage to
+					// '' or 0 would silently corrupt the tool's behavior.
+					if (typeof value !== param.type) {
+						return {
+							tool_call_id: call.id,
+							content: `Invalid type for parameter "${key}": expected ${param.type}, got ${typeof value}`,
+							is_error: true,
+						};
+					}
 				}
 			}
 
@@ -224,23 +330,42 @@ export class ToolRegistry {
 				}
 
 				if (results.length === 0) {
-					// Try content search via Obsidian search
+					// Content fallback used to read EVERY vault file per miss —
+					// cap the scan (newest 300 files, ~2MB read) so a large vault
+					// can't stall the agent loop.
+					const MAX_SCAN_FILES = 300;
+					const MAX_SCAN_CHARS = 2_000_000;
+					const scanList = [...files]
+						.sort((a, b) => b.stat.mtime - a.stat.mtime)
+						.slice(0, MAX_SCAN_FILES);
+					let capHit = scanList.length < files.length;
 					const contentMatches: string[] = [];
-					for (const file of files) {
+					let scannedChars = 0;
+
+					for (const file of scanList) {
 						if (results.length + contentMatches.length >= max) break;
+						if (scannedChars >= MAX_SCAN_CHARS) {
+							capHit = true;
+							break;
+						}
 						try {
 							const content = await this.app.vault.read(file);
+							scannedChars += content.length;
 							if (content.toLowerCase().includes(query)) {
 								contentMatches.push(`- **${file.basename}** (${file.path}) [content match]`);
 							}
 						} catch { /* skip unreadable files */ }
 					}
 
+					const capNote = capHit
+						? ` (content scan capped at the ${MAX_SCAN_FILES} most recently modified files / ~2 MB)`
+						: '';
+
 					if (contentMatches.length > 0) {
-						return `No filename matches. Content matches:\n${contentMatches.join('\n')}`;
+						return `No filename matches. Content matches${capNote}:\n${contentMatches.join('\n')}`;
 					}
 
-					return `No notes found matching "${query}"`;
+					return `No notes found matching "${query}"${capNote}`;
 				}
 
 				return `Found ${results.length} notes:\n${results.join('\n')}`;
@@ -301,7 +426,14 @@ export class ToolRegistry {
 						break;
 					case 'replace':
 						if (oldContent) {
-							newContent = existing.replace(oldContent, content);
+							if (!existing.includes(oldContent)) {
+								// Reporting success on a no-op replace would let the
+								// model believe an edit landed that didn't.
+								throw new Error(`old_content not found in ${path} — nothing was changed. Re-read the note and quote the exact text.`);
+							}
+							// Function replacer: model-supplied text may contain
+							// $&/$`/$' patterns String.replace would interpret.
+							newContent = existing.replace(oldContent, () => content);
 						} else {
 							newContent = content;
 						}
@@ -326,7 +458,7 @@ export class ToolRegistry {
 				const folder = str(params.folder) || '/';
 				const max = num(params.max_results) || 20;
 				const files = this.app.vault.getMarkdownFiles()
-					.filter(f => folder === '/' || f.path.startsWith(folder))
+					.filter(f => folder === '/' || f.path.startsWith(folder.endsWith('/') ? folder : folder + '/'))
 					.slice(0, max);
 
 				if (files.length === 0) return `No notes found in "${folder}"`;

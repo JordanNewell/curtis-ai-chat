@@ -7,6 +7,7 @@ Obsidian plugin (id: `curtis-ai-chat`), TypeScript + esbuild bundled to `main.js
 - `npm run build` — type-checks (`tsc -noEmit -skipLibCheck`) then production bundle. Run before declaring any task done.
 - `npm run lint` — eslint on `src/`. Zero warnings before commit.
 - `npm run version` — bumps `manifest.json` and `versions.json` together via `version-bump.mjs`. Never edit one without the other.
+- `npm run site:sync` — syncs version/platform tokens from manifest.json into docs/index.html. Run after `npm run version`.
 
 ## Hard constraints
 

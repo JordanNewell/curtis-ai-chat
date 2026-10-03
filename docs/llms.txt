@@ -1,0 +1,37 @@
+# Curtis AI
+
+> Curtis AI is an applied AI company (est. 2026); its first product is Curtis AI Chat, a polyglot AI chat plugin for Obsidian.
+
+## About Curtis AI
+
+- Applied AI company, established 2026.
+- Ships products and runs a research arm; the lab is in setup.
+- First research subject: the memory system shipping inside Curtis AI Chat.
+
+## Curtis AI Chat (Product 01)
+
+- Polyglot AI chat for Obsidian: 30+ providers, one sidebar.
+- Local-first: Ollama and LM Studio supported for fully offline use; nothing leaves the machine unless a provider points at the cloud.
+- Bring-your-own keys; API keys stored in the OS keychain (Obsidian 1.13+).
+- Agent mode: AI calls 10 built-in tools to read, create, and edit vault notes, plus any tool exposed by user-connected MCP servers (Streamable HTTP, opt-in).
+- Other features: multi-model arena (2 models side by side), inline diff rewrite, @-mention notes as context, voice I/O (Whisper speech-to-text in, browser TTS out), cross-chat search, /export to Markdown, editable long-term memory.
+
+## Install
+
+- Obsidian community plugin listing: https://community.obsidian.md/plugins/curtis-ai-chat
+- Deep link: obsidian://show-plugin?id=curtis-ai-chat
+- Manual: download main.js, manifest.json, and styles.css from the latest GitHub release into .obsidian/plugins/curtis-ai-chat/, then enable under Settings -> Community plugins.
+
+## Facts
+
+- Current version: 1.4.0
+- Minimum Obsidian version: 1.13.0
+- License: MIT (Copyright (c) 2026 Jordan Newell)
+- No telemetry or analytics. Source contains no sendBeacon/XHR/WebSocket/analytics calls; network requests go only to the user-configured AI provider endpoint, OpenAI's transcription endpoint when voice dictation is used, opt-in (off-by-default) web_search/read_url agent tools (DuckDuckGo, Jina Reader), and opt-in (off-by-default) user-configured MCP server URLs.
+
+## Links
+
+- Site: https://jordannewell.github.io/curtis-ai-chat/
+- Source: https://github.com/JordanNewell/curtis-ai-chat
+- Releases: https://github.com/JordanNewell/curtis-ai-chat/releases
+- Obsidian community listing: https://community.obsidian.md/plugins/curtis-ai-chat

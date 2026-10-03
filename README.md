@@ -65,6 +65,7 @@ Eight flagship features in this initial release. Full details in [CHANGELOG.md](
 | | Feature | What it does |
 |---|---|---|
 | 🤖 | **[Curtis Agent](docs/AGENT.md)** | AI calls tools to read, create, and edit your vault notes. Ten built-in tools, every provider. |
+| 🔌 | **[MCP servers](docs/AGENT.md#mcp-servers)** | Connect MCP servers you already run — any tool they expose joins the agent's toolset, namespaced `mcp__<server>__<tool>`. |
 | ⚔️ | **[Multi-model arena](docs/ARENA.md)** | Stream one prompt to 2 models in parallel, side-by-side. Pick a winner, promote to chat. |
 | 🎨 | **[Inline diff rewrite](docs/DIFF_REWRITE.md)** | Cursor-style rewrite with an Accept/Reject diff modal. Assignable hotkey. |
 | @ | **[@-mention vault notes](docs/MENTIONS.md)** | Type `@` in chat → fuzzy-search your vault → attach note content as context. |
@@ -72,6 +73,7 @@ Eight flagship features in this initial release. Full details in [CHANGELOG.md](
 | 🔍 | **Cross-conversation search** | Assignable hotkey opens a fuzzy-matched picker across all conversations and messages. |
 | 📝 | **Markdown export** | Download any conversation as `.md`. `/export` slash command or download icon. |
 | 🧠 | **Memory editing UI** | Edit/delete individual memory facts from Settings → Memory. No more append-only. |
+| 🗂️ | **Conversations as vault files** | Every chat persists as a markdown note in `AI/Conversations/` — synced across devices, in native Obsidian search, and readable by the agent. Old localStorage history imports itself. |
 
 Plus a full type-safety pass: every AI provider response shape is strictly typed, with type-guard narrowing at every JSON boundary. Zero lint warnings on `npm run build`.
 
@@ -85,6 +87,7 @@ The AI can now call tools to modify your vault. Ten built-in tools: `read_note`,
 
 - **Every major provider** — Anthropic via native tool use, OpenAI-compatible endpoints (OpenAI, Gemini, Ollama, Groq, DeepSeek, custom). The model must support tool calling.
 - **`agentMaxTurns` safety cap** (default 5) prevents runaway tool loops
+- **MCP servers** — connect your existing [Model Context Protocol](https://modelcontextprotocol.io) servers (Settings → MCP servers) and every tool they expose becomes callable alongside the built-ins. Streamable HTTP transport; local stdio servers are bridged with `mcp-proxy` or `supergateway`.
 - **Opt-in** via Settings → Agent → Enable
 
 → [docs/AGENT.md](docs/AGENT.md)
@@ -162,6 +165,18 @@ Curtis remembers durable facts about you across conversations — preferences, i
 
 → [docs/MEMORY.md](docs/MEMORY.md)
 
+### 🔎 Vault retrieval (RAG)
+
+Ask about your vault in plain language — the most relevant note excerpts are retrieved and injected into the prompt automatically.
+
+- **Any embeddings provider** — OpenAI, Gemini, Z.ai, or fully local via Ollama/LM Studio (Anthropic has no embeddings API)
+- **Automatic injection** — top-k excerpts in every prompt; skipped when you `@`-attach a note, because curated context wins
+- **Live index** — edits re-embed in the background; rebuilds are incremental and cheap
+- **`semantic_search` tool** — the agent queries the vault by meaning, not just keywords
+- **Your index stays yours** — int8-quantized JSON in the plugin folder; nothing uploaded beyond the embeddings provider you configure
+
+Enable in Settings → Vault retrieval, then **Rebuild index**.
+
 ### ⌨️ Slash commands
 
 Type `/` in the chat input for an autocomplete menu of 16 commands — `/clear`, `/regen`, `/title`, `/copy`, `/note`, `/save-all`, `/paste`, `/model`, `/provider`, `/system`, `/stats`, `/remember`, `/forget`, `/memory`, `/export` (new), `/help`.
@@ -185,7 +200,8 @@ Curtis AI Chat is the **agent layer for Obsidian**. Where other plugins focus on
 | | Curtis AI Chat | Smart Connections | Text Generator | Copilot for Obsidian |
 |---|---|---|---|---|
 | **All features free (no subscription)** | ✅ | ✅ | ✅ | Core only — advanced features need Copilot Plus |
-| **Agent tools (vault-modifying)** | ✅ 10 built-in | ❌ | ❌ | ✅ v4 agent chat |
+| **Agent tools (vault-modifying)** | ✅ 10 built-in + MCP | ❌ | ❌ | ✅ v4 agent chat |
+| **Semantic vault retrieval (RAG)** | ✅ any embeddings provider | ✅ | ❌ | ✅ |
 | **Provider count** | 30+ | 1–2 | 1–2 | 10+ |
 | **Local-first (Ollama, LM Studio)** | ✅ | ❌ | ✅ | ✅ |
 | **Multi-model arena** | ✅ | ❌ | ❌ | ❌ |
@@ -195,11 +211,11 @@ Curtis AI Chat is the **agent layer for Obsidian**. Where other plugins focus on
 | **Native Obsidian rendering** | ✅ `MarkdownRenderer` | Partial | ❌ | Partial |
 
 > [!NOTE]
-> Comparison refreshed 2026-10-02 (v1.0.5). Other plugins ship fast — Copilot's v4 agent chat is real and actively developed, Smart Connections remains the gold standard for RAG, Text Generator excels at template-driven writing. Curtis aims to be the free, polyglot, local-first agent layer that ties chat, tools, and memory together.
+> Comparison refreshed 2026-10-03. Other plugins ship fast — Copilot's v4 agent chat is real and actively developed, Smart Connections remains the gold standard for RAG (Curtis' own retrieval is new; theirs is battle-tested), Text Generator excels at template-driven writing. Curtis aims to be the free, polyglot, local-first agent layer that ties chat, tools, and memory together.
 
 ### Principles
 
-- **Your data stays yours.** Conversations in `localStorage`. Images as real vault files. Memory as a markdown file you can read and edit. No telemetry, no tracking, no phone-home.
+- **Your data stays yours.** Conversations as markdown files in your vault (`AI/Conversations/` by default) — synced across devices, searchable in native Obsidian search, and readable by the agent. Images as real vault files. Memory as a markdown file you can read and edit. No telemetry, no tracking, no phone-home.
 - **No vendor lock-in.** Thirty providers ship built-in. Add any OpenAI-compatible endpoint as a custom provider in 30 seconds. Switch models mid-conversation.
 - **Local-first when you need it.** Enable Ollama and nothing ever leaves your machine. Useful for private notes, air-gapped machines, or when you just don't want to pay per token.
 - **Native Obsidian feel.** Real Obsidian setting components. Messages render through `MarkdownRenderer`. Themes respected — light, dark, Things, Minimal, all of them.
@@ -251,9 +267,10 @@ Curtis is vault-first — no background telemetry, no analytics, no auto-update 
 | You use voice transcription | `api.openai.com` | Whisper API (only when voice input is on) |
 | The agent calls `web_search` (opt-in) | `html.duckduckgo.com` | DuckDuckGo search |
 | The agent calls `read_url` (opt-in) | `r.jina.ai` | URL → markdown reader |
+| The agent calls MCP tools (opt-in) | your own MCP servers | User-configured endpoints (Settings → MCP servers) |
 | You click a sponsor link | `www.buymeacoffee.com`, `github.com` | Opens in your browser, off the plugin |
 
-The two web tools (`web_search`, `read_url`) and voice transcription are off by default. Without them, the only external calls are to whichever AI provider you configured — or none, if you're on Ollama.
+The two web tools (`web_search`, `read_url`), voice transcription, and MCP are off by default. Without them, the only external calls are to whichever AI provider you configured — or none, if you're on Ollama. MCP tool calls go only to the server URLs you entered; tool results travel through your AI provider like any other tool result.
 
 ---
 
@@ -300,6 +317,7 @@ Curtis AI Chat works on iOS and Android with a few caveats:
 - [x] Curtis Agent: Anthropic, Gemini, and Ollama provider support (v1.1)
 - [ ] Inline diff rewrite: word-level diff and inline editor decorations (v1.1)
 - [x] Settings: declarative `getSettingDefinitions()` — shipped in v1.2.0 (see [ADR: settings API](#settings-api))
+- [x] Vault retrieval (RAG): embedding index over the vault, auto-injected context, `semantic_search` agent tool (next release)
 - [ ] Voice: streaming TTS, wake-word detection
 - [ ] Conversation branching UI
 - [ ] Plugin settings import/export

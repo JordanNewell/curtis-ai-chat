@@ -2,11 +2,10 @@
 
 import { App, Notice, TFile } from 'obsidian';
 import type { ConversationMessage } from '../types';
-import { fromBase64 } from '../utils/base64';
 
 /** Resolve the attachment folder. We use a fixed default rather than reading
  * Obsidian's per-vault setting (no public API in this obsidian version). */
-export async function resolveAttachmentFolder(app: App): Promise<string> {
+async function resolveAttachmentFolder(app: App): Promise<string> {
 	const folder = 'attachments';
 	await ensureFolder(app, folder);
 	return folder;
@@ -29,7 +28,7 @@ function uniqueImageName(app: App, folder: string, ext: string): string {
 const INVALID_CHARS = /[#*/\\?<>|:`"]/g;
 
 /** Sanitize a string into a valid Obsidian basename (no path separators). */
-export function sanitizeBasename(name: string): string {
+function sanitizeBasename(name: string): string {
 	const cleaned = name
 		.replace(/^\s*#+\s*/, '') // strip leading markdown heading marker
 		.replace(INVALID_CHARS, ' ')
@@ -39,7 +38,7 @@ export function sanitizeBasename(name: string): string {
 }
 
 /** Derive a readable basename from a message's content (first non-empty line). */
-export function deriveNoteBasename(content: string, fallback = 'AI Note'): string {
+function deriveNoteBasename(content: string, fallback = 'AI Note'): string {
 	const firstLine = content
 		.split('\n')
 		.map((l) => l.trim())
@@ -53,11 +52,13 @@ export function deriveNoteBasename(content: string, fallback = 'AI Note'): strin
 		.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
 		.replace(/\[\[([^\]]+)\]\]/g, '$1')
 		.replace(/^\s*[-*+]\s+/, '');
-	return sanitizeBasename(stripped).slice(0, 60) || fallback;
+	// Cut on a code-point boundary — slicing UTF-16 units can split a surrogate
+	// pair (emoji), producing a lone surrogate that makes vault.create throw.
+	return Array.from(sanitizeBasename(stripped)).slice(0, 60).join('') || fallback;
 }
 
 /** Ensure a folder path exists, creating nested segments as needed. */
-export async function ensureFolder(app: App, folder: string): Promise<void> {
+async function ensureFolder(app: App, folder: string): Promise<void> {
 	if (!folder) return;
 	const existing = app.vault.getAbstractFileByPath(folder);
 	if (existing) return;
@@ -113,17 +114,6 @@ function mimeToExt(mime: string): string {
 	return map[mime] || 'png';
 }
 
-/**
- * Convert a data URL into raw bytes for vault storage.
- */
-export function dataUrlToBytes(dataUrl: string): { bytes: ArrayBuffer; mime: string } | null {
-	const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-	if (!m) return null;
-	const mime = m[1];
-	const bytes = fromBase64(m[2]).slice().buffer;
-	return { bytes, mime };
-}
-
 /** Create a note with a unique basename inside `folder`. Returns the file. */
 export async function createNote(
 	app: App,
@@ -145,13 +135,12 @@ export async function createNote(
 		n++;
 	}
 
+	// JSON-encode every value: a JSON double-quoted scalar is valid YAML, so
+	// values containing newlines or ": " can't break the frontmatter block.
 	const body = opts.frontmatter
-		? `---\n${Object.keys(opts.frontmatter)
-				.map((k) => {
-					const v: unknown = opts.frontmatter![k];
-					const value = typeof v === 'string' ? v : JSON.stringify(v);
-					return `${k}: ${value}`;
-				})
+		? `---\n${Object.entries(opts.frontmatter)
+				.filter(([, v]) => v !== undefined)
+				.map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
 				.join('\n')}\n---\n\n${content}`
 		: content;
 

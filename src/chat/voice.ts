@@ -135,22 +135,40 @@ export class VoiceRecorder {
 		this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 		this.chunks = [];
 
-		const mimeType = this.pickMimeType();
-		this.mediaRecorder = mimeType
-			? new MediaRecorder(this.stream, { mimeType })
-			: new MediaRecorder(this.stream);
+		try {
+			const mimeType = this.pickMimeType();
+			this.mediaRecorder = mimeType
+				? new MediaRecorder(this.stream, { mimeType })
+				: new MediaRecorder(this.stream);
 
-		this.mediaRecorder.ondataavailable = (e) => {
-			if (e.data.size > 0) this.chunks.push(e.data);
-		};
+			this.mediaRecorder.ondataavailable = (e) => {
+				if (e.data.size > 0) this.chunks.push(e.data);
+			};
 
-		this.mediaRecorder.start();
+			this.mediaRecorder.start();
+		} catch (e) {
+			// Don't leak a live mic stream when recorder setup fails.
+			this.cleanup();
+			throw e;
+		}
 	}
 
 	stop(): Promise<Blob> {
 		return new Promise((resolve) => {
 			if (!this.mediaRecorder) {
 				resolve(new Blob());
+				return;
+			}
+
+			// The recorder can already be inactive — all tracks ending (e.g. a
+			// BT headset disconnect) auto-stops it, and calling .stop() on an
+			// inactive recorder throws InvalidStateError synchronously, which
+			// would wedge the mic button for the rest of the session.
+			if (this.mediaRecorder.state === 'inactive') {
+				const mimeType = this.mediaRecorder.mimeType || 'audio/webm';
+				const blob = new Blob(this.chunks, { type: mimeType });
+				this.cleanup();
+				resolve(blob);
 				return;
 			}
 

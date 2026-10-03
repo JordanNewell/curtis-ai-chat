@@ -1,16 +1,28 @@
-export interface DiffLine {
+interface DiffLine {
 	type: 'added' | 'removed' | 'unchanged';
 	text: string;
 }
 
 /**
+ * Beyond this many lines on either side, the LCS table's O(n*m) cell
+ * allocation (~100M cells at 10k lines) can freeze the renderer — emit a
+ * single whole-block replace instead.
+ */
+const MAX_LCS_LINES = 600;
+
+/**
  * Line-level diff between original and modified text.
  * Uses LCS dynamic programming — O(n*m) time/space.
- * For typical AI rewrite sizes (<200 lines) this is fast enough.
  */
 export function diffLines(original: string, modified: string): DiffLine[] {
 	const a = original.split('\n');
 	const b = modified.split('\n');
+	if (a.length > MAX_LCS_LINES || b.length > MAX_LCS_LINES) {
+		return [
+			...a.map((text): DiffLine => ({ type: 'removed', text })),
+			...b.map((text): DiffLine => ({ type: 'added', text })),
+		];
+	}
 
 	// Build LCS table
 	const m = a.length, n = b.length;

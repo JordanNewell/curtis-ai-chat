@@ -1,7 +1,10 @@
 // Edit Fact Modal — edit a single memory fact's content + category.
 
-import { App, Modal, Setting } from 'obsidian';
+import { App, Modal, Notice, Setting } from 'obsidian';
 import type { MemoryFact } from '../../types';
+
+/** The only categories that round-trip through the memory markdown file. */
+const FACT_CATEGORIES = ['preference', 'identity', 'project', 'instruction', 'other'] as const;
 
 export class EditFactModal extends Modal {
 	private fact: MemoryFact;
@@ -34,15 +37,21 @@ export class EditFactModal extends Modal {
 		new Setting(contentEl)
 			.setName('Category')
 			.setDesc('Optional — used for grouping')
-			.addText((text) => {
-				text.setPlaceholder('Preference / identity / project / instruction / other')
-					.setValue(this.category)
-					.onChange((val) => { this.category = val; });
+			.addDropdown((dd) => {
+				// Free text here used to be silently lost on round-trip: only
+				// these five values survive the memory file's parse/serialize.
+				dd.addOption('', 'None');
+				for (const c of FACT_CATEGORIES) dd.addOption(c, c);
+				dd.setValue(this.category).onChange((val) => { this.category = val; });
 			});
 
 		new Setting(contentEl)
 			.addButton((btn) => btn.setButtonText('Cancel').onClick(() => this.close()))
 			.addButton((btn) => btn.setButtonText('Save').setCta().onClick(() => {
+				if (!this.content.trim()) {
+					new Notice('Fact content cannot be empty');
+					return;
+				}
 				this.onSave(this.content, this.category);
 				this.close();
 			}));

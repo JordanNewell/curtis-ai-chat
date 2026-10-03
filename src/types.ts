@@ -9,7 +9,9 @@
 // '../types' don't have to thread a second import. The definitions below
 // depend on these shapes.
 import type { ToolDefinition, ToolCall } from './core/tools';
+import type { McpServerConfig } from './mcp/types';
 export type { ToolDefinition, ToolParameter, ToolCall, ToolResult, ToolContext } from './core/tools';
+export type { McpServerConfig, McpServerStatus, McpConnectionState } from './mcp/types';
 
 // ============================================================================
 // PROVIDER TYPES
@@ -66,12 +68,6 @@ export interface TokenUsage {
 	completionTokens: number;
 	totalTokens: number;
 	cachedTokens?: number;
-}
-
-export interface StreamChunk {
-	delta: string;
-	usage?: TokenUsage;
-	done: boolean;
 }
 
 export type StreamCallback = (chunk: string) => void;
@@ -163,7 +159,6 @@ export interface ConversationMessage {
 	provider?: string;
 	model?: string;
 	images?: string[];  // base64
-	parentId?: string;  // for branching
 	/** Vault paths of notes attached via @-mention. Their contents are
 	 *  prepended to `content` when building the message sent to the AI,
 	 *  but never shown in the user's chat bubble. Presists across
@@ -178,25 +173,14 @@ export interface ConversationMessage {
 	tool_error?: boolean;
 }
 
-export interface ConversationBranch {
-	id: string;
-	parentMessageId: string;
-	messageId: string;
-	label?: string;
-}
-
 export interface Conversation {
 	id: string;
 	title: string;
 	messages: ConversationMessage[];
-	branches: ConversationBranch[];
 	createdAt: number;
 	updatedAt: number;
 	provider: string;
 	model: string;
-	tags?: string[];
-	starred?: boolean;
-	activeBranch?: string;
 }
 
 export interface ConversationStats {
@@ -204,8 +188,8 @@ export interface ConversationStats {
 	totalMessages: number;
 	totalTokens: number;
 	totalCost: number;
-	providerBreakdown: Record<string, { tokens: number; cost: number }>;
-	modelBreakdown: Record<string, { tokens: number; cost: number; count: number }>;
+	providerBreakdown: Record<string, { tokens: number }>;
+	modelBreakdown: Record<string, { tokens: number; count: number }>;
 }
 
 // ============================================================================
@@ -232,7 +216,6 @@ export interface CurtisSettings {
 
 	// Chat settings
 	chatViewPosition: 'right' | 'left';
-	chatWidth: number;  // pixels
 
 	/** Folder where Save-as-note and slash /note drop new notes. '' = vault root. */
 	noteSaveFolder: string;
@@ -250,10 +233,6 @@ export interface CurtisSettings {
 	/** Vault path of the wallpaper image (when chatBackground = 'wallpaper'). */
 	chatWallpaperPath: string;
 
-	// Cost tracking
-	enableCostTracking: boolean;
-	budgetLimit?: number;
-
 	// Memory
 	enableMemory: boolean;
 	/** 'off' = manual only, 'auto' = LLM extracts after each turn. */
@@ -261,9 +240,9 @@ export interface CurtisSettings {
 	/** Path (relative to vault root) of the markdown memory file. */
 	memoryFilePath: string;
 
-	enableDailyNotesAssistant: boolean;
-	dailyNotesFolder: string;
-	dailyNotesFormat: string;
+	/** Folder (relative to vault root) where conversation transcripts are
+	 *  stored as one markdown file per conversation. */
+	conversationsFolder: string;
 
 	// RAG
 	enableRag: boolean;
@@ -281,43 +260,16 @@ export interface CurtisSettings {
 	/** Opt-in web tools (web_search + read_url). Off by default — Curtis is
 	 *  vault-first. When enabled, requires enableAgent=true to take effect. */
 	enableWebSearch: boolean;
+	/** MCP client — connect to user-configured MCP servers and call their
+	 *  tools alongside the built-ins. Requires enableAgent=true to take
+	 *  effect (MCP tools ride the same agent loop). */
+	enableMcp: boolean;
+	/** MCP server configs (Streamable HTTP endpoints). */
+	mcpServers: McpServerConfig[];
 	/** Render "Today / Yesterday / date" dividers between messages that
 	 *  cross a calendar-date boundary. Matches iMessage/Telegram feel. */
 	showDaySeparators: boolean;
-
-	// Hotkeys
-	hotkeys: HotkeyConfig;
 }
-
-export interface HotkeyConfig {
-	toggleChat: string;
-	quickAction: string;
-	explainSelection: string;
-}
-
-// ============================================================================
-// TEMPLATE TYPES
-// ============================================================================
-
-export interface TemplateVariable {
-	name: string;
-	defaultValue?: string;
-	required?: boolean;
-	description?: string;
-}
-
-export interface PromptTemplate {
-	id: string;
-	name: string;
-	description: string;
-	category: TemplateCategory;
-	content: string;
-	variables?: TemplateVariable[];
-	systemPrompt?: string;
-	icon?: string;
-}
-
-export type TemplateCategory = 'writing' | 'coding' | 'analysis' | 'creative' | 'productivity' | 'learning' | 'custom';
 
 // ============================================================================
 // MEMORY TYPES

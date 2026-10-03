@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jordannewell.github.io/curtis-ai-chat/sitemap.xml

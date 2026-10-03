@@ -28,6 +28,10 @@ export type ProviderFamily =
 	| 'gemini'
 	| 'ollama';
 
+/** Appended to a streamed reply that hit the provider's max-tokens limit,
+ *  so the user can see the reply was cut short rather than just odd. */
+export const TRUNCATION_MARKER = '\n\n*[Truncated — hit the max-tokens limit]*';
+
 export abstract class BaseProvider implements AIProvider {
 	abstract readonly id: string;
 	abstract readonly name: string;
@@ -41,6 +45,13 @@ export abstract class BaseProvider implements AIProvider {
 	/** Family tag — defaults to openai-compat for BaseProvider subclasses.
 	 *  AnthropicProvider overrides this to 'anthropic'. Used by supportsToolCalls(). */
 	readonly family: ProviderFamily = 'openai-compat';
+
+	/**
+	 * True when the provider accepts `stream_options: { include_usage: true }`.
+	 * Set by the registry only for OpenAI-dialect providers known to support
+	 * the field — strict/local compat servers may 400 on unknown fields.
+	 */
+	protected supportsStreamUsage = false;
 
 	protected abstract getAuthHeaders(): Record<string, string>;
 
@@ -83,6 +94,12 @@ export abstract class BaseProvider implements AIProvider {
 			max_tokens: options.maxTokens,
 			stream: options.stream ?? false,
 		};
+
+		// Usage reporting for streamed requests — without this OpenAI-family
+		// servers never send the usage-only final chunk.
+		if (options.stream && this.supportsStreamUsage) {
+			body.stream_options = { include_usage: true };
+		}
 
 		// Tool advertisement — only when the caller provided tools AND this
 		// provider speaks the OpenAI function-calling dialect. Other families
@@ -133,6 +150,36 @@ export abstract class BaseProvider implements AIProvider {
 
 		const decoder = new TextDecoder();
 		let buffer = '';
+		let truncationSent = false;
+
+		const processLine = (line: string): void => {
+			const clean = line.endsWith('\r') ? line.slice(0, -1) : line;
+			if (!clean.trim() || !clean.startsWith('data:')) return;
+			const data = clean.charAt(5) === ' ' ? clean.slice(6) : clean.slice(5);
+			if (data === '[DONE]') return;
+
+			try {
+				const parsed: unknown = JSON.parse(data);
+				if (!isOpenAIChunk(parsed)) return;
+				const delta = parsed.choices[0]?.delta?.content || '';
+				if (delta) onChunk(delta);
+
+				if (parsed.usage && onUsage) {
+					onUsage({
+						promptTokens: parsed.usage.prompt_tokens || 0,
+						completionTokens: parsed.usage.completion_tokens || 0,
+						totalTokens: parsed.usage.total_tokens || 0,
+					});
+				}
+
+				if (!truncationSent && parsed.choices[0]?.finish_reason === 'length') {
+					truncationSent = true;
+					onChunk(TRUNCATION_MARKER);
+				}
+			} catch (e) {
+				if (onError) onError(e as Error);
+			}
+		};
 
 		try {
 			while (true) {
@@ -142,30 +189,10 @@ export abstract class BaseProvider implements AIProvider {
 				buffer += decoder.decode(value, { stream: true });
 				const lines = buffer.split('\n');
 				buffer = lines.pop() || '';
-
-				for (const line of lines) {
-					if (!line.trim() || !line.startsWith('data: ')) continue;
-					const data = line.slice(6);
-					if (data === '[DONE]') continue;
-
-					try {
-						const parsed: unknown = JSON.parse(data);
-						if (!isOpenAIChunk(parsed)) continue;
-						const delta = parsed.choices[0]?.delta?.content || '';
-						if (delta) onChunk(delta);
-
-						if (parsed.usage && onUsage) {
-							onUsage({
-								promptTokens: parsed.usage.prompt_tokens || 0,
-								completionTokens: parsed.usage.completion_tokens || 0,
-								totalTokens: parsed.usage.total_tokens || 0,
-							});
-						}
-					} catch (e) {
-						if (onError) onError(e as Error);
-					}
-				}
+				for (const line of lines) processLine(line);
 			}
+			// Flush a final chunk delivered without a trailing newline.
+			if (buffer.trim()) processLine(buffer);
 		} finally {
 			reader.releaseLock();
 		}
@@ -192,6 +219,8 @@ export class OpenAICompatibleProvider extends BaseProvider {
 		models: AIModel[];
 		apiKey: string;
 		authType?: AuthType;
+		/** Accepts `stream_options: { include_usage: true }` on streamed requests. */
+		supportsStreamUsage?: boolean;
 	}) {
 		super();
 		this.id = config.id;
@@ -200,6 +229,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
 		this.models = config.models;
 		this.apiKey = config.apiKey;
 		this.authType = config.authType ?? 'bearer';
+		if (config.supportsStreamUsage) this.supportsStreamUsage = true;
 	}
 
 	/** Replace this provider's model list (used by auto-discovery). */
@@ -208,7 +238,9 @@ export class OpenAICompatibleProvider extends BaseProvider {
 	}
 
 	getAuthHeaders(): Record<string, string> {
-		if (!this.apiKey) return {};
+		// Keyless auth never sends a header — some local proxies reject
+		// unexpected Authorization values outright.
+		if (this.authType === 'none' || !this.apiKey) return {};
 		return { Authorization: `Bearer ${this.apiKey}` };
 	}
 

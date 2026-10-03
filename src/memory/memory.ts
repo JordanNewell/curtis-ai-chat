@@ -135,7 +135,9 @@ export class MemoryStore {
 
 	/** Add a fact, dedupe against existing, persist. */
 	async addFact(content: string, category?: string): Promise<MemoryFact | null> {
-		const trimmed = content.trim();
+		// One fact = one bullet line; newlines would silently truncate the fact
+		// on the next parse of the memory file.
+		const trimmed = content.replace(/\s+/g, ' ').trim();
 		if (!trimmed) return null;
 		// Trivial dedupe — exact content match (case-insensitive).
 		const exists = this.facts.find((f) => f.content.toLowerCase() === trimmed.toLowerCase());
@@ -172,10 +174,15 @@ export class MemoryStore {
 	async updateFact(id: string, content: string, category?: string): Promise<MemoryFact | null> {
 		const fact = this.facts.find((f) => f.id === id);
 		if (!fact) return null;
-		const trimmed = content.trim();
+		const trimmed = content.replace(/\s+/g, ' ').trim();
 		if (!trimmed) return null;
 		fact.content = trimmed;
-		if (category !== undefined) fact.category = category;
+		if (category !== undefined) {
+			// Only the five known categories round-trip through the markdown
+			// file — anything else would be re-parsed as fact text.
+			const normalized = category.trim().toLowerCase();
+			fact.category = normalized === '' ? undefined : normalized;
+		}
 		fact.timestamp = Date.now();
 		fact.lastAccessed = Date.now();
 		await this.persist();

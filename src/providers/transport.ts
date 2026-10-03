@@ -74,16 +74,16 @@ export interface ChatStreamResult {
 }
 
 /**
- * Lazy accessor for Node's https module. Returns undefined on mobile or if
- * Node integration is unavailable for any reason. Never throws.
+ * Lazy accessor for Node's http/https module, picked by protocol. Returns
+ * undefined on mobile or if Node integration is unavailable. Never throws.
  */
-function getNodeHttps(): NodeHttpsModule | undefined {
+function getNodeHttpModule(protocol: string): NodeHttpsModule | undefined {
 	if (!Platform.isDesktopApp) return undefined;
 	try {
-		// window.require bypasses esbuild hoisting; https is externalized.
+		// window.require bypasses esbuild hoisting; http(s) is externalized.
 		const req = (window as unknown as { require?: ElectronRequire }).require;
 		if (typeof req !== 'function') return undefined;
-		return req('https');
+		return req(protocol === 'http:' ? 'http' : 'https') as NodeHttpsModule;
 	} catch {
 		return undefined;
 	}
@@ -94,9 +94,10 @@ function getNodeHttps(): NodeHttpsModule | undefined {
  * - `stream: true` requests prefer node-https (desktop) or fetch (mobile).
  * - `stream: false` requests use requestUrl (simplest, works everywhere).
  */
-export function pickTransport(stream: boolean): TransportKind {
+export function pickTransport(stream: boolean, endpoint?: string): TransportKind {
 	if (stream) {
-		if (getNodeHttps() !== undefined) return 'node-https';
+		const protocol = endpoint ? new URL(endpoint).protocol : 'https:';
+		if (getNodeHttpModule(protocol) !== undefined) return 'node-https';
 		// fetch() is architecturally required here for mobile streaming.
 		// Obsidian's requestUrl does not support SSE streaming (it buffers).
 		// Mobile users have no alternative transport for CORS-friendly providers.
@@ -149,7 +150,7 @@ export async function chatStream(
 	options: { stream: boolean },
 	callbacks: ChatStreamCallbacks = {}
 ): Promise<ChatStreamResult> {
-	const transport = pickTransport(options.stream);
+	const transport = pickTransport(options.stream, provider.endpoint);
 	let cancelImpl: () => void = () => {};
 
 	const done = new Promise<void>((resolve, reject) => {
@@ -168,12 +169,33 @@ export async function chatStream(
 				if (transport === 'node-https') {
 					await runViaNodeHttps(provider, requestInit, options.stream, callbacks, (c) => { cancelImpl = c; });
 				} else if (transport === 'fetch') {
-					await runViaFetch(provider, requestInit, options.stream, callbacks, (c) => { cancelImpl = c; });
+					let delivered = false;
+					const tracked: ChatStreamCallbacks = {
+						...callbacks,
+						onChunk: (c) => { delivered = true; callbacks.onChunk?.(c); },
+						onUsage: (u) => { delivered = true; callbacks.onUsage?.(u); },
+					};
+					try {
+						await runViaFetch(provider, requestInit, options.stream, tracked, (c) => { cancelImpl = c; });
+					} catch (err) {
+						const networkish = err instanceof TypeError
+							|| (err instanceof Error && err.message.includes('fetch unavailable'));
+						if (delivered || callbacks.signal?.aborted || !networkish) throw err;
+						// CORS/network failure before any content arrived (mobile
+						// common case): retry once, buffered, via requestUrl.
+						await runViaRequestUrl(provider, rewriteBodyStreamOff(requestInit), callbacks);
+					}
 				} else {
 					await runViaRequestUrl(provider, requestInit, callbacks);
 				}
 				resolve();
 			} catch (err) {
+				// An aborted request must not surface as a user-facing error —
+				// socket teardown (ConnResetException, hang-up) lands here too.
+				if (callbacks.signal?.aborted) {
+					resolve();
+					return;
+				}
 				const error = err instanceof Error ? err : new Error(String(err));
 				if (error.name === 'AbortError') {
 					resolve();
@@ -202,10 +224,9 @@ function runViaNodeHttps(
 	callbacks: ChatStreamCallbacks,
 	registerCancel: (cancel: () => void) => void
 ): Promise<void> {
-	const https = getNodeHttps();
-	if (!https) throw new Error('Node https unavailable on this platform');
-
 	const url = new URL(provider.endpoint);
+	const https = getNodeHttpModule(url.protocol);
+	if (!https) throw new Error('Node http(s) unavailable on this platform');
 	const body = (requestInit.body as string) ?? '';
 	const headers: Record<string, string> = flattenHeaders(requestInit.headers);
 
@@ -309,6 +330,13 @@ async function runViaFetch(
 	// fetch Response already satisfies StreamResponse shape (body is ReadableStream).
 	const streamResponse = response as unknown as StreamResponse;
 
+	// Register while the stream is live — after parseStream the body is spent
+	// and cancelling is a no-op.
+	registerCancel(() => {
+		const body = response.body as { cancel?: () => Promise<void> } | null;
+		void body?.cancel?.();
+	});
+
 	if (stream) {
 		await provider.parseStream(
 			streamResponse,
@@ -321,13 +349,6 @@ async function runViaFetch(
 		if (ai.content) callbacks.onChunk?.(ai.content);
 		if (ai.usage) callbacks.onUsage?.(ai.usage);
 	}
-
-	registerCancel(() => {
-		// fetch has no native cancel beyond AbortSignal (already wired above).
-		// response.body?.cancel() is a soft-cancel for the stream.
-		const body = response.body as { cancel?: () => Promise<void> } | null;
-		void body?.cancel?.();
-	});
 }
 
 // ---------------------------------------------------------------------------
@@ -339,6 +360,9 @@ async function runViaRequestUrl(
 	requestInit: RequestInit,
 	callbacks: ChatStreamCallbacks
 ): Promise<void> {
+	// requestUrl cannot be aborted — but a request that is already cancelled
+	// must not deliver its buffered payload into a finalized chat bubble.
+	if (callbacks.signal?.aborted) return;
 	const headers: Record<string, string> = flattenHeaders(requestInit.headers);
 
 	let urlResp: RequestUrlResponse;
@@ -354,6 +378,7 @@ async function runViaRequestUrl(
 		const msg = (e as { message?: string }).message || String(e);
 		throw new Error(`${provider.name} API error: ${msg}`);
 	}
+	if (callbacks.signal?.aborted) return;
 
 	// Parse the body ourselves and narrow at the boundary. requestUrl returns
 	// .json already-parsed, but we re-parse .text so the value flows through
@@ -369,4 +394,21 @@ async function runViaRequestUrl(
 	if (ai.content) callbacks.onChunk?.(ai.content);
 	if (ai.usage) callbacks.onUsage?.(ai.usage);
 	// Note: requestUrl ignores AbortSignal; abort during this path is best-effort.
+}
+
+/**
+ * Rewrite a JSON request body with `stream: false` — used when a failed
+ * streaming fetch is retried buffered via requestUrl (which cannot stream).
+ */
+function rewriteBodyStreamOff(requestInit: RequestInit): RequestInit {
+	if (typeof requestInit.body !== 'string') return requestInit;
+	try {
+		const parsed: unknown = JSON.parse(requestInit.body);
+		if (isRecord(parsed) && parsed.stream === true) {
+			return { ...requestInit, body: JSON.stringify({ ...parsed, stream: false }) };
+		}
+	} catch {
+		// Non-JSON body — send as-is.
+	}
+	return requestInit;
 }

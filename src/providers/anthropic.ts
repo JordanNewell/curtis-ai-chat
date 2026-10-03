@@ -14,6 +14,7 @@ import type {
 	ToolCall,
 } from '../types';
 import { isAnthropicMessage, isAnthropicStreamEvent } from './types/anthropic-responses';
+import { TRUNCATION_MARKER } from './base';
 import { buildToolParametersSchema } from '../core/tools';
 import { isRecord } from '../core/types/json-helpers';
 
@@ -54,17 +55,16 @@ export function getAnthropicModels(): AIModel[] {
 export class AnthropicProvider implements AIProvider {
 	readonly id = 'anthropic';
 	readonly name = 'Anthropic Claude';
-	readonly endpoint = 'https://api.anthropic.com/v1/messages';
+	readonly endpoint: string;
 	models = ANTHROPIC_MODELS;  // mutable so auto-discovery can update in place
 	readonly supportsStreaming = true;
 	readonly supportsVision = true;
 
 	private apiKey: string;
-	/** Captured from message_start; emitted with output_tokens in message_delta. */
-	private pendingInputTokens = 0;
 
-	constructor(apiKey: string) {
+	constructor(apiKey: string, endpoint = 'https://api.anthropic.com/v1/messages') {
 		this.apiKey = apiKey;
+		this.endpoint = endpoint;
 	}
 
 	/** Replace this provider's model list (used by auto-discovery). */
@@ -162,8 +162,76 @@ export class AnthropicProvider implements AIProvider {
 
 		const decoder = new TextDecoder();
 		let buffer = '';
-		// Reset per-stream; the message_start handler sets this.
-		this.pendingInputTokens = 0;
+		// Captured from message_start; local to this stream so two concurrent
+		// streams on the shared provider instance never cross-contaminate.
+		let pendingInputTokens = 0;
+		let truncationSent = false;
+
+		const processLine = (line: string): void => {
+			const clean = line.endsWith('\r') ? line.slice(0, -1) : line;
+			if (!clean.trim() || !clean.startsWith('data:')) return;
+			const data = clean.charAt(5) === ' ' ? clean.slice(6) : clean.slice(5);
+			if (data === '[DONE]') return;
+
+			try {
+				const rawEvent: unknown = JSON.parse(data);
+				if (!isAnthropicStreamEvent(rawEvent)) return;
+				switch (rawEvent.type) {
+					case 'content_block_delta':
+						if (rawEvent.delta.type === 'text_delta') {
+							if (rawEvent.delta.text) onChunk(rawEvent.delta.text);
+						}
+						// input_json_delta is tool-call incremental JSON — not
+						// surfaced in this implementation; fall through silently.
+						break;
+					case 'message_delta':
+						if (!truncationSent && rawEvent.delta.stop_reason === 'max_tokens') {
+							truncationSent = true;
+							onChunk(TRUNCATION_MARKER);
+						}
+						if (onUsage) {
+							// output_tokens here is cumulative; input_tokens lives on
+							// message_start, so use the saved value.
+							const inputTokens = pendingInputTokens;
+							const outputTokens = rawEvent.usage.output_tokens || 0;
+							onUsage({
+								promptTokens: inputTokens,
+								completionTokens: outputTokens,
+								totalTokens: inputTokens + outputTokens,
+							});
+						}
+						break;
+					case 'message_start':
+						// Initial event carries input_tokens (prompt size) under
+						// message.usage. Save it; the final usage comes from
+						// message_delta which only carries output_tokens.
+						pendingInputTokens = rawEvent.message.usage.input_tokens || 0;
+						break;
+					case 'error':
+						if (onError) {
+							// Mid-stream error event — surface and stop.
+							const errMsg = rawEvent.error.message || 'Anthropic stream error';
+							onError(new Error(errMsg));
+							return;
+						}
+						break;
+					case 'message_stop':
+					case 'ping':
+					case 'content_block_start':
+					case 'content_block_stop':
+						// no-op for these event types in this implementation
+						break;
+					default: {
+						// exhaustive — if Anthropic adds a new event type, TS
+						// will flag this assignment as non-assignable to never.
+						const _exhaustive: never = rawEvent;
+						void _exhaustive;
+					}
+				}
+			} catch (e) {
+				if (onError) onError(e as Error);
+			}
+		};
 
 		try {
 			while (true) {
@@ -173,67 +241,10 @@ export class AnthropicProvider implements AIProvider {
 				buffer += decoder.decode(value, { stream: true });
 				const lines = buffer.split('\n');
 				buffer = lines.pop() || '';
-
-				for (const line of lines) {
-					if (!line.trim() || !line.startsWith('data: ')) continue;
-					const data = line.slice(6);
-					if (data === '[DONE]') continue;
-
-					try {
-						const rawEvent: unknown = JSON.parse(data);
-						if (!isAnthropicStreamEvent(rawEvent)) continue;
-						switch (rawEvent.type) {
-							case 'content_block_delta':
-								if (rawEvent.delta.type === 'text_delta') {
-									if (rawEvent.delta.text) onChunk(rawEvent.delta.text);
-								}
-								// input_json_delta is tool-call incremental JSON — not
-								// surfaced in this implementation; fall through silently.
-								break;
-							case 'message_delta':
-								if (onUsage) {
-									// output_tokens here is cumulative; input_tokens lives on
-									// message_start, so use the saved value.
-									const inputTokens = this.pendingInputTokens;
-									const outputTokens = rawEvent.usage.output_tokens || 0;
-									onUsage({
-										promptTokens: inputTokens,
-										completionTokens: outputTokens,
-										totalTokens: inputTokens + outputTokens,
-									});
-								}
-								break;
-							case 'message_start':
-								// Initial event carries input_tokens (prompt size) under
-								// message.usage. Save it; the final usage comes from
-								// message_delta which only carries output_tokens.
-								this.pendingInputTokens = rawEvent.message.usage.input_tokens || 0;
-								break;
-							case 'error':
-								if (onError) {
-									// Mid-stream error event — surface and stop.
-									const errMsg = rawEvent.error.message || 'Anthropic stream error';
-									onError(new Error(errMsg));
-								}
-								break;
-							case 'message_stop':
-							case 'ping':
-							case 'content_block_start':
-							case 'content_block_stop':
-								// no-op for these event types in this implementation
-								break;
-							default: {
-								// exhaustive — if Anthropic adds a new event type, TS
-								// will flag this assignment as non-assignable to never.
-								const _exhaustive: never = rawEvent;
-								void _exhaustive;
-							}
-						}
-					} catch (e) {
-						if (onError) onError(e as Error);
-					}
-				}
+				for (const line of lines) processLine(line);
 			}
+			// Flush a final event delivered without a trailing newline.
+			if (buffer.trim()) processLine(buffer);
 		} finally {
 			reader.releaseLock();
 		}

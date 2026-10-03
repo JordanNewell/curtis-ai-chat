@@ -38,16 +38,33 @@ export class TTSController {
 	private sentences: string[] = [];
 	private listeners: Set<TTSListener> = new Set();
 	private voice: SpeechSynthesisVoice | null = null;
+	private voiceResolved = false;
+	/** Monotonic tag per utterance sent — stale onend/onerror events from
+	 *  cancelled utterances (skip, rate change, stop) are ignored by comparing. */
+	private generation = 0;
 
 	constructor() {
-		// Cache a preferred voice once. Subsequent utterances reuse it so
-		// there's no voice drift between sentences.
-		const voices = window.speechSynthesis.getVoices();
-		this.voice =
-			voices.find((v) => v.lang === 'en-US' && v.default) ||
-			voices.find((v) => v.lang.startsWith('en')) ||
-			voices[0] ||
-			null;
+		// Voices load asynchronously in many windows (getVoices() returns []
+		// until voiceschanged fires) — resolve lazily instead of caching once
+		// at construction, and re-resolve when the voice list arrives.
+		if (typeof window.speechSynthesis !== 'undefined') {
+			window.speechSynthesis.onvoiceschanged = () => {
+				this.voiceResolved = false;
+			};
+		}
+	}
+
+	private pickVoice(): SpeechSynthesisVoice | null {
+		if (!this.voiceResolved) {
+			this.voiceResolved = true;
+			const voices = window.speechSynthesis.getVoices();
+			this.voice =
+				voices.find((v) => v.lang === 'en-US' && v.default) ||
+				voices.find((v) => v.lang.startsWith('en')) ||
+				voices[0] ||
+				null;
+		}
+		return this.voice;
 	}
 
 	subscribe(fn: TTSListener): () => void {
@@ -90,20 +107,24 @@ export class TTSController {
 		// Cancel anything still queued so rapid skips don't pile up.
 		window.speechSynthesis.cancel();
 
+		const gen = ++this.generation;
 		const utterance = new SpeechSynthesisUtterance(this.sentences[idx]);
 		utterance.rate = this.state.rate;
 		utterance.pitch = 1;
 		utterance.volume = 1;
-		if (this.voice) utterance.voice = this.voice;
+		const voice = this.pickVoice();
+		if (voice) utterance.voice = voice;
 
 		utterance.onend = () => {
+			// Stale event from a cancelled/superseded utterance — the chain is
+			// already being driven by a newer generation.
+			if (gen !== this.generation) return;
 			// If the user paused/stopped during this utterance, don't advance.
 			if (!this.state.isPlaying || this.state.isPaused) return;
-			if (this.state.currentSentence === idx) {
-				this.speakSentence(idx + 1);
-			}
+			this.speakSentence(idx + 1);
 		};
 		utterance.onerror = () => {
+			if (gen !== this.generation) return;
 			if (!this.state.isPlaying) return;
 			this.state.isPlaying = false;
 			this.notify();
@@ -128,6 +149,7 @@ export class TTSController {
 	}
 
 	stop(): void {
+		this.generation++; // in-flight utterance events are stale from here on
 		window.speechSynthesis.cancel();
 		this.state.isPlaying = false;
 		this.state.isPaused = false;

@@ -1,5 +1,6 @@
 import { Menu, Editor, MarkdownView, Notice } from 'obsidian';
 import type CurtisPlugin from '../main';
+import { CHAT_VIEW_TYPE, ChatView } from '../chat/view';
 
 interface ContextAction {
 	id: string;
@@ -54,8 +55,18 @@ export function registerContextMenu(plugin: CurtisPlugin): void {
 						item.setIcon('bot');
 						item.onClick(() => {
 							if (action.action === 'chat') {
-								void plugin.activateChatView();
-								// TODO: pre-load selection into chat
+								// Prefill the composer with the selection as a
+								// quote instead of opening an empty chat that
+								// silently discards what the user selected.
+								const quote = selection.length > 8000
+									? selection.slice(0, 8000) + '\n…[truncated]'
+									: selection;
+								void plugin.activateChatView().then(() => {
+									const leaf = plugin.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0];
+									if (leaf?.view instanceof ChatView) {
+										leaf.view.setInputValue(`> ${quote.replace(/\n/g, '\n> ')}\n\n`);
+									}
+								});
 							} else if (action.action === 'rewrite-diff') {
 								void plugin.runDiffRewrite(editor, selection);
 							} else {
@@ -76,11 +87,14 @@ export function registerContextMenu(plugin: CurtisPlugin): void {
 				menu.addItem((item) => {
 					item.setTitle('Save to memory');
 					item.setIcon('brain');
-					item.onClick(() => {
-						void plugin.memoryStore.addFact(selection).then(() => {
-							new Notice('Saved to memory');
+						item.onClick(() => {
+							void plugin.memoryStore.addFact(selection)
+								.then(() => new Notice('Saved to memory'))
+								.catch((e) => {
+									console.error('[Curtis] Save to memory failed:', e);
+									new Notice('Could not save to memory');
+								});
 						});
-					});
 				});
 			}
 		})
