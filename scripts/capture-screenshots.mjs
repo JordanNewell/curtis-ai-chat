@@ -435,11 +435,12 @@ async function main() {
 	}
 
 	// ---- Pass 2: phone-width shots ----
-	// Viewport emulation renders fine as long as Obsidian's desktop chrome is
-	// left alone (the is-mobile body class blanks it). So: dock the chat to
-	// the LEFT, hide the ribbon/editor/status bar via injected CSS, and the
-	// emulated 390px viewport becomes a clean full-bleed phone screen.
-	console.log('[shots] pass 2: phone-width (390x844 emulation, chat docked left)');
+	// Emulation renders fine as long as Obsidian's desktop chrome is left
+	// alone (the is-mobile body class blanks it). So: dock the chat to the
+	// LEFT, hide the ribbon/editor/status bar via injected CSS, and the
+	// emulated viewport becomes a clean full-bleed phone screen — captured at
+	// 2x DPR (900x1600, the directory's recommended mobile size).
+	console.log('[shots] pass 2: phone-width (450x800 @2x DPR, chat docked left)');
 	const mob = await bootInstance(9223);
 	try {
 		let { page, ctx } = mob;
@@ -449,7 +450,15 @@ async function main() {
 			plugin.settings.chatViewPosition = 'left';
 			plugin.saveSettings();
 		});
-		await page.setViewportSize({ width: 390, height: 844 });
+		// Phone metrics at 2x DPR via raw CDP. Page-level session — Obsidian's
+		// build exposes Emulation domains there, but not Browser.* domains.
+		const cdp = await ctx.newCDPSession(page);
+		await cdp.send('Emulation.setDeviceMetricsOverride', {
+			width: 450,
+			height: 800,
+			deviceScaleFactor: 2,
+			mobile: true,
+		});
 		await page.evaluate(() => location.reload());
 		page = await waitForVaultPage(
 			ctx,
@@ -464,8 +473,6 @@ async function main() {
 			'command registration (phone)'
 		);
 		await page.evaluate(selectLatestConversation);
-		// The workspace may have restored the chat leaf docked right from the
-		// desktop pass; activateChatView only re-docks when no leaf exists.
 		await page.evaluate(() => {
 			window.app.workspace.getLeavesOfType('curtis-chat').forEach((l) => l.detach());
 		});
@@ -489,17 +496,24 @@ async function main() {
 		});
 		await page.evaluate(scrollChatToTop);
 		await page.waitForTimeout(1500);
-		await page.screenshot({
-			path: resolve(OUT_DIR, 'phone-chat.png'),
-			clip: { x: 0, y: 0, width: 390, height: 844 },
-		});
+		// Capture via raw CDP — Playwright's screenshot imposes 1x capture
+		// metrics and clobbers the DPR override; Page.captureScreenshot
+		// respects it (900x1600 physical).
+		const captureViaCdp = async (outName) => {
+			const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+			writeFileSync(resolve(OUT_DIR, outName), Buffer.from(data, 'base64'));
+		};
+		await captureViaCdp('phone-chat.png');
 		console.log('[shots] phone-chat.png');
-		await page.evaluate(scrollChatToTop);
-		await page.waitForTimeout(400);
-		await page.screenshot({
-			path: resolve(OUT_DIR, 'phone-chat-bottom.png'),
-			clip: { x: 0, y: 0, width: 390, height: 844 },
+		// Second mobile shot: scrolled to the bottom — input box + last reply.
+		await page.evaluate(() => {
+			const els = document.querySelectorAll(
+				'.workspace-leaf-content[data-type="curtis-chat"] .view-content, .workspace-leaf-content[data-type="curtis-chat"] .curtis-messages'
+			);
+			for (const c of els) c.scrollTop = c.scrollHeight;
 		});
+		await page.waitForTimeout(700);
+		await captureViaCdp('phone-chat-bottom.png');
 		console.log('[shots] phone-chat-bottom.png');
 
 		await page.evaluate(() => {

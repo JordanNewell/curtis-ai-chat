@@ -8,8 +8,10 @@
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"lint": "eslint src",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"site:sync": "node scripts/site-sync.mjs",
 		"shots": "node scripts/capture-screenshots.mjs",
-		"mockups": "python scripts/phone_mockup.py assets/screenshots/phone-chat.png assets/screenshots/phone-chat-framed.png && python scripts/phone_mockup.py assets/screenshots/ollama-provider-settings.png assets/screenshots/phone-settings-framed.png"
+		"mockups": "python scripts/phone_mockup.py assets/screenshots/phone-chat.png assets/screenshots/phone-chat-framed.png && python scripts/phone_mockup.py assets/screenshots/ollama-provider-settings.png assets/screenshots/phone-settings-framed.png",
+		"marketplace": "python scripts/marketplace_shots.py"
 	},
 	"keywords": [
 		"obsidian",
