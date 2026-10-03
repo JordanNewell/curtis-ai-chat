@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://jordannewell.github.io/curtis-ai-chat/"><img src="https://img.shields.io/badge/website-live-00FF41" alt="Live site"></a>
-  <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/badge/release-1.0.5-blue" alt="Latest release"></a>
+  <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/badge/release-1.4.0-blue" alt="Latest release"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Obsidian-1.13%2B-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian 1.13+">
   <img src="https://img.shields.io/badge/providers-30%2B-8B5CF6" alt="30+ providers">
@@ -48,7 +48,7 @@ Real captures, regenerated any time with `npm run shots && npm run mockups` (Pla
 
 2. **Configure one provider** — open **Settings → Curtis AI Chat → Provider Configuration**, enable a provider, paste an API key. Keys are stored in your OS keychain via the Obsidian `SecretStorage` API.
 
-3. **Send a message** — click the **robot icon** in the ribbon (or `Ctrl+Shift+G`), pick a model from the header dropdown, type, hit Enter.
+3. **Send a message** — click the **robot icon** in the ribbon, pick a model from the header dropdown, type, hit Enter. (All commands are hotkey-assignable under Obsidian's Settings → Hotkeys — none are bound by default.)
 
 > [!TIP]
 > **Want fully private, free, offline AI?** Install [Ollama](https://ollama.com), run `ollama pull qwen2.5:7b-instruct`, then enable **Ollama (Local)** in provider settings. No API key. Nothing leaves your machine.
@@ -60,11 +60,11 @@ Real captures, regenerated any time with `npm run shots && npm run mockups` (Pla
 
 ## Highlights
 
-Eight flagship features in this initial release. Full details in [CHANGELOG.md](CHANGELOG.md) and the per-feature docs.
+The flagship features. Full details in [CHANGELOG.md](CHANGELOG.md) and the per-feature docs.
 
 | | Feature | What it does |
 |---|---|---|
-| 🤖 | **[Curtis Agent](docs/AGENT.md)** | AI calls tools to read, create, and edit your vault notes. Ten built-in tools, every provider. |
+| 🤖 | **[Curtis Agent](docs/AGENT.md)** | AI calls tools to read, create, and edit your vault notes. Eleven built-in tools, every provider. |
 | 🔌 | **[MCP servers](docs/AGENT.md#mcp-servers)** | Connect MCP servers you already run — any tool they expose joins the agent's toolset, namespaced `mcp__<server>__<tool>`. |
 | ⚔️ | **[Multi-model arena](docs/ARENA.md)** | Stream one prompt to 2 models in parallel, side-by-side. Pick a winner, promote to chat. |
 | 🎨 | **[Inline diff rewrite](docs/DIFF_REWRITE.md)** | Cursor-style rewrite with an Accept/Reject diff modal. Assignable hotkey. |
@@ -83,11 +83,11 @@ Plus a full type-safety pass: every AI provider response shape is strictly typed
 
 ### 🤖 Curtis Agent
 
-The AI can now call tools to modify your vault. Ten built-in tools: `read_note`, `search_notes`, `create_note`, `edit_note`, `list_notes`, `get_tags`, `get_backlinks`, `get_current_note`, `get_current_date`, `calculator`.
+The AI can now call tools to modify your vault. Eleven built-in tools: `read_note`, `search_notes`, `semantic_search`, `create_note`, `edit_note`, `list_notes`, `get_tags`, `get_backlinks`, `get_current_note`, `get_current_date`, `calculator`.
 
 - **Every major provider** — Anthropic via native tool use, OpenAI-compatible endpoints (OpenAI, Gemini, Ollama, Groq, DeepSeek, custom). The model must support tool calling.
 - **`agentMaxTurns` safety cap** (default 5) prevents runaway tool loops
-- **MCP servers** — connect your existing [Model Context Protocol](https://modelcontextprotocol.io) servers (Settings → MCP servers) and every tool they expose becomes callable alongside the built-ins. Streamable HTTP transport; local stdio servers are bridged with `mcp-proxy` or `supergateway`.
+- **MCP servers** — connect your existing [Model Context Protocol](https://modelcontextprotocol.io) servers (Settings → MCP servers) and every tool they expose becomes callable alongside the built-ins. Streamable HTTP transport — local stdio servers need an HTTP bridge such as `mcp-proxy` or `supergateway`.
 - **Opt-in** via Settings → Agent → Enable
 
 → [docs/AGENT.md](docs/AGENT.md)
@@ -169,7 +169,7 @@ Curtis remembers durable facts about you across conversations — preferences, i
 
 Ask about your vault in plain language — the most relevant note excerpts are retrieved and injected into the prompt automatically.
 
-- **Any embeddings provider** — OpenAI, Gemini, Z.ai, or fully local via Ollama/LM Studio (Anthropic has no embeddings API)
+- **Any embeddings provider** — OpenAI, Gemini, Z.ai, or fully local via Ollama/LM Studio (Anthropic and Azure are excluded — no embeddings API / deployment-specific URL scheme)
 - **Automatic injection** — top-k excerpts in every prompt; skipped when you `@`-attach a note, because curated context wins
 - **Live index** — edits re-embed in the background; rebuilds are incremental and cheap
 - **`semantic_search` tool** — the agent queries the vault by meaning, not just keywords
@@ -179,13 +179,13 @@ Enable in Settings → Vault retrieval, then **Rebuild index**.
 
 ### ⌨️ Slash commands
 
-Type `/` in the chat input for an autocomplete menu of 16 commands — `/clear`, `/regen`, `/title`, `/copy`, `/note`, `/save-all`, `/paste`, `/model`, `/provider`, `/system`, `/stats`, `/remember`, `/forget`, `/memory`, `/export` (new), `/help`.
+Type `/` in the chat input for an autocomplete menu of 17 commands — `/clear`, `/regen` (alias `/regenerate`), `/title`, `/copy`, `/note`, `/save-all`, `/paste`, `/model`, `/provider`, `/system`, `/stats`, `/remember`, `/forget`, `/memory`, `/export`, `/help`.
 
 → [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md)
 
 ### ⚙️ Customizable
 
-- Chat panel position (left/right), width, background (theme default or a wallpaper image from your vault)
+- Chat panel position (left/right), background (theme default or a wallpaper image from your vault)
 - Configurable system prompt, temperature, max tokens
 - Enter-to-send (default) or Enter-for-newline
 - Auto-save assistant responses to a folder of your choice
@@ -200,7 +200,7 @@ Curtis AI Chat is the **agent layer for Obsidian**. Where other plugins focus on
 | | Curtis AI Chat | Smart Connections | Text Generator | Copilot for Obsidian |
 |---|---|---|---|---|
 | **All features free (no subscription)** | ✅ | ✅ | ✅ | Core only — advanced features need Copilot Plus |
-| **Agent tools (vault-modifying)** | ✅ 10 built-in + MCP | ❌ | ❌ | ✅ v4 agent chat |
+| **Agent tools (vault-modifying)** | ✅ 11 built-in + MCP | ❌ | ❌ | ✅ v4 agent chat |
 | **Semantic vault retrieval (RAG)** | ✅ any embeddings provider | ✅ | ❌ | ✅ |
 | **Provider count** | 30+ | 1–2 | 1–2 | 10+ |
 | **Local-first (Ollama, LM Studio)** | ✅ | ❌ | ✅ | ✅ |
@@ -262,6 +262,7 @@ Curtis is vault-first — no background telemetry, no analytics, no auto-update 
 | When | Domain | Why |
 |------|--------|-----|
 | You send a message (cloud providers) | Your provider's API (e.g. `api.anthropic.com`, `api.openai.com`, `generativelanguage.googleapis.com`) | Chat completion / streaming |
+| Vault retrieval builds or queries the index (opt-in) | Your embeddings provider's API | Note chunks and queries are sent for embedding |
 | You send a message (Ollama / LM Studio) | `localhost` / your custom endpoint | Local model inference |
 | You click "Test connection" or "Refresh models" | Your provider's API | Auth + reachability check, model list |
 | You use voice transcription | `api.openai.com` | Whisper API (only when voice input is on) |
@@ -270,7 +271,7 @@ Curtis is vault-first — no background telemetry, no analytics, no auto-update 
 | The agent calls MCP tools (opt-in) | your own MCP servers | User-configured endpoints (Settings → MCP servers) |
 | You click a sponsor link | `www.buymeacoffee.com`, `github.com` | Opens in your browser, off the plugin |
 
-The two web tools (`web_search`, `read_url`), voice transcription, and MCP are off by default. Without them, the only external calls are to whichever AI provider you configured — or none, if you're on Ollama. MCP tool calls go only to the server URLs you entered; tool results travel through your AI provider like any other tool result.
+The two web tools (`web_search`, `read_url`), voice transcription, MCP, and vault retrieval are off by default. Without them, the only external calls are to whichever AI provider you configured — or none, if you're on Ollama. MCP tool calls go only to the server URLs you entered; tool results travel through your AI provider like any other tool result.
 
 ---
 
@@ -307,7 +308,7 @@ Curtis AI Chat works on iOS and Android with a few caveats:
 - Touch targets sized to Apple HIG minimums (44pt send button, 40pt header icons)
 - Wallpaper background auto-disabled on phones for scroll performance
 - `/paste` may fail if the OS blocks clipboard read — use `Ctrl+V` / long-press → Paste
-- Streaming may degrade to buffered responses on some providers due to mobile CORS
+- Streaming falls back to buffered responses automatically when a provider blocks mobile CORS
 - Local providers work over LAN (`http://192.168.1.50:11434/v1/chat/completions`)
 
 ---
@@ -315,9 +316,11 @@ Curtis AI Chat works on iOS and Android with a few caveats:
 ## Roadmap
 
 - [x] Curtis Agent: Anthropic, Gemini, and Ollama provider support (v1.1)
-- [ ] Inline diff rewrite: word-level diff and inline editor decorations (v1.1)
+- [ ] Inline diff rewrite: word-level diff and inline editor decorations
 - [x] Settings: declarative `getSettingDefinitions()` — shipped in v1.2.0 (see [ADR: settings API](#settings-api))
-- [x] Vault retrieval (RAG): embedding index over the vault, auto-injected context, `semantic_search` agent tool (next release)
+- [x] Vault retrieval (RAG): embedding index over the vault, auto-injected context, `semantic_search` agent tool (v1.4.0)
+- [x] MCP client: connect external MCP servers, their tools join the agent toolset (v1.4.0)
+- [x] Conversations as vault markdown files with automatic localStorage import (v1.4.0)
 - [ ] Voice: streaming TTS, wake-word detection
 - [ ] Conversation branching UI
 - [ ] Plugin settings import/export
@@ -341,8 +344,6 @@ PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style
 Since v1.2.0 Curtis targets Obsidian **1.13.0+** and uses the **declarative `getSettingDefinitions()` API** for its settings tab. Every section and row is indexed by Obsidian's settings search; dynamic re-renders go through the sanctioned `SettingTab.update()`.
 
 History: through v1.1.x the floor was 1.11.4 (set by the `SecretStorage` API for per-provider key storage) and the tab used the imperative `display()` API, which Obsidian 1.13 deprecated. The dual-path (`getSettingDefinitions()` + `display()` fallback) was evaluated and rejected — the declarative path's `SettingTab.update()` is 1.13-only, so supporting both meant either shipping a broken tab on older versions or tripping the `no-unsupported-api` lint rule. When Obsidian 1.13.6 reached the stable channel for all desktop and mobile users (August 2026), the migration shipped as v1.2.0: a single declarative path, zero deprecation warnings, and settings search that actually finds things.
-
-The 13 `display is deprecated` lint warnings this produces are expected, justified, and non-blocking for plugin review.
 
 ## 💬 Feedback
 
