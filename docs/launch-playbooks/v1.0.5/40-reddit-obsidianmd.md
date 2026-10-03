@@ -27,11 +27,17 @@ The setup that works end to end as of this release:
 3. Curtis on mobile: enable Ollama, base URL `http://<desktop-ip>:11434/v1/chat/completions`
 4. Chat — nothing leaves your LAN
 
-**Screenshots:**
+**Screenshots (captured — in `assets/screenshots/`):**
 
-<!-- TODO(author): capture on a phone, light + dark if cheap to do -->
-1. [SCREENSHOT 1: mobile provider settings showing Ollama enabled and saving with no key field]
-2. [SCREENSHOT 2: mobile chat visibly running against the local model — include the model name in the header dropdown so it reads as local]
+- `desktop-chat.png` — full desktop window: vault with daily note open, chat sidebar running the seeded agent conversation (Ollama + qwen2.5, tool call + result visible, token count).
+- `chat-panel.png` — tight 300×760 crop of the chat panel alone; good as the hero image.
+- `desktop-settings-providers.png` — settings on the Provider configuration section.
+- `ollama-provider-settings.png` — the Ollama provider section: enabled toggle, **no API key field by design**.
+
+<!-- TODO(author): the two on-a-phone shots still need a real device —
+     1. [SCREENSHOT: phone: provider settings showing Ollama enabled with no key field]
+     2. [SCREENSHOT: phone: chat running against the local model, model name visible in the header]
+     30 seconds each with the phone on the same LAN as a desktop running Ollama/LM Studio. -->
 
 If you hit the key prompt before and gave up on local mobile — that's this bug. Update and it should save clean.
 

@@ -873,6 +873,10 @@ export class ChatView extends ItemView {
 	// --- Messages ---------------------------------------------------------
 
 	renderCurrentConversation(): void {
+		// refreshChatViews() can fire while a chat view's onOpen is still
+		// constructing (e.g. command open + settings change in the same tick)
+		// — the container doesn't exist yet and onOpen renders on its own.
+		if (!this.messagesContainer) return;
 		this.messagesContainer.empty();
 		const conv = this.store.getCurrentConversation();
 		if (!conv || conv.messages.length === 0) {

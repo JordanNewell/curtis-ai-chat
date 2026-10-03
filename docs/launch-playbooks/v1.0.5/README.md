@@ -1,6 +1,10 @@
 # Curtis AI Chat v1.0.5 — Announcement Kit
 
-Patch-release promo package. All copy paste-ready; TODO markers flag the few things only the author can supply (screenshots, anecdotes, thread links).
+Patch-release promo package. All copy paste-ready; TODO markers flag the few things only the author can supply (on-phone screenshots, anecdotes, thread links).
+
+## Screenshots
+
+Regenerate any time with `npm run shots` (Playwright-core driving Obsidian over the Chrome DevTools Protocol; it closes and relaunches your Obsidian automatically, and restores your session after). Current assets in `assets/screenshots/`: `desktop-chat.png`, `chat-panel.png` (300x760 panel crop — good hero image), `desktop-settings-providers.png`, `ollama-provider-settings.png`. On-a-phone shots are the only manual capture left (TODOs in the Reddit post).
 
 ## What's shipping in 1.0.5
 

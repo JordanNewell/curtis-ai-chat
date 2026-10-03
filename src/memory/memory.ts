@@ -69,6 +69,11 @@ export class MemoryStore {
 		this.filePath = this.resolvePath();
 		const existing = this.app.vault.getAbstractFileByPath(this.filePath);
 		if (existing instanceof TFile) return;
+		// The vault index can lag the filesystem on a cold boot — a file that
+		// exists on disk may not be indexed yet, and vault.create() would then
+		// throw "File already exists" and kill onload. Check the adapter
+		// (filesystem truth) before creating.
+		if (await this.app.vault.adapter.exists(this.filePath)) return;
 		// Create folder chain.
 		const folder = this.filePath.includes('/') ? this.filePath.slice(0, this.filePath.lastIndexOf('/')) : '';
 		if (folder) {
@@ -81,10 +86,17 @@ export class MemoryStore {
 				}
 			}
 		}
-		await this.app.vault.create(
-			this.filePath,
-			'# Curtis Memory\n\nLong-term facts about the user, captured during chat and editable by hand. Delete a line to forget; edit a line to correct.\n\n'
-		);
+		try {
+			await this.app.vault.create(
+				this.filePath,
+				'# Curtis Memory\n\nLong-term facts about the user, captured during chat and editable by hand. Delete a line to forget; edit a line to correct.\n\n'
+			);
+		} catch (e) {
+			// Lost a race with the indexer or another boot step — fine as long
+			// as the file exists; reload() reads it either way.
+			const onDisk = await this.app.vault.adapter.exists(this.filePath).catch(() => false);
+			if (!onDisk) throw e;
+		}
 	}
 
 	/** Backwards-compat with main.ts unload. */
