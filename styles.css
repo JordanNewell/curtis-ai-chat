@@ -1118,15 +1118,6 @@ pre:hover .ai-code-copy-btn {
 	color: var(--text-muted);
 }
 
-/* Support blurb at the bottom of settings */
-.ai-support-blurb {
-	padding: var(--size-4-2) var(--size-4-3);
-	margin: var(--size-4-2) 0 var(--size-4-3);
-	font-size: var(--font-ui-small);
-	color: var(--text-muted);
-	line-height: 1.5;
-}
-
 /* ============================================================================
    MOBILE / TOUCH — surface hover-only elements, bump touch targets,
    adapt layout for narrow viewports.
