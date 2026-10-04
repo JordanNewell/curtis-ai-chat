@@ -2,6 +2,22 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.4.1] — 2026-10-04
+
+Maintenance release addressing community-plugin review feedback. No functional changes beyond the removals below.
+
+### Removed
+
+- **All sponsorship surface** — the Settings → Support group (and its buymeacoffee.com link), `fundingUrl` in `manifest.json`, and the site footer sponsor links. The plugin contains no reference to external sponsor domains.
+
+### Documentation
+
+- **README privacy pass** — clipboard access disclosed (read only when pasting into the chat input, written only on message copy, never in the background); sponsor entries dropped from the network table.
+
+### Internal
+
+- **Type-check hardening** — catch variables are `unknown` (`useUnknownInCatchVariables`), TypeScript lib widened from deprecated `ES5`/`ES6`/`ES7` aliases to `ES2022`. Type-check-only; emitted code unchanged.
+
 ## [1.4.0] — 2026-10-03
 
 MCP client support. Ten built-in tools becomes "any tool the user already has" — Curtis connects to MCP servers the user already runs instead of a fixed catalog. Plus vault retrieval (RAG): the `enableRag`/embedding settings finally back a real implementation — previously they were UI with nothing behind it. And the storage brand promise closes its last gap: conversations move out of `localStorage` into vault markdown files, so "your data stays in your vault" is literally true.
