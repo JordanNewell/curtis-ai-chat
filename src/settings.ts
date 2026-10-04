@@ -104,7 +104,6 @@ export class CurtisSettingTab extends PluginSettingTab {
 				this.memoryGroup(),
 				this.ragGroup(),
 				this.conversationsGroup(),
-			this.supportGroup(),
 		];
 	}
 
@@ -1249,43 +1248,6 @@ export class CurtisSettingTab extends PluginSettingTab {
 			);
 		}
 		return { type: 'group', name: 'Vault retrieval', heading: 'Vault retrieval', items };
-	}
-
-	// ---- Support ----
-
-	private supportGroup(): SettingDefinitionItem {
-		return {
-			type: 'group',
-			name: 'Support',
-			heading: '🙏 Support',
-			items: [
-				this.row('Support curtis', undefined, (el) => {
-					const supportBlurb = el.createEl('p', { cls: 'ai-setting-hint ai-support-blurb' });
-					supportBlurb.setText(
-						'Curtis is free and open source. If it saves you time, consider buying me a coffee or sponsoring the project on GitHub. Every contribution funds the next feature.'
-					);
-				}),
-				this.row('Buy me a coffee', 'Buymeacoffee.com/jordannewell', (el) => {
-					new Setting(el)
-						.setName('Buy me a coffee')
-						.setDesc('Buymeacoffee.com/jordannewell')
-						.addButton((btn) => {
-							btn.setButtonText('☕ Buy me a coffee')
-								.setClass('mod-cta')
-								.onClick(() => window.open('https://www.buymeacoffee.com/jordannewell', '_blank'));
-						});
-				}),
-				this.row('GitHub sponsors', 'GitHub.com/sponsors/jordannewell', (el) => {
-					new Setting(el)
-						.setName('GitHub sponsors')
-						.setDesc('GitHub.com/sponsors/jordannewell')
-						.addButton((btn) => {
-							btn.setButtonText('💛 Sponsor on GitHub')
-								.onClick(() => window.open('https://github.com/sponsors/jordannewell', '_blank'));
-						});
-				}),
-			],
-		};
 	}
 
 	private openCustomProviderModal(existing?: ProviderDefinition, existingKey?: string): void {
