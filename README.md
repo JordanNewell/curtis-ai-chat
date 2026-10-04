@@ -252,6 +252,8 @@ Curtis AI Chat accesses your vault files only in user-initiated cases:
 
 No file contents are sent to AI providers except message text, attached images, attached note contents, and tool-call results. API keys are stored in your OS keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service), never in the vault.
 
+**Clipboard:** the plugin reads the system clipboard only when you paste into the chat input (Ctrl+V / long-press → Paste), and writes to it only when you click copy on a message. Nothing is read from or written to the clipboard in the background.
+
 > [!IMPORTANT]
 > Tool calls go to your AI provider. Vault contents read by agent tools are sent to the provider as part of the conversation. If you're on a cloud provider, that content leaves your machine. Switch to Ollama for fully offline operation.
 
