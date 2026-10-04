@@ -2,6 +2,26 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.5.0] — 2026-10-04
+
+Model lists that keep up with providers. Discovery results persist and re-seed the picker on every start, Anthropic models are discovered live, and a manual "Add model" row covers providers whose `/models` listing lags what the plan actually serves.
+
+### Added
+
+- **Persistent model discovery** — every successful `/models` listing is saved to settings and re-seeds the picker on boot, so restarts and offline sessions never fall back to the months-old baked-in list while the background refresh is pending or unreachable. Only ids that came from an earlier discovery and vanished from today's listing are dropped; curated (built-in) ids and manual ids are never pruned by a listing, and a failed discovery changes nothing.
+- **Anthropic auto-discovery** — the Claude model list is fetched from `/v1/models` (limit=1000, `anthropic-version` header). Custom endpoints and gateways are honored; the baked-in list remains the fallback and is never pruned.
+- **Manual model ids** — an "Add model" row on every provider card (built-in and custom) appends hand-typed ids to the picker; they survive refreshes and are never pruned by discovery. Escape hatch for listings that lag plan routing (z.ai coding plans serve models their `/models` omits).
+- **GLM-5.3** — baked into the Z.ai GLM list as Latest (GLM-5.2 demoted).
+
+### Fixed
+
+- **Retired/gated model errors** — "model not found" / "does not exist" / "not supported" style errors (including 404s naming the model) now read as "this model is no longer available — pick a current model" instead of "auth failed", which sent users off to re-enter perfectly valid API keys.
+- **Discovery-cache lifecycle** — deleting a custom provider clears its persisted cache entry; editing one keeps the cache; a pending debounced cache write is cancelled (not fired) on unload.
+
+### Internal
+
+- **Model-discovery smoke test** (dev tooling) — `node scripts/models-smoke.mjs` bundles the real registry with the obsidian module stubbed to a fake in-process network and asserts the invariants: per-auth URL/header derivation, merge order and metadata preservation, curated/manual ids never pruned, vanished discovery-only ids self-clean, failed discovery touches nothing, restart seeding with zero network, edit-save keeps the cache while delete clears it. Not shipped in the plugin bundle.
+
 ## [1.4.1] — 2026-10-04
 
 Maintenance release addressing community-plugin review feedback. No functional changes beyond the removals below.
