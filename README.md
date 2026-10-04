@@ -269,7 +269,6 @@ Curtis is vault-first — no background telemetry, no analytics, no auto-update 
 | The agent calls `web_search` (opt-in) | `html.duckduckgo.com` | DuckDuckGo search |
 | The agent calls `read_url` (opt-in) | `r.jina.ai` | URL → markdown reader |
 | The agent calls MCP tools (opt-in) | your own MCP servers | User-configured endpoints (Settings → MCP servers) |
-| You click a sponsor link | `www.buymeacoffee.com`, `github.com` | Opens in your browser, off the plugin |
 
 The two web tools (`web_search`, `read_url`), voice transcription, MCP, and vault retrieval are off by default. Without them, the only external calls are to whichever AI provider you configured — or none, if you're on Ollama. MCP tool calls go only to the server URLs you entered; tool results travel through your AI provider like any other tool result.
 
@@ -361,19 +360,6 @@ No GitHub account? Email [hello@jordannewell.com](mailto:hello@jordannewell.com)
 ## License
 
 [MIT](LICENSE) © Jordan Newell
-
-## 🙏 Support Curtis AI Chat
-
-If Curtis AI Chat saves you time, consider sponsoring the project or buying me a coffee.
-
-- ☕ [Buy Me a Coffee](https://buymeacoffee.com/jordannewell)
-- 💛 [GitHub Sponsors](https://github.com/sponsors/jordannewell)
-
-The donate button is also available in **Settings → Curtis AI Chat** inside Obsidian.
-
-> [!NOTE]
-> Curtis AI Chat is and will remain **free and open source** under the MIT license. Every feature — 30+ providers, memory, image attachments, slash commands, agent, arena — works with your own API keys. Sponsorship is voluntary and appreciated, never required.
-
 
 <p align="right">
   <a href="https://jordannewell.com" title="Built by Jordan Newell">
