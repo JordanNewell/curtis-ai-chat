@@ -100,12 +100,33 @@ function bytesToBase64(buf: ArrayBuffer): string {
  *   - HTTP 429 → rate limit
  *   - HTTP 5xx → provider down
  */
+/**
+ * Model-level failure patterns: the selected model id was retired, gated, or
+ * unknown to the provider. Checked BEFORE the 401/403 branch because gated
+ * and decommissioned models often surface as 403/404 — classifying them as
+ * auth failures sends users off to re-enter API keys that are perfectly valid.
+ */
+const MODEL_UNAVAILABLE_RE =
+	/model[_\s-]*not[_\s-]*(found|exist|available)|model_not_found|unknown model|invalid model|unsupported model|access to (this|the|that) model|model.*(decommissioned|deprecated|retired|no longer|does not exist|doesn.t exist)/;
+/** Weaker signals that only indicate a dead model when the error body also
+ *  names the model or carries a 404 status (e.g. OpenAI's "The model `x`
+ *  does not exist or you do not have access to it", z.ai's "model not
+ *  supported" for ids the plan stopped serving). */
+const MODEL_GONE_WEAK_RE = /(does not|doesn.t) exist|not available|no longer|not supported|unsupported/;
+
 function friendlyError(error: Error, hasImages = false): { message: string; cause?: string } {
 	const msg = (error.message || '').toLowerCase();
+	const mentionsModel = msg.includes('model');
+	const has404 = /(^|[^0-9])404([^0-9]|$)/.test(msg);
 
 	if (/(image|vision|multimodal|unsupported.*media)/.test(msg) && hasImages) {
 		return {
 			message: `This model rejected the image. Switch to a vision-capable model via the picker (look for the 👁 icon), or remove the image and resend.`,
+		};
+	}
+	if (MODEL_UNAVAILABLE_RE.test(msg) || ((MODEL_GONE_WEAK_RE.test(msg) || has404) && mentionsModel)) {
+		return {
+			message: 'This model is no longer available from the provider — it was likely retired or your key does not have access to it. Pick a current model from the model picker.',
 		};
 	}
 	if (/(^|[^0-9])(401|403)([^0-9]|$)|unauthor|invalid.*api.*key|invalid.*key/.test(msg)) {

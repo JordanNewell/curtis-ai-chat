@@ -921,6 +921,19 @@ pre:hover .ai-code-copy-btn {
 	min-width: 200px;
 }
 
+/* Raw input in the "Add model" row (created imperatively, not via
+   Setting.addText) — needs explicit theme variables to match Obsidian's
+   native text inputs. */
+.ai-provider-settings input.ai-manual-model-input {
+	flex-grow: 1;
+	padding: var(--size-4-1) var(--size-4-2);
+	background: var(--background-modifier-form-field);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+}
+
 /* ============================================================================
    MESSAGE ACTIONS — hover toolbar on assistant messages
    ============================================================================ */

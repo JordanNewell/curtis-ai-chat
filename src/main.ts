@@ -1,6 +1,6 @@
 // Curtis — Main Plugin Entry Point
 
-import { Editor, Notice, Plugin, requestUrl, TFile } from 'obsidian';
+import { Editor, Notice, Plugin, requestUrl, TFile, debounce } from 'obsidian';
 import type { CurtisSettings, AIMessage, TokenUsage, AIProvider, ToolCall, ToolDefinition } from './types';
 import { DEFAULT_SETTINGS, CurtisSettingTab } from './settings';
 import { ProviderRegistry } from './providers/registry';
@@ -92,7 +92,15 @@ export default class CurtisPlugin extends Plugin {
 		this.providerRegistry = new ProviderRegistry(
 			this.settings.providerConfigs,
 			this.settings.customProviders,
-			resolveKey
+			resolveKey,
+			this.settings.discoveredModels,
+			(providerId, models) => {
+				// Persist each successful discovery so the next boot seeds from
+				// the last known good list instead of the baked-in one.
+				if (!this.settings.discoveredModels) this.settings.discoveredModels = {};
+				this.settings.discoveredModels[providerId] = models;
+				this.debouncedSaveDiscovery();
+			}
 		);
 		// Discovery hits each enabled provider's /models endpoint sequentially —
 		// awaiting it here would block commands, ribbon, view registration and
@@ -132,6 +140,9 @@ export default class CurtisPlugin extends Plugin {
 		void this.memoryStore?.save(this);
 		void this.mcpManager?.disconnectAll();
 		void this.ragIndex?.dispose();
+		// Drop any pending discovery-cache write rather than fire saveSettings()
+		// on an unloaded plugin — the cache self-rebuilds on next boot's discovery.
+		this.debouncedSaveDiscovery.cancel();
 	}
 
 	/**
@@ -185,6 +196,12 @@ export default class CurtisPlugin extends Plugin {
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
 	}
+
+	/** Coalesces model-discovery cache writes — a boot with many enabled
+	 *  providers would otherwise fire one data.json write per provider. */
+	private debouncedSaveDiscovery = debounce(() => {
+		void this.saveSettings();
+	}, 2000);
 
 	// ---- Chat View Management ----
 

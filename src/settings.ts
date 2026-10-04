@@ -357,6 +357,58 @@ export class CurtisSettingTab extends PluginSettingTab {
 							new Notice(result.message, 8000);
 						});
 				});
+
+			this.buildManualModelSettings(el, def, config);
+		}
+	}
+
+	/** "Add model" rows — manual model ids for providers whose /models listing
+	 *  lags what the plan actually serves (e.g. z.ai coding plans). Extras are
+	 *  always offered in the picker and never pruned by discovery. Shared by
+	 *  built-in and custom provider cards. */
+	private buildManualModelSettings(el: HTMLElement, def: ProviderDefinition, config: ProviderConfig): void {
+		const input = new Setting(el)
+			.setName('Add model')
+			.setDesc('Manually add a model ID if the list above is outdated — it appears in the model picker and survives refreshes.');
+		const inputEl = input.controlEl.createEl('input', { type: 'text', attr: { placeholder: 'e.g. glm-5.3' } });
+		inputEl.addClass('ai-manual-model-input');
+		const addExtra = async (): Promise<void> => {
+			const id = inputEl.value.trim();
+			if (!id) return;
+			if (config.extraModels?.includes(id)) {
+				new Notice(`${id} is already in the list`);
+				return;
+			}
+			config.extraModels = [...(config.extraModels ?? []), id];
+			await this.plugin.saveSettings();
+			// updateConfig recreates the provider seeded with the extras.
+			this.plugin.providerRegistry.updateConfig(def.id, config);
+			this.update();
+			new Notice(`Added ${id} to ${def.name}`);
+		};
+		inputEl.addEventListener('keydown', (evt) => {
+			if (evt.key === 'Enter') void addExtra();
+		});
+		input.addExtraButton((btn) => {
+			btn.setIcon('plus')
+				.setTooltip('Add model ID')
+				.onClick(() => void addExtra());
+		});
+
+		for (const id of config.extraModels ?? []) {
+			new Setting(el)
+				.setName(id)
+				.setDesc('Manually added — always kept in the model picker')
+				.addExtraButton((btn) => {
+					btn.setIcon('x')
+						.setTooltip('Remove')
+						.onClick(async () => {
+							config.extraModels = (config.extraModels ?? []).filter((m) => m !== id);
+							await this.plugin.saveSettings();
+							this.plugin.providerRegistry.updateConfig(def.id, config);
+							this.update();
+						});
+				});
 		}
 	}
 
@@ -442,11 +494,17 @@ export class CurtisSettingTab extends PluginSettingTab {
 					this.plugin.providerRegistry.removeCustomProvider(def.id);
 					this.plugin.settings.customProviders = this.plugin.settings.customProviders.filter((p) => p.id !== def.id);
 					delete this.plugin.settings.providerConfigs[def.id];
+					// The persisted discovery cache outlives the registry's
+					// in-memory copy — clear it too or data.json carries the
+					// dead id forever.
+					delete this.plugin.settings.discoveredModels?.[def.id];
 					await this.plugin.saveSettings();
 					this.update();
 					new Notice(`Deleted ${def.name}`);
 				});
 			});
+
+		this.buildManualModelSettings(el, def, config);
 	}
 
 	// ---- Generation ----
@@ -1276,8 +1334,9 @@ export class CurtisSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 					// Recreate the registry entry — without removing the old def
 					// first, the registry holds two definitions with the same id
-					// and updateConfig() recreates from the STALE one.
-					this.plugin.providerRegistry.removeCustomProvider(definition.id);
+					// and updateConfig() recreates from the STALE one. Keep the
+					// discovery cache: this is an edit of the same provider.
+					this.plugin.providerRegistry.removeCustomProvider(definition.id, true);
 					this.plugin.providerRegistry.addCustomProvider(definition);
 					this.plugin.providerRegistry.updateConfig(definition.id, config);
 					if (definition.autoDiscoverModels && !definition.models.length) {

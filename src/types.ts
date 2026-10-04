@@ -143,6 +143,11 @@ export interface ProviderConfig {
 	enabled: boolean;
 	defaultModel?: string;
 	customEndpoint?: string;  // user override
+	/** Model ids the user typed in manually (Settings → "Add model").
+	 *  Escape hatch for providers whose /models listing lags what the plan
+	 *  actually serves — these ids are always offered in the picker and are
+	 *  never pruned by discovery. */
+	extraModels?: string[];
 }
 
 // ============================================================================
@@ -206,6 +211,12 @@ export interface CurtisSettings {
 
 	// Custom providers (user-added)
 	customProviders: ProviderDefinition[];
+
+	/** Last successful model-discovery result per provider id. Seeds model
+	 *  lists on startup so the picker never falls back to the (possibly
+	 *  months-old) built-in list while offline or before the background
+	 *  refresh lands. Written by the registry, never by user action. */
+	discoveredModels?: Record<string, AIModel[]>;
 
 	// Shared generation settings
 	temperature: number;

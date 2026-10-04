@@ -53,6 +53,24 @@ type ModelsResponse = OpenAIModelsResponse | OllamaModelsResponse | GeminiModels
  */
 const STREAM_USAGE_PROVIDER_IDS = new Set(['openai', 'azure-openai', 'openrouter']);
 
+/**
+ * Append user-added model ids (Settings → "Add model") to a seed list as bare
+ * entries. Returns the input array unchanged when there are no extras — never
+ * mutates it, because def.models arrays are shared across provider instances.
+ */
+function applyExtraModels(models: AIModel[], config?: ProviderConfig): AIModel[] {
+	const extras = config?.extraModels;
+	if (!extras || extras.length === 0) return models;
+	const seen = new Set(models.map((m) => m.id));
+	const merged = [...models];
+	for (const id of extras) {
+		if (!id || seen.has(id)) continue;
+		seen.add(id);
+		merged.push({ id, name: id, contextLength: 0, inputPrice: 0, outputPrice: 0 });
+	}
+	return merged;
+}
+
 // ============================================================================
 // BUILT-IN PROVIDER DEFINITIONS
 // ============================================================================
@@ -63,7 +81,9 @@ export const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
 		name: 'Anthropic Claude',
 		endpoint: 'https://api.anthropic.com/v1/messages',
 		authType: 'anthropic',
+		// Fallback list — auto-discovered from /v1/models at runtime.
 		models: getAnthropicModels(),
+		autoDiscoverModels: true,
 	},
 	{
 		id: 'openai',
@@ -100,9 +120,11 @@ export const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
 		name: 'Z.ai GLM',
 		endpoint: 'https://api.z.ai/api/coding/paas/v4/chat/completions',
 		authType: 'bearer',
-		// Verified 2026-07-19 via GET /models on Coding Plan endpoint.
+		// Verified 2026-07-19 via GET /models on Coding Plan endpoint; glm-5.3
+		// added 2026-10-04 — plan routing served 5.3 before /models listed it.
 		models: [
-			{ id: 'glm-5.2', name: 'GLM-5.2 (Latest)', contextLength: 128000, inputPrice: 0, outputPrice: 0 },
+			{ id: 'glm-5.3', name: 'GLM-5.3 (Latest)', contextLength: 128000, inputPrice: 0, outputPrice: 0 },
+			{ id: 'glm-5.2', name: 'GLM-5.2', contextLength: 128000, inputPrice: 0, outputPrice: 0 },
 			{ id: 'glm-5.1', name: 'GLM-5.1', contextLength: 128000, inputPrice: 0, outputPrice: 0 },
 			{ id: 'glm-5', name: 'GLM-5', contextLength: 128000, inputPrice: 0, outputPrice: 0 },
 			{ id: 'glm-5-turbo', name: 'GLM-5 Turbo', contextLength: 128000, inputPrice: 0, outputPrice: 0 },
@@ -415,15 +437,26 @@ export class ProviderRegistry {
 	private customProviders: ProviderDefinition[] = [];
 	/** Optional resolver — returns API key from keychain (preferred) or plaintext. */
 	private resolveKey?: (providerId: string, config?: ProviderConfig) => string;
+	/** Last known good discovery result per provider id — seeds model lists so
+	 *  restarts (and offline sessions) never fall back to the stale baked-in
+	 *  list while the background refresh is pending or unreachable. */
+	private discoveredCache: Record<string, AIModel[]> = {};
+	/** Optional sink — called after every successful discovery so the host
+	 *  can persist the cache (main.ts writes it into settings, debounced). */
+	private onModelsDiscovered?: (providerId: string, models: AIModel[]) => void;
 
 	constructor(
 		configs: Record<string, ProviderConfig>,
 		customProviders?: ProviderDefinition[],
-		resolveKey?: (providerId: string, config?: ProviderConfig) => string
+		resolveKey?: (providerId: string, config?: ProviderConfig) => string,
+		discoveredModels?: Record<string, AIModel[]>,
+		onModelsDiscovered?: (providerId: string, models: AIModel[]) => void
 	) {
 		this.configs = configs;
 		this.customProviders = customProviders || [];
 		this.resolveKey = resolveKey;
+		this.discoveredCache = discoveredModels || {};
+		this.onModelsDiscovered = onModelsDiscovered;
 	}
 
 	getProvider(id: string): AIProvider | undefined {
@@ -510,11 +543,17 @@ export class ProviderRegistry {
 		// Prefer keychain-resolved key over plaintext apiKey.
 		const apiKey = this.resolveKey ? this.resolveKey(def.id, config) : (config?.apiKey || '');
 		const endpoint = config?.customEndpoint || def.endpoint;
+		// Seed with the last good discovery result when one exists — newer
+		// than the baked-in list, and survives config edits that recreate the
+		// provider instance. Manual extras are appended on top.
+		const seedModels = applyExtraModels(this.discoveredCache[def.id] ?? def.models, config);
 
 		if (def.authType === 'anthropic') {
 			// Custom endpoints (e.g. Claude-compatible gateways) must be honored —
 			// silently falling back to api.anthropic.com would leak the proxy key.
-			return new AnthropicProvider(apiKey, endpoint);
+			const provider = new AnthropicProvider(apiKey, endpoint);
+			provider.setModels(seedModels);
+			return provider;
 		}
 
 		// Azure requires a user-supplied deployment URL — refuse to construct
@@ -530,7 +569,7 @@ export class ProviderRegistry {
 			id: def.id,
 			name: def.name,
 			endpoint,
-			models: def.models,
+			models: seedModels,
 			apiKey,
 			authType: def.authType,
 			supportsStreamUsage: STREAM_USAGE_PROVIDER_IDS.has(def.id),
@@ -564,6 +603,10 @@ export class ProviderRegistry {
 		} else if (def.id === 'google') {
 			// Gemini: replace /openai/ path with native /v1beta/models
 			modelsUrl = endpoint.replace(/\/openai\/chat\/completions.*$/, '/v1beta/models?pageSize=200');
+		} else if (def.authType === 'anthropic') {
+			// Claude: chat at /v1/messages, catalog at /v1/models (paginated —
+			// ask for the max page or the list truncates at 20 entries).
+			modelsUrl = endpoint.replace(/\/messages.*$/, '/models?limit=1000');
 		} else {
 			// Standard OpenAI-compat: /chat/completions → /models
 			modelsUrl = endpoint.replace(/\/chat\/completions.*$/, '/models');
@@ -578,6 +621,7 @@ export class ProviderRegistry {
 			headers['Authorization'] = `Bearer ${apiKey}`;
 		} else if (apiKey && def.authType === 'anthropic') {
 			headers['x-api-key'] = apiKey;
+			headers['anthropic-version'] = '2023-06-01';
 		}
 
 		try {
@@ -596,29 +640,51 @@ export class ProviderRegistry {
 			const discovered = this.parseModelsResponse(def.id, data);
 			if (discovered.length === 0) return [];
 
-			// Merge discovered models with built-in ones (preserve pricing/caps
-			// from the built-in list, append new IDs as defaults).
+			// Merge discovered models with the metadata we already have
+			// (pricing, caps, vision/tool flags) from the built-in list or a
+			// previous discovery.
 			const existing = provider.models;
 			const existingById = new Map(existing.map((m) => [m.id, m]));
 			const merged: AIModel[] = [];
 			const seenIds = new Set<string>();
+			// Curated ids: the baked-in list plus anything the user typed in
+			// manually. These are NEVER pruned on a successful listing — /models
+			// is not universally authoritative (z.ai's coding-plan endpoint
+			// lags its plan routing: it lists models the plan stopped serving
+			// and omits the one it serves), so a listing gap must not hide an
+			// id the user knows works.
+			const extraModelIds = config?.extraModels ?? [];
+			const curatedIds = new Set<string>([...def.models.map((m) => m.id), ...extraModelIds]);
 
-			// First: discovered models, using built-in metadata if available
+			// First: discovered models, using known metadata if available
 			for (const m of discovered) {
 				if (seenIds.has(m.id)) continue;
 				seenIds.add(m.id);
-				const builtin = existingById.get(m.id);
-				merged.push(builtin ?? m);
+				merged.push(existingById.get(m.id) ?? m);
 			}
-			// Then: any built-in models not in discovered (e.g. openrouter/auto)
+			// Then: curated ids absent from the listing (baked-ins like
+			// openrouter/auto, and manual extras that already have metadata).
 			for (const m of existing) {
-				if (!seenIds.has(m.id)) {
+				if (seenIds.has(m.id)) continue;
+				if (curatedIds.has(m.id)) {
 					seenIds.add(m.id);
 					merged.push(m);
 				}
 			}
+			// Finally: manual extras with no metadata yet, as bare entries.
+			for (const id of extraModelIds) {
+				if (seenIds.has(id)) continue;
+				seenIds.add(id);
+				merged.push({ id, name: id, contextLength: 0, inputPrice: 0, outputPrice: 0 });
+			}
+			// Entries that came only from a previous discovery and vanished
+			// from today's listing fall through here and are dropped — the
+			// cache self-cleans without ever hiding a curated id. Discovery
+			// failures return earlier, so an unreachable /models never prunes.
 
 			provider.setModels?.(merged);
+			this.discoveredCache[def.id] = merged;
+			this.onModelsDiscovered?.(def.id, merged);
 			return merged;
 		} catch (e) {
 			console.debug(`[Curtis] Model discovery failed for ${def.id}:`, e);
@@ -706,10 +772,14 @@ export class ProviderRegistry {
 		this.customProviders.push(def);
 	}
 
-	removeCustomProvider(id: string): void {
+	/** keepDiscoveredCache: the settings edit-save flow removes and re-adds
+	 *  the same id — wiping the cache there would drop discovery results on
+	 *  a mere rename or endpoint tweak. Actual deletion clears it. */
+	removeCustomProvider(id: string, keepDiscoveredCache = false): void {
 		this.customProviders = this.customProviders.filter((d) => d.id !== id);
 		this.providers.delete(id);
 		delete this.configs[id];
+		if (!keepDiscoveredCache) delete this.discoveredCache[id];
 	}
 
 	getCustomProviders(): ProviderDefinition[] {
