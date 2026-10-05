@@ -15,12 +15,12 @@
   <meta property="og:description" content="We ship AI products that respect your machine, your data, and your attention. First product: Curtis AI Chat for Obsidian — 30+ providers, one sidebar.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://jordannewell.github.io/curtis-ai-chat/">
-  <meta property="og:image" content="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/hero.png">
+  <meta property="og:image" content="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/og.png">
   <meta property="og:site_name" content="Curtis AI">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Curtis AI — applied AI company · makers of Curtis AI Chat for Obsidian">
   <meta name="twitter:description" content="We ship AI products that respect your machine, your data, and your attention. First product: Curtis AI Chat for Obsidian — 30+ providers, one sidebar.">
-  <meta name="twitter:image" content="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/hero.png">
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/og.png">
   <title>Curtis AI — applied AI company · Curtis AI Chat for Obsidian</title>
   <link rel="canonical" href="https://jordannewell.github.io/curtis-ai-chat/">
   <script type="application/ld+json">
@@ -452,7 +452,7 @@
       color: var(--green);
       white-space: nowrap;
     }
-    .shot img { display: block; width: 100%; height: auto; }
+    .shot img, .shot video { display: block; width: 100%; height: auto; }
     .shot figcaption {
       font-size: 0.7rem;
       letter-spacing: 0.08em;
@@ -835,6 +835,25 @@
     </div>
     <div class="shots">
       <figure class="shot wide win">
+        <div class="shot-bar"><span class="t">CURTIS·ARENA — LIVE</span><span class="r">LOCAL LLAMA · CLOUD DEEPSEEK</span></div>
+        <video src="assets/demo-arena-local-vs-cloud.mp4" autoplay loop muted playsinline></video>
+        <figcaption>The arena in motion — one prompt, two models racing; stop one column, promote the winner</figcaption>
+      </figure>
+      <figure class="shot wide win">
+        <div class="shot-bar"><span class="t">CURTIS·ARENA — OBSIDIAN</span><span class="r">TWO MODELS · PARALLEL</span></div>
+        <img src="assets/screenshots/arena-streaming-dark.png" alt="Arena — one prompt streaming to two models side by side, per-column Stop while streaming" loading="lazy">
+        <figcaption>Arena — two models streaming side by side, per-column stop</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="assets/screenshots/phone-arena-framed-dark.png" alt="Arena on a phone — columns stack vertically" loading="lazy">
+        <figcaption>Phone — arena columns stack</figcaption>
+      </figure>
+      <figure class="shot win">
+        <div class="shot-bar"><span class="t">CURTIS·MEMORY</span><span class="r">ASK BEFORE SAVING</span></div>
+        <video src="assets/demo-memory.mp4" autoplay loop muted playsinline></video>
+        <figcaption>Memory — proposed facts ask Save/Skip before anything persists</figcaption>
+      </figure>
+      <figure class="shot wide win">
         <div class="shot-bar"><span class="t">CURTIS·CHAT — OBSIDIAN</span><span class="r">AGENT MODE · OLLAMA</span></div>
         <img src="assets/screenshots/desktop-chat.png" alt="Curtis AI Chat on desktop — vault open, agent conversation running against a local Ollama model with a tool call and result" loading="lazy">
         <figcaption>Desktop — agent mode on Ollama, tool call + result</figcaption>
@@ -842,11 +861,6 @@
       <figure class="shot">
         <img src="assets/screenshots/phone-chat-framed.png" alt="Curtis AI Chat on a phone — the agent conversation at phone width" loading="lazy">
         <figcaption>Phone — same agent chat, local model</figcaption>
-      </figure>
-      <figure class="shot win">
-        <div class="shot-bar"><span class="t">CURTIS·CHAT — SETTINGS</span><span class="r">PROVIDERS</span></div>
-        <img src="assets/screenshots/ollama-provider-settings.png" alt="Ollama provider settings — enabled toggle, no API key field by design" loading="lazy">
-        <figcaption>Ollama setup — no key field, by design</figcaption>
       </figure>
     </div>
   </section>

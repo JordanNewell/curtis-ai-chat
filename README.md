@@ -8,8 +8,14 @@
 </p>
 
 <p align="center">
+  <img src="assets/demo-arena-local-vs-cloud.gif" alt="The arena in motion — one prompt typed once, streaming in parallel to a local Ollama model and a cloud DeepSeek model, per-column stop, then Promote-to-chat keeps the winner" width="720">
+</p>
+
+<p align="center"><em>The arena, live: local Llama vs cloud DeepSeek, stop one column, promote the winner.</em></p>
+
+<p align="center">
   <a href="https://jordannewell.github.io/curtis-ai-chat/"><img src="https://img.shields.io/badge/website-live-00FF41" alt="Live site"></a>
-  <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/badge/release-1.4.0-blue" alt="Latest release"></a>
+  <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/github/v/release/JordanNewell/curtis-ai-chat?label=release&color=blue" alt="Latest release"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Obsidian-1.13%2B-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian 1.13+">
   <img src="https://img.shields.io/badge/providers-30%2B-8B5CF6" alt="30+ providers">
@@ -31,12 +37,14 @@
 
 ## Screenshots
 
-Real captures, regenerated any time with `npm run shots && npm run mockups` (Playwright driving Obsidian over the DevTools protocol).
+Real captures, regenerated any time with `npm run shots && npm run mockups` (general set), `node scripts/capture-arena-shots.mjs` (arena set, both themes + phone), and `node scripts/record-arena-demo.mjs` (demo GIFs/MP4s).
 
 | | |
 |---|---|
-| <img src="assets/screenshots/desktop-chat.png" alt="Desktop — vault open, agent conversation on a local Ollama model with tool call and result" width="100%"> | |
-| <img src="assets/screenshots/phone-chat-framed.png" alt="Phone — the agent conversation at phone width" width="270"> | <img src="assets/screenshots/ollama-provider-settings.png" alt="Ollama provider settings — enabled, no API key field by design" width="270"> |
+| <img src="assets/screenshots/arena-streaming-dark.png" alt="Arena — one prompt streaming to two models side by side, per-column Stop while streaming" width="100%"> | |
+| <img src="assets/screenshots/arena-final-light.png" alt="Arena, light theme — both answers complete, Promote to chat on each column" width="100%"> | <img src="assets/screenshots/phone-arena-framed-dark.png" alt="Arena on a phone — columns stack vertically" width="220"> |
+| <img src="assets/demo-memory.gif" alt="Memory — after a turn, proposed facts appear with Save/Skip; nothing persists until you tap Save" width="720"> | |
+| <img src="assets/screenshots/desktop-chat.png" alt="Desktop — vault open, agent conversation on a local Ollama model with tool call and result" width="100%"> | <img src="assets/screenshots/phone-chat-framed.png" alt="Phone — the agent conversation at phone width" width="220"> |
 
 ---
 
