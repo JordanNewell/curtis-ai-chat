@@ -2,6 +2,27 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.5.1] — 2026-10-04
+
+Consent-first memory and a sharper arena. Extracted facts now ask before anything is saved, and the arena narrows to a two-model head-to-head that compares models under the same context a normal send carries.
+
+### Added
+
+- **Ask-before-saving fact capture** — memory capture gains a `confirm` mode, now the default. Extraction still runs in the background after each turn (0–3 facts, deduped against what's already saved), but proposals appear under the last message as a "Worth remembering?" bar with Save/Skip per fact. Nothing touches the memory file until you tap Save; skipped facts are not re-proposed that session. The bar is transient — sending the next message clears it. Silent capture remains available as "Save silently after each turn" in Settings → Memory → Fact capture; a one-time migration moves stored `auto` to `confirm`.
+- **Per-column arena stop** — every arena column footer gets a Stop button while it streams; it halts that column only while the sibling keeps going. The main Stop button still aborts all columns. A stopped column keeps its partial text (final markdown render) and stays promotable.
+- **Arena context parity** — arena sends carry the same context as a normal send: memory block, vault-retrieval excerpts, `@`-mention attachments, and images (multi-part vision content), with vision-aware error messages. Prior conversation history still deliberately doesn't ride along — arena stays single-shot, so the comparison reflects a fresh answer and promote carries exactly what the winner saw.
+- **Arena screenshot capture script** (dev tooling) — `node scripts/capture-arena-shots.mjs` drives real Obsidian over CDP through the full arena flow (picker, parallel streaming, per-column stop, promote) and asserts store behavior after each step. Not shipped in the plugin bundle. Five new arena screenshots.
+
+### Changed
+
+- **Arena is head-to-head** — the picker selects exactly 2 models (was 2–5). Duels keep columns readable in the sidebar and make promote cheap.
+- **Promote cleans the thread** — promoting a column aborts the losing column and deletes its stored answer, so the continued conversation is a clean single-model thread. Previously both answers stayed in history.
+- **Memory prompt discipline** — the core system prompt now instructs the model to use remembered facts only when relevant and never volunteer observations about the user's patterns ("I've noticed you always…").
+
+### Fixed
+
+- **Arena conversation pinning** — arena sends pin all message writes to the conversation current at send time (same guard as the normal path), so switching conversations mid-stream no longer files columns into the wrong thread. Aborted columns no longer persist a stale snapshot; the settle path mirrors the normal send's.
+
 ## [1.5.0] — 2026-10-04
 
 Model lists that keep up with providers. Discovery results persist and re-seed the picker on every start, Anthropic models are discovered live, and a manual "Add model" row covers providers whose `/models` listing lags what the plan actually serves.
