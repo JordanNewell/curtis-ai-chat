@@ -13,7 +13,7 @@
 
 import type { ProviderConfig } from '../types';
 
-export const CURRENT_VERSION = 5;
+export const CURRENT_VERSION = 6;
 
 /**
  * Pre-v4.0.0 default system prompt. Used to detect users upgrading from
@@ -233,6 +233,23 @@ export const MIGRATIONS: Migration[] = [
 			];
 			for (const key of DEAD_KEYS) delete settings[key];
 			settings._version = 5;
+			return settings;
+		},
+	},
+	{
+		version: 6,
+		description: 'v1.5.1 — memory capture: stored "auto" (silent save) moves to "confirm" (ask before saving)',
+		migrate: (settings: SettingsData): SettingsData => {
+			// 'auto' shipped as the DEFAULT when memory launched — most stored
+			// copies were never a deliberate choice, and silent persistence is
+			// at odds with the plugin's consent posture. Move stored 'auto' to
+			// the new 'confirm' mode: extraction still runs, but facts now ask
+			// before saving. Anyone who genuinely wants silent capture can
+			// switch back in Settings → Memory → Fact capture.
+			if (settings.memoryCaptureMode === 'auto') {
+				settings.memoryCaptureMode = 'confirm';
+			}
+			settings._version = 6;
 			return settings;
 		},
 	},

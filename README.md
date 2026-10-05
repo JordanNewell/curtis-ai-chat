@@ -72,7 +72,7 @@ The flagship features. Full details in [CHANGELOG.md](CHANGELOG.md) and the per-
 | 🎙️ | **[Voice I/O](docs/VOICE.md)** | Whisper speech-to-text on the mic button. Browser TTS on every assistant message. |
 | 🔍 | **Cross-conversation search** | Assignable hotkey opens a fuzzy-matched picker across all conversations and messages. |
 | 📝 | **Markdown export** | Download any conversation as `.md`. `/export` slash command or download icon. |
-| 🧠 | **Memory editing UI** | Edit/delete individual memory facts from Settings → Memory. No more append-only. |
+| 🧠 | **[Memory](docs/MEMORY.md)** | Ask-before-saving capture: proposed facts show a Save/Skip bar, nothing persists without your tap. Plus a full edit/delete UI in Settings → Memory. |
 | 🗂️ | **Conversations as vault files** | Every chat persists as a markdown note in `AI/Conversations/` — synced across devices, in native Obsidian search, and readable by the agent. Old localStorage history imports itself. |
 
 Plus a full type-safety pass: every AI provider response shape is strictly typed, with type-guard narrowing at every JSON boundary. Zero lint warnings on `npm run build`.
@@ -158,7 +158,7 @@ Right-click any selection in a note for **Explain · ELI5 · Summarize · TL;DR 
 
 Curtis remembers durable facts about you across conversations — preferences, identity, projects, standing instructions. Facts live in a markdown file in your vault.
 
-- **Auto-capture**: background LLM extraction after each turn (0–3 facts)
+- **Ask before saving**: after each turn the model proposes up to 3 facts — Save/Skip each, nothing persists without your tap
 - **Manual**: `/remember <fact>` or right-click selection → **Save to memory**
 - **Edit UI**: edit/delete individual facts from Settings → Memory
 - **Recall**: every prompt includes a `## What you know about the user` block

@@ -1602,6 +1602,25 @@ pre:hover .ai-code-copy-btn {
 	cursor: not-allowed;
 }
 
+/* Per-column stop — aborts only its own stream; removed once the column
+ * settles. Hover leans destructive to distinguish it from Promote. */
+.ai-arena-stop-btn {
+	background: transparent;
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	border-radius: var(--radius-s);
+	padding: 2px 8px;
+	font-size: var(--font-ui-smallest);
+	cursor: pointer;
+	transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.ai-arena-stop-btn:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-error);
+	border-color: var(--text-error);
+}
+
 /* Narrow phone only — stack columns vertically. Sidebar at ~360px+ keeps
  * the side-by-side arena view; only true phone-width collapses. */
 @media (max-width: 360px) {
@@ -2109,3 +2128,72 @@ textarea.ai-system-prompt-core.ai-system-prompt-core {
 	-webkit-user-select: text;
 }
 
+
+/* ============================================================================
+   MEMORY PROPOSALS — confirm-mode capture bar ("Worth remembering?").
+   Appears under the last assistant message after a turn; transient — sending
+   the next message clears it. Nothing is saved until the user taps Save.
+   ============================================================================ */
+
+.ai-memory-proposal-bar {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-1);
+	margin: var(--size-4-1) 0 var(--size-4-2);
+	padding: var(--size-4-2) var(--size-4-3);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+}
+
+.ai-memory-proposal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.ai-memory-proposal-title {
+	font-size: var(--font-ui-smallest);
+	font-weight: var(--font-medium);
+	color: var(--text-muted);
+}
+
+.ai-memory-proposal-close {
+	box-shadow: none;
+	background: none;
+	height: auto;
+	padding: 2px;
+	color: var(--text-faint);
+}
+
+.ai-memory-proposal-close:hover {
+	color: var(--text-normal);
+}
+
+.ai-memory-proposal-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+}
+
+.ai-memory-proposal-text {
+	flex: 1;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-normal);
+	min-width: 0;
+}
+
+.ai-memory-proposal-row.is-saved .ai-memory-proposal-text {
+	color: var(--text-success);
+}
+
+.ai-memory-proposal-actions {
+	display: flex;
+	gap: var(--size-4-1);
+	flex-shrink: 0;
+}
+
+.ai-memory-proposal-actions button {
+	font-size: var(--font-ui-smaller);
+	padding: 2px 10px;
+}

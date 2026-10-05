@@ -41,22 +41,29 @@ You can edit this file directly — add bullets, delete them, rewrite them. The 
 
 ## How facts get in
 
-### Auto-capture (default)
+### Ask before saving (default)
 
 After each assistant turn, Curtis AI Chat fires a background call to the active model with a strict extraction prompt:
 
 > *"Extract 0-3 durable facts about the user from this chat turn. A durable fact is something true across future conversations: a preference, identity trait, long-lived project detail, or standing instruction. Do NOT capture ephemeral requests. Respond with ONLY a JSON array."*
 
-The model decides what's worth remembering. Failures are silent and non-fatal.
+Proposed facts appear under the last message as a **Worth remembering?** bar — each with **Save** and **Skip**. Nothing is written to the memory file until you tap Save. Facts you skip are not proposed again that session; the bar itself is transient — sending your next message clears it, so decide before you type. Up to three proposals per turn, deduped against what you already saved.
 
-Toggle in **Settings → Memory → Auto-capture facts**. Set to `Off` for manual-only.
+Extraction is best-effort: failures are silent and non-fatal. Note the extraction call goes through your active provider, like every other request.
 
-### Manual
+### Save silently (opt-in)
+
+Same extraction, no confirmation — extracted facts are written directly to the memory file after each turn. Choose this in **Settings → Memory → Fact capture → Save silently after each turn** if you prefer convenience over review.
+
+### Manual only
 
 - **`/remember <fact>`** — type it in chat
 - **Right-click any selection in a note → Save to memory** — stores the highlighted text verbatim
 
 Manual facts go through the same `addFact` API and dedupe against existing facts (case-insensitive exact match).
+
+> [!NOTE]
+> Before v1.5.1 the default was silent auto-capture. Existing installs were moved to ask-before-saving by a one-time migration — nothing was deleted, and silent mode is one dropdown away if you want it back.
 
 ## How facts get out
 
@@ -134,6 +141,7 @@ The memory system is modeled on obsidian-copilot's user-memory layer (see the de
 
 - **Markdown over JSON** — user-editable, survives plugin uninstall, no corruption risk
 - **LLM-gated capture over regex** — the model decides what's durable, so recall can be trivial (full injection)
+- **Ratified capture over silent capture** — v1.5.1: the model proposes, the user decides. Silent persistence contradicts the plugin's consent posture, and human ratification filters the classic auto-memory failure modes (poisoned and stale facts) at the gate
 - **Full injection over retrieval** — at the scale of personal facts (tens, not thousands), retrieval adds complexity for no benefit
 - **Categories as enum** — `preference | identity | project | instruction | other`. Keeps the file parseable even with hand-edits.
 - **Edit UI over file-only** — added in v1.0 because the file-only workflow made correcting facts needlessly high-friction.

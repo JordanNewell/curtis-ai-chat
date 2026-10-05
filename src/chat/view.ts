@@ -1,7 +1,7 @@
 // Sidebar Chat View — persistent ItemView for AI chat
 
 import { ItemView, Notice, WorkspaceLeaf, setIcon, TFile, debounce } from 'obsidian';
-import type { Conversation, ConversationMessage, AIMessage, MessageContent, TokenUsage, ToolCall } from '../types';
+import type { Conversation, ConversationMessage, AIMessage, MessageContent, TokenUsage, ToolCall, MemoryProposal } from '../types';
 import { toBase64 } from '../utils/base64';
 import { MessageRenderer } from './message-renderer';
 import { ConversationStore } from './conversation-store';
@@ -217,13 +217,22 @@ export class ChatView extends ItemView {
 	/** Active TTS controller when the player UI is open. */
 	private ttsController: TTSController | null = null;
 
+	// --- Memory proposals (confirm-mode capture) ---------------------------
+	/** Lowercased fact contents the user skipped this session — never
+	 *  re-propose something the user already declined. */
+	private dismissedProposals = new Set<string>();
+
 	// --- Arena mode -------------------------------------------------------
 	/** True while the user has the arena toggle active. */
 	private arenaMode = false;
-	/** Models selected for the next arena send (2–5). */
+	/** Models selected for the next arena send (2, head-to-head). */
 	private arenaSelectedModels: ArenaSelection[] = [];
 	/** In-flight arena AbortControllers, keyed by `${providerId}:${modelId}`. */
 	private arenaAbortControllers: Map<string, AbortController> = new Map();
+	/** Stored assistant message id per column of the current arena round,
+	 *  keyed like arenaAbortControllers. Promote uses it to delete the losing
+	 *  column's answer so the continued thread carries the winner only. */
+	private arenaRoundMessages: Map<string, string | null> = new Map();
 
 	startNewChat(): void {
 		// A new chat mid-stream would repoint the store's current conversation
@@ -1509,6 +1518,7 @@ export class ChatView extends ItemView {
 			}
 			const prompt = trimmed;
 			this.inputEl.value = '';
+			this.mentionEndOffset = -1;
 			this.autoResizeInput();
 			void this.sendArenaMessage(prompt);
 			return;
@@ -1807,7 +1817,8 @@ export class ChatView extends ItemView {
 		}
 	}
 
-	/** Pull the last user/assistant pair and hand to the plugin for extraction. */
+	/** Pull the last user/assistant pair and hand to the plugin for extraction.
+	 *  In 'confirm' mode the proposals come back here for ratification. */
 	private maybeExtractFacts(): void {
 		const conv = this.store.getCurrentConversation();
 		if (!conv) return;
@@ -1818,9 +1829,73 @@ export class ChatView extends ItemView {
 		while (userIdx >= 0 && msgs[userIdx].role !== 'user') userIdx--;
 		if (userIdx < 0) return;
 		const userMsg = msgs[userIdx];
-		void this.plugin.extractAndStoreFacts(userMsg.content, assistant.content).catch((e) =>
+		void this.plugin.extractAndStoreFacts(userMsg.content, assistant.content, (proposals) =>
+			this.renderMemoryProposals(proposals)
+		).catch((e) =>
 			console.debug('[Curtis] fact extraction failed:', e)
 		);
+	}
+
+	/** 'confirm' capture mode: show proposed facts under the last message.
+	 *  Nothing is written to the memory file until the user taps Save; the
+	 *  bar is transient — sending the next message clears it. */
+	private renderMemoryProposals(proposals: MemoryProposal[]): void {
+		const fresh = proposals.filter(
+			(p) => !this.dismissedProposals.has(p.content.toLowerCase())
+		).slice(0, 3);
+		if (fresh.length === 0) return;
+
+		// One bar at a time — a pending bar from a previous turn is replaced.
+		this.messagesContainer.querySelectorAll('.ai-memory-proposal-bar').forEach((el) => el.remove());
+
+		const bar = this.messagesContainer.createDiv({ cls: 'ai-memory-proposal-bar' });
+		const header = bar.createDiv({ cls: 'ai-memory-proposal-header' });
+		header.createDiv({ cls: 'ai-memory-proposal-title', text: 'Worth remembering?' });
+		const closeBtn = header.createEl('button', {
+			cls: 'ai-memory-proposal-close clickable-icon',
+			attr: { 'aria-label': 'Dismiss' },
+		});
+		setIcon(closeBtn, 'lucide-x');
+
+		const removeBarIfEmpty = () => {
+			if (!bar.querySelector('.ai-memory-proposal-row')) bar.remove();
+		};
+		closeBtn.addEventListener('click', () => {
+			// Treat dismiss-all as "not now" for everything still showing, so
+			// the same facts don't come back next turn.
+			bar.querySelectorAll('.ai-memory-proposal-row').forEach((row) => {
+				const text = row.querySelector('.ai-memory-proposal-text')?.textContent;
+				if (text) this.dismissedProposals.add(text.toLowerCase());
+			});
+			bar.remove();
+		});
+
+		for (const p of fresh) {
+			const row = bar.createDiv({ cls: 'ai-memory-proposal-row' });
+			row.createDiv({ cls: 'ai-memory-proposal-text', text: p.content });
+			const actions = row.createDiv({ cls: 'ai-memory-proposal-actions' });
+			const saveBtn = actions.createEl('button', { cls: 'mod-cta', text: 'Save', type: 'button' });
+			const skipBtn = actions.createEl('button', { text: 'Skip', type: 'button' });
+			saveBtn.addEventListener('click', () => {
+				void (async () => {
+					await this.plugin.memoryStore.addFact(p.content, p.category);
+					row.addClass('is-saved');
+					row.querySelector('.ai-memory-proposal-actions')?.remove();
+					row.querySelector('.ai-memory-proposal-text')?.setText(`Saved: ${p.content}`);
+					window.setTimeout(() => {
+						row.remove();
+						removeBarIfEmpty();
+					}, 1200);
+				})();
+			});
+			skipBtn.addEventListener('click', () => {
+				this.dismissedProposals.add(p.content.toLowerCase());
+				row.remove();
+				removeBarIfEmpty();
+			});
+		}
+
+		this.scrollToBottom();
 	}
 
 	private abortGeneration(): void {
@@ -2336,25 +2411,66 @@ export class ChatView extends ItemView {
 		if (!this.store.getCurrentConversation()) {
 			this.startNewChat();
 		}
-		const provider = this.plugin.providerRegistry.getActiveProvider(this.plugin.settings.activeProvider);
+		// Pin every store write below to THIS conversation (same pattern as
+		// the normal send path).
+		const convId = this.store.getCurrentConversation()!.id;
 
-		// Persist + render the user bubble (full width, normal flow).
-		this.store.addMessage({
+		// Context parity with a normal send: capture images + @-mention notes,
+		// persist them on the user message, and clear the pending strips. The
+		// compared answers must see the context the promoted model will see,
+		// or the arena verdict doesn't predict post-promote behavior. The
+		// user message deliberately carries no provider/model — it went to
+		// every selected model, not the active one.
+		const imagePaths = this.pendingImages.map((p) => p.path);
+		const notePaths = this.pendingNoteAttachments.map((f) => f.path);
+		this.currentSendHasImages = imagePaths.length > 0;
+		this.store.addMessageTo(convId, {
 			role: 'user',
 			content: prompt,
-			provider: provider?.id || this.plugin.settings.activeProvider,
-			model: this.plugin.settings.activeModel,
+			images: imagePaths.length > 0 ? imagePaths : undefined,
+			attachedNotes: notePaths.length > 0 ? notePaths : undefined,
 		});
+		this.pendingImages = [];
+		this.renderImageStrip();
+		this.pendingNoteAttachments = [];
+		this.renderAttachmentChips();
 		this.renderCurrentConversation();
 
 		this.isGenerating = true;
 		this.setGeneratingUI(true);
 		this.arenaAbortControllers.clear();
+		this.arenaRoundMessages.clear();
 
-		// Build a single-shot message list: CORE system prompt + user extension + user prompt.
-		const messages: AIMessage[] = [];
-		messages.push({ role: 'system', content: composeSystemPrompt(this.plugin.settings.systemPrompt) });
-		messages.push({ role: 'user', content: prompt });
+		// System prompt = CORE + extension + memory + RAG — the same parts
+		// buildMessagesArray assembles for a normal send (arena stays
+		// single-shot: no prior conversation history rides along).
+		const sysParts: string[] = [composeSystemPrompt(this.plugin.settings.systemPrompt)];
+		if (this.plugin.settings.enableMemory) {
+			const memBlock = this.plugin.memoryStore.formatFactsForPrompt();
+			if (memBlock) sysParts.push(memBlock);
+		}
+		const ragBlock = await this.buildRetrievedContextBlock(this.store.getCurrentConversation()!);
+		if (ragBlock) sysParts.push(ragBlock);
+		const messages: AIMessage[] = [{ role: 'system', content: sysParts.join('\n\n') }];
+
+		// User turn = prompt + attached-note contents (invisible context) and,
+		// when images are pending, multi-part image content — the same shape
+		// the normal path builds for vision sends.
+		const textWithNotes = await this.prependAttachedNotes(
+			prompt,
+			notePaths.length > 0 ? notePaths : undefined
+		);
+		if (imagePaths.length > 0) {
+			const parts: MessageContent[] = [];
+			if (textWithNotes) parts.push({ type: 'text', text: textWithNotes });
+			for (const imgPath of imagePaths) {
+				const dataUrl = await this.imagePathToDataUrl(imgPath);
+				if (dataUrl) parts.push({ type: 'image_url', image_url: { url: dataUrl } });
+			}
+			messages.push({ role: 'user', content: parts.length > 0 ? parts : textWithNotes });
+		} else {
+			messages.push({ role: 'user', content: textWithNotes });
+		}
 
 		// Arena layout — user bubble is already rendered above; the grid sits
 		// below it as the assistant's response surface.
@@ -2375,6 +2491,9 @@ export class ChatView extends ItemView {
 
 			const responseEl = column.createDiv({ cls: 'ai-arena-column-response ai-message-thinking' });
 			const footer = column.createDiv({ cls: 'ai-arena-column-footer' });
+			const stopBtn = footer.createEl('button', { cls: 'ai-arena-stop-btn', text: 'Stop' });
+			stopBtn.title = 'Stop this column';
+			stopBtn.setAttribute('aria-label', `Stop ${sel.modelName}`);
 			const promoteBtn = footer.createEl('button', {
 				cls: 'ai-arena-promote-btn',
 				text: 'Promote to chat',
@@ -2384,7 +2503,9 @@ export class ChatView extends ItemView {
 				void this.promoteArenaColumn(sel, responseEl.dataset.content || '');
 			});
 
-			promises.push(this.streamArenaResponse(sel, messages, responseEl, footer, promoteBtn));
+			promises.push(
+				this.streamArenaResponse(sel, convId, messages, responseEl, footer, stopBtn, promoteBtn)
+			);
 		}
 
 		// All streams run parallel; resolve independently. allSettled so one
@@ -2392,6 +2513,7 @@ export class ChatView extends ItemView {
 		void Promise.all(promises.map((p): Promise<void> => p.then(() => undefined, () => undefined))).then(() => {
 			this.isGenerating = false;
 			this.setGeneratingUI(false);
+			this.currentSendHasImages = false;
 			this.arenaAbortControllers.clear();
 			this.scrollToBottom();
 		});
@@ -2403,13 +2525,18 @@ export class ChatView extends ItemView {
 	 */
 	private async streamArenaResponse(
 		sel: ArenaSelection,
+		convId: string,
 		messages: AIMessage[],
 		responseEl: HTMLElement,
 		footer: HTMLElement,
+		stopBtn: HTMLButtonElement,
 		promoteBtn: HTMLButtonElement
 	): Promise<void> {
+		const arenaKey = `${sel.providerId}:${sel.modelId}`;
 		const abortController = new AbortController();
-		this.arenaAbortControllers.set(`${sel.providerId}:${sel.modelId}`, abortController);
+		this.arenaAbortControllers.set(arenaKey, abortController);
+		// Per-column stop — aborts only this column; the sibling keeps streaming.
+		stopBtn.addEventListener('click', () => abortController.abort());
 		let streamed = '';
 		let firstChunkReceived = false;
 		let assistantStored = false;
@@ -2441,11 +2568,12 @@ export class ChatView extends ItemView {
 						});
 					}
 					// Persist a separate assistant message per column so the
-					// user can still see all answers after exiting arena. We
-					// tag provider/model on each so the conversation history
-					// shows which model produced which answer.
+					// user can still see all answers after exiting arena without
+					// promoting. Promote later deletes the losing column's
+					// message; provider/model on each record shows which model
+					// produced which answer.
 					if (!assistantStored) {
-						const stored = this.store.addMessage({
+						const stored = this.store.addMessageTo(convId, {
 							role: 'assistant',
 							content: streamed,
 							tokens: usage,
@@ -2453,40 +2581,36 @@ export class ChatView extends ItemView {
 							provider: sel.providerId,
 							model: sel.modelId,
 						});
-						storedArenaMessageId = stored.id;
-						assistantStored = true;
+						if (stored) {
+							storedArenaMessageId = stored.id;
+							this.arenaRoundMessages.set(arenaKey, stored.id);
+							assistantStored = true;
+						}
 					}
 				},
 				onError: (error: Error) => {
 					console.error(`[Curtis] Arena stream error (${sel.providerName}/${sel.modelName}):`, error);
-					const friendly = friendlyError(error, false);
+					const friendly = friendlyError(error, this.currentSendHasImages);
 					responseEl.createDiv({
 						cls: 'ai-arena-column-error',
 						text: `⚠️ ${friendly.message}`,
 					});
 				},
 			});
-			// Final render with full markdown.
-			if (streamed) {
-				this.renderer.renderStreamedMessage(responseEl, streamed, true);
-				promoteBtn.disabled = false;
-				// Persist even when no usage callback fired (some providers
-				// omit token counts on stream completion). Guard against the
-				// usage path having already stored.
-				if (!assistantStored) {
-					const stored = this.store.addMessage({
-						role: 'assistant',
-						content: streamed,
-						provider: sel.providerId,
-						model: sel.modelId,
-					});
+			// Persist even when no usage callback fired (some providers omit
+			// token counts on stream completion). Runs only on a clean finish —
+			// an abort skips it, matching the normal path's no-usage store.
+			if (streamed && !assistantStored) {
+				const stored = this.store.addMessageTo(convId, {
+					role: 'assistant',
+					content: streamed,
+					provider: sel.providerId,
+					model: sel.modelId,
+				});
+				if (stored) {
 					storedArenaMessageId = stored.id;
+					this.arenaRoundMessages.set(arenaKey, stored.id);
 					assistantStored = true;
-				}
-				// Sync the full text in case usage fired before the final chunk
-				// and the persisted snapshot is stale (mirrors the normal path).
-				if (storedArenaMessageId) {
-					this.store.updateMessage(storedArenaMessageId, { content: streamed });
 				}
 			}
 		} catch (e) {
@@ -2500,20 +2624,42 @@ export class ChatView extends ItemView {
 		} finally {
 			responseEl.removeClass('ai-message-streaming');
 			responseEl.removeClass('ai-message-thinking');
+			stopBtn.remove();
+			// Final markdown render even for an aborted column so partial text
+			// keeps its formatting, and promote becomes available for whatever
+			// streamed (mirrors the normal path's finally).
+			if (streamed) {
+				this.renderer.renderStreamedMessage(responseEl, streamed, true);
+				promoteBtn.disabled = false;
+				// Sync the full text in case usage fired before the final chunk
+				// and the persisted snapshot is stale (mirrors the normal path).
+				if (storedArenaMessageId) {
+					this.store.updateMessage(storedArenaMessageId, { content: streamed });
+				}
+			}
 			// Release the controller so the Map doesn't accumulate stale entries
 			// across arena rounds (one leaked controller per column per send).
-			this.arenaAbortControllers.delete(`${sel.providerId}:${sel.modelId}`);
+			this.arenaAbortControllers.delete(arenaKey);
 		}
 	}
 
 	/**
-	 * Promote a single column's response into the main chat: persist it as
-	 * the active assistant message, exit arena mode, and let the user continue
-	 * with the active provider. Does NOT switch the active provider — the user
-	 * may want to keep their default.
+	 * Promote a single column's response into the main chat: exit arena mode,
+	 * keep the promoted answer as the assistant message, and continue with
+	 * that provider/model. The losing column is aborted and its stored answer
+	 * deleted — the continued thread carries the winner only ("carried into a
+	 * normal single-model conversation").
 	 */
 	private async promoteArenaColumn(sel: ArenaSelection, content: string): Promise<void> {
 		if (!content) return;
+		const winnerKey = `${sel.providerId}:${sel.modelId}`;
+		for (const [key, controller] of this.arenaAbortControllers) {
+			if (key !== winnerKey) controller.abort();
+		}
+		for (const [key, messageId] of this.arenaRoundMessages) {
+			if (key !== winnerKey && messageId) this.store.deleteMessage(messageId);
+		}
+		this.arenaRoundMessages.clear();
 		// Exit arena mode but keep the just-promoted message in history.
 		this.arenaMode = false;
 		this.arenaSelectedModels = [];
@@ -2526,6 +2672,9 @@ export class ChatView extends ItemView {
 		void this.plugin.saveSettings();
 		const pickerBtn = this.contentEl.querySelector('.ai-model-picker-btn');
 		if (pickerBtn instanceof HTMLElement) this.updateModelPickerButton(pickerBtn);
+		// The live arena grid is now dead DOM (loser deleted, mode off) —
+		// re-render closes it and shows the clean user + winner thread.
+		this.renderCurrentConversation();
 		new Notice(`Continuing with ${sel.modelName}`);
 	}
 

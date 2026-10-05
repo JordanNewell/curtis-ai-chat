@@ -54,7 +54,7 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 	chatWallpaperPath: '',
 
 	enableMemory: true,
-	memoryCaptureMode: 'auto',
+	memoryCaptureMode: 'confirm',
 	memoryFilePath: 'AI/Curtis Memory.md',
 
 	conversationsFolder: 'AI/Conversations',
@@ -1025,10 +1025,10 @@ export class CurtisSettingTab extends PluginSettingTab {
 	private memoryGroup(): SettingDefinitionItem {
 		const s = this.plugin.settings;
 		const items: SettingDefinitionRender[] = [
-			this.row('Enable memory', 'Inject remembered facts about the user into each prompt', (el) => {
+			this.row('Enable memory', 'Inject remembered facts into each prompt — they are sent to your active provider with every message.', (el) => {
 				new Setting(el)
 					.setName('Enable memory')
-					.setDesc('Inject remembered facts about the user into each prompt')
+					.setDesc('Inject remembered facts into each prompt — they are sent to your active provider with every message.')
 					.addToggle((toggle) => {
 						toggle.setValue(s.enableMemory);
 						toggle.onChange(async (val) => {
@@ -1037,16 +1037,17 @@ export class CurtisSettingTab extends PluginSettingTab {
 						});
 					});
 			}),
-			this.row('Auto-capture facts', 'After each turn, ask the model to extract durable facts. Off = manual only (/remember, right-click).', (el) => {
+			this.row('Fact capture', 'How new facts get saved. Extraction (when on) runs one background request per turn through your active provider.', (el) => {
 				new Setting(el)
-					.setName('Auto-capture facts')
-					.setDesc('After each turn, ask the model to extract durable facts. Off = manual only (/remember, right-click).')
+					.setName('Fact capture')
+					.setDesc('How new facts get saved. Extraction (when on) runs one background request per turn through your active provider.')
 					.addDropdown((dd) => {
-						dd.addOption('off', 'Off (manual only)');
-						dd.addOption('auto', 'Auto-extract after each turn');
+						dd.addOption('off', 'Off — manual only (/remember, right-click)');
+						dd.addOption('confirm', 'Ask before saving (default)');
+						dd.addOption('auto', 'Save silently after each turn');
 						dd.setValue(s.memoryCaptureMode);
 						dd.onChange(async (val) => {
-							s.memoryCaptureMode = val as 'off' | 'auto';
+							s.memoryCaptureMode = val as 'off' | 'confirm' | 'auto';
 							await this.plugin.saveSettings();
 						});
 					});

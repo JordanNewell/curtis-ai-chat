@@ -1,7 +1,7 @@
 // Curtis — Main Plugin Entry Point
 
 import { Editor, Notice, Plugin, requestUrl, TFile, debounce } from 'obsidian';
-import type { CurtisSettings, AIMessage, TokenUsage, AIProvider, ToolCall, ToolDefinition } from './types';
+import type { CurtisSettings, AIMessage, TokenUsage, AIProvider, ToolCall, ToolDefinition, MemoryProposal } from './types';
 import { DEFAULT_SETTINGS, CurtisSettingTab } from './settings';
 import { ProviderRegistry } from './providers/registry';
 import { chatStream, flattenHeaders } from './providers/transport';
@@ -695,10 +695,21 @@ export default class CurtisPlugin extends Plugin {
 	 * Background extraction of durable facts from a completed user→assistant
 	 * turn. Strict prompt: model returns 0-3 facts as JSON or `[]`. Failures
 	 * are logged but never surface to the user — this is best-effort.
+	 *
+	 * Capture modes:
+	 *   - 'off'     — never runs.
+	 *   - 'auto'    — extracted facts are saved to the memory file directly.
+	 *   - 'confirm' — extracted facts are handed to `onPropose`; nothing is
+	 *                 persisted until the user ratifies each one.
 	 */
-	async extractAndStoreFacts(userText: string, assistantText: string): Promise<void> {
+	async extractAndStoreFacts(
+		userText: string,
+		assistantText: string,
+		onPropose?: (proposals: MemoryProposal[]) => void
+	): Promise<void> {
 		if (!this.settings.enableMemory) return;
-		if (this.settings.memoryCaptureMode !== 'auto') return;
+		const mode = this.settings.memoryCaptureMode;
+		if (mode === 'off') return;
 		const trimmedUser = userText.trim();
 		const trimmedAsst = assistantText.trim();
 		if (!trimmedUser || !trimmedAsst) return;
@@ -727,11 +738,24 @@ export default class CurtisPlugin extends Plugin {
 			});
 			const json = extractJsonArray(buffer);
 			if (!json || json.length === 0) return;
+			// Normalize + skip facts the user already saved — neither mode
+			// should re-surface known content.
+			const existing = new Set(this.memoryStore.getFacts().map((f) => f.content.toLowerCase()));
+			const proposals: MemoryProposal[] = [];
 			for (const f of json) {
-				if (typeof f?.content === 'string' && f.content.trim()) {
-					await this.memoryStore.addFact(f.content.trim(), typeof f.category === 'string' ? f.category : undefined);
-				}
+				if (typeof f?.content !== 'string') continue;
+				const content = f.content.replace(/\s+/g, ' ').trim();
+				if (!content || existing.has(content.toLowerCase())) continue;
+				proposals.push({ content, category: typeof f.category === 'string' ? f.category : undefined });
 			}
+			if (proposals.length === 0) return;
+			if (mode === 'auto') {
+				for (const p of proposals) {
+					await this.memoryStore.addFact(p.content, p.category);
+				}
+				return;
+			}
+			onPropose?.(proposals);
 		} catch (e) {
 			console.debug('[Curtis] fact extraction failed (non-fatal):', e);
 		}

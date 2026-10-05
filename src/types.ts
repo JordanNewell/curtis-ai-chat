@@ -246,8 +246,9 @@ export interface CurtisSettings {
 
 	// Memory
 	enableMemory: boolean;
-	/** 'off' = manual only, 'auto' = LLM extracts after each turn. */
-	memoryCaptureMode: 'off' | 'auto';
+	/** 'off' = manual only, 'confirm' = model proposes, user ratifies before
+	 *  anything is saved (default), 'auto' = model extracts and saves silently. */
+	memoryCaptureMode: 'off' | 'confirm' | 'auto';
 	/** Path (relative to vault root) of the markdown memory file. */
 	memoryFilePath: string;
 
@@ -293,6 +294,13 @@ export interface MemoryFact {
 	timestamp: number;
 	accessCount: number;
 	lastAccessed: number;
+}
+
+/** A fact the model extracted in 'confirm' capture mode, pending the user's
+ *  Save/Skip decision. Nothing touches the memory file until Save. */
+export interface MemoryProposal {
+	content: string;
+	category?: string;
 }
 
 // ============================================================================
