@@ -2,6 +2,20 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.6.0] — 2026-10-07
+
+Brand and direction: a custom Curtis mark across the plugin, a theme-adaptive logo disc on the empty state, and right-to-left layout that mirrors cleanly.
+
+### Added
+
+- **Custom Curtis mark** — angular C with a speech-bubble tail on the 24px icon grid, filled with `currentColor` so it follows the theme. Replaces the stock bot glyph in the ribbon, tab strip, and editor context menu.
+- **Dual-theme logo disc** — the empty-state hero is drawn entirely by CSS: dark master (`#0A0A0A`) for dark themes, warm off-white master (`#F5F5F3`) for light, inlined as data URIs. Crop/inline pipeline in `scripts/logo-crop.ps1` and `scripts/inline-logo.mjs`; handoff spec for the final designer master in `LOGO-SPEC.md`, visual rules in `DESIGN.md`.
+
+### Changed
+
+- **Right-to-left support** — all directional CSS (bubble tails, blockquote bars, list indents, code copy button, hover toolbars, dropdown anchors, image-remove button, arena thinking indicator) converted to logical properties, so the chat UI mirrors correctly under Obsidian 1.14's workspace-level RTL flip. No visual change in left-to-right use.
+- **Active history marker** — the active conversation's accent bar is now a logical border instead of an inset box-shadow, so it flips with direction; padding compensates to keep rows aligned.
+
 ## [1.5.1] — 2026-10-04
 
 Consent-first memory and a sharper arena. Extracted facts now ask before anything is saved, and the arena narrows to a two-model head-to-head that compares models under the same context a normal send carries.
