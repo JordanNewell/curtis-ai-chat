@@ -4,6 +4,7 @@ import { ItemView, Notice, WorkspaceLeaf, setIcon, TFile, debounce } from 'obsid
 import type { Conversation, ConversationMessage, AIMessage, MessageContent, TokenUsage, ToolCall, MemoryProposal } from '../types';
 import { toBase64 } from '../utils/base64';
 import { MessageRenderer } from './message-renderer';
+import { CURTIS_ICON_ID } from '../icons';
 import { ConversationStore } from './conversation-store';
 import { ModelPickerModal, buildModelPickerEntries } from '../ui/modals/model-picker-modal';
 import { ArenaModelPickerModal } from '../ui/modals/arena-model-picker-modal';
@@ -272,7 +273,7 @@ export class ChatView extends ItemView {
 	}
 
 	getIcon(): string {
-		return 'bot';
+		return CURTIS_ICON_ID;
 	}
 
 	async onOpen(): Promise<void> {
@@ -995,8 +996,8 @@ export class ChatView extends ItemView {
 		// Full hero orb (only shown when chat has no messages). Disappears the
 		// moment the first message is added. Wallpaper (if enabled) shows behind.
 		const empty = this.messagesContainer.createDiv({ cls: 'ai-chat-empty' });
-		const iconWrap = empty.createDiv({ cls: 'ai-chat-empty-icon' });
-		setIcon(iconWrap, 'bot');
+		// Logo disc is painted purely by CSS (inlined brand image in styles.css).
+		empty.createDiv({ cls: 'ai-chat-empty-icon' });
 		empty.createDiv({ cls: 'ai-chat-empty-title', text: 'Curtis' });
 		const activeNote = getActiveNoteFile(this.app);
 		if (activeNote) {

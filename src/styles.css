@@ -71,9 +71,9 @@
 	display: flex;
 	align-items: center;
 	gap: var(--size-4-2);
-	/* Extra right margin so the picker doesn't crowd the history/mode buttons
-	 * that follow it in the header. */
-	margin-right: var(--size-4-2);
+	/* Extra trailing margin so the picker doesn't crowd the history/mode
+	 * buttons that follow it in the header. */
+	margin-inline-end: var(--size-4-2);
 	padding: 6px var(--size-4-3);
 	background: transparent;
 	border: none;
@@ -206,34 +206,26 @@
 	padding: var(--size-4-8) var(--size-4-4);
 }
 
+/* Brand logo disc. The image is inlined as a data URI (~6KB) because plugin
+ * releases ship only main.js + styles.css — no asset files. Source crop:
+ * assets/logo-square.jpg (regenerate with scripts/logo-crop.ps1). Specs for
+ * the final designer master: LOGO-SPEC.md. No glow/gradient behind the disc
+ * per DESIGN.md brand rules. */
 .ai-chat-empty-icon {
 	position: relative;
 	width: 96px;
 	height: 96px;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	background: var(--background-secondary);
+	background: #0A0A0A url('data:image/jpeg;base64,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') center / cover no-repeat;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 50%;
-	color: var(--interactive-accent);
 	box-shadow: 0 0 0 8px var(--background-modifier-hover);
 }
 
-/* Soft glow — contained, doesn't extend past the icon's box. */
-.ai-chat-empty-icon::before {
-	content: '';
-	position: absolute;
-	inset: 0;
-	border-radius: 50%;
-	background: radial-gradient(circle, var(--interactive-accent) 0%, transparent 70%);
-	opacity: 0.18;
-	z-index: -1;
-}
-
-.ai-chat-empty-icon svg {
-	width: 44px;
-	height: 44px;
+/* Light themes swap to the light master (green mark on warm off-white) so the
+ * disc doesn't read as a heavy black block on bright UI. Both masters must
+ * share identical geometry — see LOGO-SPEC.md. */
+.theme-light .ai-chat-empty-icon {
+	background: #F5F5F3 url('data:image/jpeg;base64,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') center / cover no-repeat;
 }
 
 .ai-chat-empty-title {
@@ -302,12 +294,17 @@
 	font-variant-numeric: tabular-nums;
 }
 
-/* === USER BUBBLE — accent gradient, right-aligned, asymmetric tail === */
+/* === USER BUBBLE — accent gradient, inline-end-aligned, asymmetric tail === */
 .ai-message-user .ai-message-content {
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 	padding: 10px 14px;
-	border-radius: 18px 18px 4px 18px;
+	/* Logical radii so the tail corner follows the inline axis — the small
+	 * corner sits at the sender's trailing edge in both LTR and RTL. */
+	border-start-start-radius: 18px;
+	border-start-end-radius: 18px;
+	border-end-start-radius: 18px;
+	border-end-end-radius: 4px;
 	font-size: var(--font-ui-small);
 	line-height: 1.5;
 	overflow-wrap: break-word;
@@ -316,12 +313,15 @@
 	box-shadow: 0 1px 2px var(--background-modifier-border);
 }
 
-/* === ASSISTANT BUBBLE — subtle bg, left-aligned, asymmetric tail === */
+/* === ASSISTANT BUBBLE — subtle bg, inline-start-aligned, asymmetric tail === */
 .ai-message-assistant .ai-message-content {
 	background: var(--background-secondary);
 	color: var(--text-normal);
 	padding: 10px 14px;
-	border-radius: 18px 18px 18px 4px;
+	border-start-start-radius: 18px;
+	border-start-end-radius: 18px;
+	border-end-start-radius: 4px;
+	border-end-end-radius: 18px;
 	font-size: var(--font-ui-small);
 	line-height: 1.5;
 	overflow-wrap: break-word;
@@ -343,7 +343,7 @@
 
 .ai-message-assistant .ai-message-content ul,
 .ai-message-assistant .ai-message-content ol {
-	padding-left: 1.5em;
+	padding-inline-start: 1.5em;
 	margin: var(--size-4-2) 0;
 }
 
@@ -394,8 +394,8 @@
 }
 
 .ai-message-assistant .ai-message-content blockquote {
-	border-left: 3px solid var(--interactive-accent);
-	padding-left: var(--size-4-3);
+	border-inline-start: 3px solid var(--interactive-accent);
+	padding-inline-start: var(--size-4-3);
 	margin: var(--size-4-2) 0;
 	color: var(--text-muted);
 }
@@ -417,7 +417,7 @@
 	display: inline-block;
 	animation: ai-blink 1s infinite step-end;
 	color: var(--interactive-accent);
-	margin-left: 2px;
+	margin-inline-start: 2px;
 	vertical-align: baseline;
 }
 
@@ -464,7 +464,7 @@
 .ai-code-copy-btn {
 	position: absolute;
 	top: var(--size-4-1);
-	right: var(--size-4-1);
+	inset-inline-end: var(--size-4-1);
 	padding: 3px var(--size-4-2);
 	font-size: var(--font-ui-smallest);
 	border: 1px solid var(--background-modifier-border);
@@ -613,7 +613,7 @@ pre:hover .ai-code-copy-btn {
 .ai-chat-image-remove {
 	position: absolute;
 	top: 2px;
-	right: 2px;
+	inset-inline-end: 2px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -795,7 +795,11 @@ pre:hover .ai-code-copy-btn {
 
 .ai-history-item.is-active {
 	background: var(--background-modifier-hover);
-	box-shadow: inset 3px 0 0 var(--interactive-accent);
+	/* Leading accent bar — border-inline-start rather than an inset
+	 * box-shadow (shadows have no logical form) so the bar flips with RTL;
+	 * the compensated padding keeps active/inactive content aligned. */
+	border-inline-start: 3px solid var(--interactive-accent);
+	padding-inline-start: calc(var(--size-4-3) - 3px);
 }
 
 .ai-history-title {
@@ -872,7 +876,7 @@ pre:hover .ai-code-copy-btn {
 
 .ai-model-pill + .ai-model-pill::before {
 	content: '·';
-	margin-right: 3px;
+	margin-inline-end: 3px;
 	color: var(--text-faint);
 }
 
@@ -945,7 +949,7 @@ pre:hover .ai-code-copy-btn {
 .ai-message-actions {
 	position: absolute;
 	top: 0;
-	right: 0;
+	inset-inline-end: 0;
 	display: flex;
 	gap: 2px;
 	padding: 2px;
@@ -995,8 +999,8 @@ pre:hover .ai-code-copy-btn {
 
 .ai-slash-menu {
 	position: absolute;
-	left: var(--size-4-4);
-	right: var(--size-4-4);
+	inset-inline-start: var(--size-4-4);
+	inset-inline-end: var(--size-4-4);
 	bottom: calc(100% + 4px);
 	max-height: 240px;
 	overflow-y: auto;
@@ -1044,8 +1048,8 @@ pre:hover .ai-code-copy-btn {
 
 .ai-mention-menu {
 	position: absolute;
-	left: var(--size-4-4);
-	right: var(--size-4-4);
+	inset-inline-start: var(--size-4-4);
+	inset-inline-end: var(--size-4-4);
 	bottom: calc(100% + 4px);
 	max-height: 240px;
 	overflow-y: auto;
@@ -1125,7 +1129,7 @@ pre:hover .ai-code-copy-btn {
 	padding: var(--size-4-2) var(--size-4-3);
 	margin: var(--size-4-2) 0;
 	background: var(--background-modifier-hover);
-	border-left: 3px solid var(--interactive-accent);
+	border-inline-start: 3px solid var(--interactive-accent);
 	border-radius: var(--radius-s);
 	font-size: var(--font-ui-small);
 	color: var(--text-muted);
@@ -1203,11 +1207,6 @@ pre:hover .ai-code-copy-btn {
 		height: 72px;
 	}
 
-	.ai-chat-empty-icon svg {
-		width: 36px;
-		height: 36px;
-	}
-
 	.ai-chat-empty-title {
 		font-size: var(--font-ui-medium);
 	}
@@ -1235,8 +1234,8 @@ pre:hover .ai-code-copy-btn {
 	/* Slash/mention menus: span full width minus tight margins. */
 	.ai-slash-menu,
 	.ai-mention-menu {
-		left: var(--size-4-2);
-		right: var(--size-4-2);
+		inset-inline-start: var(--size-4-2);
+		inset-inline-end: var(--size-4-2);
 	}
 
 	/* Image thumbnails: smaller tiles so 3+ fit in a row. */
@@ -1247,8 +1246,8 @@ pre:hover .ai-code-copy-btn {
 
 	/* History dropdown: full-width on mobile so items are tappable. */
 	.ai-history-dropdown {
-		left: var(--size-4-2);
-		right: var(--size-4-2);
+		inset-inline-start: var(--size-4-2);
+		inset-inline-end: var(--size-4-2);
 	}
 
 	.ai-history-item {
@@ -1314,7 +1313,7 @@ pre:hover .ai-code-copy-btn {
  * `top` is set dynamically via setCssProps in showHistoryDropdown. */
 .ai-history-dropdown {
 	position: absolute;
-	right: 8px;
+	inset-inline-end: 8px;
 }
 
 /* Highlight the active model name in the picker. */
@@ -1546,7 +1545,7 @@ pre:hover .ai-code-copy-btn {
 	content: '…';
 	position: absolute;
 	top: 8px;
-	left: 10px;
+	inset-inline-start: 10px;
 	color: var(--text-faint);
 	animation: ai-arena-pulse 1.4s ease-in-out infinite;
 }

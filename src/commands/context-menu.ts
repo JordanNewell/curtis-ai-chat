@@ -1,6 +1,7 @@
 import { Menu, Editor, MarkdownView, Notice } from 'obsidian';
 import type CurtisPlugin from '../main';
 import { CHAT_VIEW_TYPE, ChatView } from '../chat/view';
+import { CURTIS_ICON_ID } from '../icons';
 
 interface ContextAction {
 	id: string;
@@ -52,7 +53,7 @@ export function registerContextMenu(plugin: CurtisPlugin): void {
 				for (const action of actions) {
 					menu.addItem((item) => {
 						item.setTitle(action.label);
-						item.setIcon('bot');
+						item.setIcon(CURTIS_ICON_ID);
 						item.onClick(() => {
 							if (action.action === 'chat') {
 								// Prefill the composer with the selection as a

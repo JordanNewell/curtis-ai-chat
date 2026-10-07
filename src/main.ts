@@ -1,6 +1,7 @@
 // Curtis — Main Plugin Entry Point
 
-import { Editor, Notice, Plugin, requestUrl, TFile, debounce } from 'obsidian';
+import { Editor, Notice, Plugin, addIcon, requestUrl, TFile, debounce } from 'obsidian';
+import { CURTIS_ICON_ID, CURTIS_ICON_SVG } from './icons';
 import type { CurtisSettings, AIMessage, TokenUsage, AIProvider, ToolCall, ToolDefinition, MemoryProposal } from './types';
 import { DEFAULT_SETTINGS, CurtisSettingTab } from './settings';
 import { ProviderRegistry } from './providers/registry';
@@ -126,8 +127,9 @@ export default class CurtisPlugin extends Plugin {
 		// 7. Settings tab
 		this.addSettingTab(new CurtisSettingTab(this.app, this));
 
-		// 8. Ribbon icon
-		this.addRibbonIcon('bot', 'Open AI chat', () => {
+		// 8. Ribbon icon — custom Curtis mark, registered before first use
+		addIcon(CURTIS_ICON_ID, CURTIS_ICON_SVG);
+		this.addRibbonIcon(CURTIS_ICON_ID, 'Open AI chat', () => {
 			void this.activateChatView();
 		});
 	}
