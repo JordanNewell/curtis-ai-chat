@@ -15,12 +15,12 @@
 
 <p align="center">
   <a href="https://jordannewell.github.io/curtis-ai-chat/"><img src="https://img.shields.io/badge/website-live-00FF41" alt="Live site"></a>
-  <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/github/v/release/JordanNewell/curtis-ai-chat?label=release&color=blue" alt="Latest release"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Obsidian-1.13%2B-7C3AED?logo=obsidian&logoColor=white" alt="Obsidian 1.13+">
-  <img src="https://img.shields.io/badge/providers-30%2B-8B5CF6" alt="30+ providers">
-  <img src="https://img.shields.io/badge/build-0%20warnings-10B981" alt="Zero lint warnings">
-  <a href="https://github.com/JordanNewell/curtis-ai-chat/discussions"><img src="https://img.shields.io/github/discussions/JordanNewell/curtis-ai-chat?label=discussions&color=34D399" alt="GitHub Discussions"></a>
+  <a href="https://github.com/JordanNewell/curtis-ai-chat/releases"><img src="https://img.shields.io/github/v/release/JordanNewell/curtis-ai-chat?label=release&color=0A0A0A" alt="Latest release"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-1F1F1F" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/Obsidian-1.13%2B-0A0A0A?logo=obsidian&logoColor=00FF41" alt="Obsidian 1.13+">
+  <img src="https://img.shields.io/badge/providers-30%2B-00FF41" alt="30+ providers">
+  <img src="https://img.shields.io/badge/build-0%20warnings-00FF41" alt="Zero lint warnings">
+  <a href="https://github.com/JordanNewell/curtis-ai-chat/discussions"><img src="https://img.shields.io/github/discussions/JordanNewell/curtis-ai-chat?label=discussions&color=0A0A0A" alt="GitHub Discussions"></a>
 </p>
 
 <p align="center">
