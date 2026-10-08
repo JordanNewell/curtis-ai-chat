@@ -20,7 +20,6 @@ Outputs:
 Usage: python scripts/build_hero.py
 """
 
-import json
 import shutil
 from pathlib import Path
 
@@ -163,45 +162,42 @@ def paste_wordmark(base, wordmark, x, y, height):
     return resized.size
 
 
-def build_card(size, version, wordmark, shot):
+# Press banner (1792x1008): mark span 1549px, headline 959, deck 797.
+# Ink gaps 68 and 36. Top and bottom margins 280 and 178.
+BANNER_MARK = 1549
+BANNER_HEAD = 959
+BANNER_DECK = 797
+HEAD_AT_40 = 563
+DECK_AT_26 = 438
+
+
+def build_card(size, wordmark):
+    """Centered lockup at the press-banner scale.
+
+    1200x630 is the share-card frame. The banner itself is 16:9 and
+    spells the headline wrong, so the lines are redrawn here.
+    """
     w, h = size
     base = Image.new("RGBA", size, BG + (255,))
+    target_w = round(w * 0.86)
+    mark_h = round(wordmark.height * (target_w / wordmark.width))
+    headline = font(DISPLAY, round(40 * (target_w * BANNER_HEAD / BANNER_MARK) / HEAD_AT_40))
+    sub = font(DISPLAY_MED, round(26 * (target_w * BANNER_DECK / BANNER_MARK) / DECK_AT_26))
+    head = "Polyglot AI chat for Obsidian."
+    deck = "Thirty-plus providers, one sidebar."
+    head_h = headline.getbbox(head)[3] - headline.getbbox(head)[1]
+    deck_h = sub.getbbox(deck)[3] - sub.getbbox(deck)[1]
+    gap_mark = round(target_w * 68 / BANNER_MARK)
+    gap_line = round(target_w * 36 / BANNER_MARK)
+    block = mark_h + gap_mark + head_h + gap_line + deck_h
+    if block > h - 48:
+        raise RuntimeError(f"lockup {block}px does not fit a {h}px card")
+    y = round((h - block) * 280 / (280 + 178))
+    _mw, mh = paste_wordmark(base, wordmark, (w - target_w) // 2, y, mark_h)
     draw = ImageDraw.Draw(base)
-    big = w >= 1240
-
-    x = 64
-    y = 72 if big else 64
-    mark_h = 148 if big else 120
-    _mw, mh = paste_wordmark(base, wordmark, x, y, mark_h)
-
-    draw = ImageDraw.Draw(base)
-    ty = y + mh + 32
-    draw.text(
-        (x, ty),
-        "Polyglot AI chat for Obsidian.",
-        font=font(DISPLAY, 36 if big else 30),
-        fill=WHITE,
-    )
-    ty += 52 if big else 44
-    draw.text(
-        (x, ty),
-        "Your vault stays yours.",
-        font=font(DISPLAY_MED, 22 if big else 18),
-        fill=MUTED,
-    )
-    ty += 40
-    draw.text(
-        (x, ty),
-        f"v{version}   ·   30+ PROVIDERS   ·   MIT",
-        font=font(MONO, 14 if big else 12),
-        fill=MUTED,
-    )
-
-    panel_w = 520 if big else 460
-    panel_h = h - 112
-    panel = framed(shot, (panel_w, panel_h))
-    base.alpha_composite(panel, (w - panel_w - 48, (h - panel.height) // 2))
-
+    ty = y + mh + gap_mark
+    draw.text((w / 2, ty), head, font=headline, fill=WHITE, anchor="mt")
+    draw.text((w / 2, ty + head_h + gap_line), deck, font=sub, fill=MUTED, anchor="mt")
     return base.convert("RGB")
 
 
@@ -211,7 +207,6 @@ def save_png(image, path):
 
 
 def main():
-    version = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))["version"]
     wordmark = knockout(BRAND / "wordmark-source.jpg")
     mark = knockout(BRAND / "mark-source.jpg")
 
@@ -233,8 +228,8 @@ def main():
     shot = chat_crop(Image.open(SHOTS / "desktop-chat.png").convert("RGB"))
     save_png(shot, DOCS / "assets" / "screenshots" / "hero-chat.png")
 
-    hero = build_card((1280, 640), version, wordmark, shot)
-    og = build_card((1200, 630), version, wordmark, shot)
+    hero = build_card((1280, 640), wordmark)
+    og = build_card((1200, 630), wordmark)
     hero.save(ROOT / "assets" / "hero.png", "PNG", optimize=True)
     og.save(ROOT / "assets" / "og.png", "PNG", optimize=True)
 
