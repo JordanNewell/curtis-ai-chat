@@ -220,10 +220,16 @@ export const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
 		name: 'DeepSeek',
 		endpoint: 'https://api.deepseek.com/v1/chat/completions',
 		authType: 'bearer',
-		// Verified 2026-07-19. NOTE: deepseek-chat/reasoner sunset 2026-07-24.
+		// Verified 2026-10-08 via api-docs.deepseek.com (pricing + chat-completion
+		// reference). deepseek-flash serves DeepSeek-V4.1-Flash; the legacy
+		// deepseek-v4-flash slug still routes there but is retired for naming.
+		// Prices are off-peak (peak is 2x: 01:00-04:00, 06:00-10:00 UTC Mon-Fri).
+		// NOTE: the server defaults these models to thinking mode, which ignores
+		// temperature and delays first content token — see the capture scripts
+		// for the thinking:disabled override used in demos.
 		models: [
-			{ id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 65536, inputPrice: 0.27, outputPrice: 1.1, functionCallingSupported: true },
-			{ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', contextLength: 65536, inputPrice: 0.14, outputPrice: 0.55, functionCallingSupported: true },
+			{ id: 'deepseek-flash', name: 'DeepSeek V4.1 Flash', contextLength: 1048576, inputPrice: 0.15, outputPrice: 0.6, functionCallingSupported: true },
+			{ id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 1048576, inputPrice: 0.66, outputPrice: 1.98, functionCallingSupported: true },
 		],
 		autoDiscoverModels: true,
 	},

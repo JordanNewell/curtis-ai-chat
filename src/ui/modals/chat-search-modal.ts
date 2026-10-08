@@ -30,10 +30,15 @@ const MAX_ITEMS = 200;
 
 export class ChatSearchModal extends FuzzySuggestModal<ChatSearchResult> {
 	private plugin: CurtisPlugin;
+	/** Called with the chosen conversation id. When provided, the picked
+	 *  conversation opens in the pane the search was launched from; otherwise
+	 *  every open pane re-renders (legacy single-pane behavior). */
+	private onSelect?: (conversationId: string) => void;
 
-	constructor(app: App, plugin: CurtisPlugin) {
+	constructor(app: App, plugin: CurtisPlugin, onSelect?: (conversationId: string) => void) {
 		super(app);
 		this.plugin = plugin;
+		this.onSelect = onSelect;
 		this.setPlaceholder('Search conversations... (Type to filter)');
 		this.setInstructions([
 			{ command: '↑↓', purpose: 'Navigate' },
@@ -109,9 +114,15 @@ export class ChatSearchModal extends FuzzySuggestModal<ChatSearchResult> {
 	}
 
 	onChooseItem(item: ChatSearchResult): void {
-		this.plugin.conversationStore.setCurrentConversation(item.conversation.id);
-		// Re-render any open ChatView so the chosen conversation shows up.
 		// For v1 we don't scroll to the specific message — switching is enough.
+		if (this.onSelect) {
+			// switchConversation moves the store pointer itself on success —
+			// when the pane refuses (mid-stream), the pointer must not move
+			// either, or the pane and the default silently diverge.
+			this.onSelect(item.conversation.id);
+			return;
+		}
+		this.plugin.conversationStore.setCurrentConversation(item.conversation.id);
 		this.plugin.refreshChatViews();
 	}
 }

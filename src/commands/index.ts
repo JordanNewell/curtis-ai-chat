@@ -1,12 +1,14 @@
 import { Editor, Notice } from 'obsidian';
 import type CurtisPlugin from '../main';
 import { rebuildIndexWithProgress } from '../rag';
+import { openImportDialog } from '../import/importer';
+import { downloadConversationsCurtZip } from '../import/curt';
 
 export function registerCommands(plugin: CurtisPlugin): void {
 	// ── Chat Commands ──
 	plugin.addCommand({
 		id: 'open-chat',
-		name: 'Open AI chat',
+		name: 'Open Curtis AI',
 		callback: () => plugin.activateChatView(),
 	});
 
@@ -16,12 +18,37 @@ export function registerCommands(plugin: CurtisPlugin): void {
 		callback: () => plugin.activateChatView(true),
 	});
 
+	// Multi-pane support — each additional pane binds its own conversation.
+	plugin.addCommand({
+		id: 'open-chat-new-pane',
+		name: 'Open new chat pane',
+		callback: () => plugin.openNewChatPane('split'),
+	});
+
+	plugin.addCommand({
+		id: 'open-chat-window',
+		name: 'Open chat in new window',
+		callback: () => plugin.openNewChatPane('window'),
+	});
+
 	plugin.addCommand({
 		id: 'search-conversations',
 		name: 'Search conversations',
 		callback: () => {
 			void plugin.openChatSearch();
 		},
+	});
+
+	plugin.addCommand({
+		id: 'import-chats',
+		name: 'Import chats from other AI tools',
+		callback: () => openImportDialog(plugin),
+	});
+
+	plugin.addCommand({
+		id: 'export-all-chats-curt',
+		name: 'Export all chats as .curt (zip)',
+		callback: () => downloadConversationsCurtZip(plugin.conversationStore.getAllConversations()),
 	});
 
 	// ── Selection Commands ──

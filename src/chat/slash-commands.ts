@@ -5,6 +5,7 @@
 import { App, Notice, TFile } from 'obsidian';
 import type { ConversationStore } from './conversation-store';
 import { downloadConversationMarkdown } from './export';
+import { runRecap } from './recap';
 import { createNote, renderConversationAsMarkdown, saveMessageAsNote } from '../vault/notes';
 import { SlashHelpModal } from '../ui/modals/slash-help-modal';
 import type CurtisPlugin from '../main';
@@ -26,6 +27,11 @@ export interface SlashContext {
 	raw: string;
 	/** Arguments (everything after the command word). */
 	args: string;
+	/** Conversation the invoking pane is bound to — commands act on it, not
+	 *  on the store's global current pointer (multi-pane support). */
+	conversationId?: string | null;
+	/** Switch the invoking pane's (and the workspace-default) provider/model. */
+	setModel?: (providerId: string, modelId: string) => void;
 	/** Helper to replace the input box value. */
 	setInput: (text: string) => void;
 	/** Helper to focus the input. */
@@ -38,7 +44,8 @@ export interface SlashContext {
 	newChat: () => void;
 }
 
-const findConv = (store: ConversationStore) => store.getCurrentConversation();
+const findConv = (store: ConversationStore, conversationId?: string | null) =>
+	conversationId ? store.getConversation(conversationId) : store.getCurrentConversation();
 
 export const SLASH_COMMANDS: SlashCommand[] = [
 	{
@@ -73,14 +80,14 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 		usage: '/title <text>',
 		description: 'Rename the current conversation',
 		run: (ctx) => {
-			const conv = findConv(ctx.plugin.conversationStore);
+			const conv = findConv(ctx.plugin.conversationStore, ctx.conversationId);
 			const title = ctx.args.trim();
 			if (!conv) return true;
 			if (!title) {
 				new Notice('Usage: /title <new name>');
 				return true;
 			}
-			ctx.plugin.conversationStore.renameCurrentConversation(title);
+			ctx.plugin.conversationStore.renameCurrentConversation(title, conv.id);
 			ctx.refresh();
 			new Notice(`Renamed to "${title}"`);
 			return true;
@@ -91,7 +98,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 		usage: '/copy',
 		description: 'Copy the last assistant response',
 		run: async (ctx) => {
-			const last = ctx.plugin.conversationStore.getLastAssistantMessage();
+			const last = ctx.plugin.conversationStore.getLastAssistantMessage(ctx.conversationId ?? undefined);
 			if (!last) {
 				new Notice('No assistant message to copy');
 				return true;
@@ -110,7 +117,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 		usage: '/note [name]',
 		description: 'Save the last assistant response as a new note',
 		run: async (ctx) => {
-			const last = ctx.plugin.conversationStore.getLastAssistantMessage();
+			const last = ctx.plugin.conversationStore.getLastAssistantMessage(ctx.conversationId ?? undefined);
 			if (!last) {
 				new Notice('No assistant message to save');
 				return true;
@@ -129,7 +136,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 		usage: '/save-all [name]',
 		description: 'Export the whole conversation to a single note',
 		run: async (ctx) => {
-			const conv = findConv(ctx.plugin.conversationStore);
+			const conv = findConv(ctx.plugin.conversationStore, ctx.conversationId);
 			if (!conv || conv.messages.length === 0) {
 				new Notice('Nothing to export');
 				return true;
@@ -147,7 +154,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 		usage: '/export',
 		description: 'Download current conversation as a markdown file',
 		run: (ctx) => {
-			const conv = findConv(ctx.plugin.conversationStore);
+			const conv = findConv(ctx.plugin.conversationStore, ctx.conversationId);
 			if (!conv || conv.messages.length === 0) {
 				new Notice('Nothing to export');
 				return true;
@@ -199,9 +206,13 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 				new Notice(`No model matching "${q}"`);
 				return true;
 			}
-			ctx.plugin.settings.activeProvider = best.providerId;
-			ctx.plugin.settings.activeModel = best.modelId;
-			void ctx.plugin.saveSettings();
+			if (ctx.setModel) {
+				ctx.setModel(best.providerId, best.modelId);
+			} else {
+				ctx.plugin.settings.activeProvider = best.providerId;
+				ctx.plugin.settings.activeModel = best.modelId;
+				void ctx.plugin.saveSettings();
+			}
 			const provider = ctx.plugin.providerRegistry.getProvider(best.providerId);
 			new Notice(`Model: ${provider?.name} / ${best.modelId}`);
 			ctx.refresh();
@@ -232,9 +243,13 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 			}
 			const provider = ctx.plugin.providerRegistry.getProvider(best.id);
 			const firstModel = provider?.models[0]?.id;
-			ctx.plugin.settings.activeProvider = best.id;
-			if (firstModel) ctx.plugin.settings.activeModel = firstModel;
-			void ctx.plugin.saveSettings();
+			if (ctx.setModel && best.id && firstModel) {
+				ctx.setModel(best.id, firstModel);
+			} else {
+				ctx.plugin.settings.activeProvider = best.id;
+				if (firstModel) ctx.plugin.settings.activeModel = firstModel;
+				void ctx.plugin.saveSettings();
+			}
 			new Notice(`Provider: ${provider?.name}`);
 			ctx.refresh();
 			return true;
@@ -336,12 +351,21 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 				await ctx.plugin.memoryStore.clear();
 				return true;
 			}
-			// Default: show a Notice with a short summary.
-			const sample = facts.slice(-8).map((f) => `• ${f.content}${f.category ? ` [${f.category}]` : ''}`).join('\n');
-			new Notice(`Memory (${facts.length} facts):\n${sample}`, 8000);
-			return true;
-		},
+		// Default: show a Notice with a short summary.
+		const sample = facts.slice(-8).map((f) => `• ${f.content}${f.category ? ` [${f.category}]` : ''}`).join('\n');
+		new Notice(`Memory (${facts.length} facts):\n${sample}`, 8000);
+		return true;
 	},
+},
+{
+	name: 'recap',
+	usage: '/recap',
+	description: 'Summarize this conversation and log it to the journal',
+	run: async (ctx) => {
+		await runRecap(ctx.plugin, ctx.conversationId, ctx.refresh);
+		return true;
+	},
+},
 ];
 
 /** Very small fuzzy scorer: returns 0 if no chars match, higher = better. */

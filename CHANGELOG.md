@@ -2,6 +2,39 @@
 
 All notable changes to Curtis AI Chat are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- **Multi-pane chat** — "Open new chat pane" opens a second chat as a split in the center area; "Open chat in new window" opens one as a separate OS window. Each pane keeps its own conversation, provider, and model, so panes work independently. Reachable from the command palette, a popout icon on the pane header, and the pane's "..." menu (popout actions are desktop-only).
+
+### Changed
+
+- **Composer layout** — the input box now sits on its own full-width line with attach, mic, the Enter/Shift+Enter hint, and send/stop sharing one action row beneath it, instead of everything squeezed beside the box. The chat header splits into two rows on narrow panes (phones and narrow sidebars): new chat + active note + model picker up top, arena/auto-speak/history/export/search underneath. Wide panes keep the single-row header.
+
+## [2.0.0] — 2026-10-07
+
+Chat import and a Curtis that remembers visibly: bring conversations in from other AI tools, see what Curtis remembers and where each fact came from, recap sessions into a journal, get a quiet hint when your notes connect to a past chat, and start on the right foot.
+
+### Added
+
+- **Chat importer** — an "Import chats from other AI tools" command plus a Settings → Conversations entry point. Auto-detects the official ChatGPT and Claude data exports (`conversations.json`, plain or zipped), `.curt` files, existing Curtis markdown transcripts, and generic role-labeled JSON/markdown. Imported chats land in the conversations folder as normal vault files; continuing one sends its full history under whatever provider is active.
+- **Four entry points** — command palette, drag-and-drop onto the chat view, double-click a `.curt` file in the vault for a one-click import page, and right-click → "Import into Curtis" in the file explorer.
+- **Import summary** — per-file breakdown (format, imported, already-present, failures) after each run; progress shown while a multi-file import runs.
+- **`.curt` portable format** — one file, one conversation, full fidelity (ids, tokens, images survive). "Export" in the chat header now offers Download as Markdown or Save as .curt; `.curt` files in the vault open a branded landing page with one-click import. Curtis-to-Curtis moves are now a file copy.
+- **Fidelity guards** — ChatGPT platform system prompts and tool-output nodes are excluded; orphan tool messages from any foreign transcript are dropped so imported history is always safe to re-send to a provider. Re-running the same export is idempotent (duplicates skipped).
+- **Bulk export** — "Export all chats as .curt (zip)" command and Settings entry point writes the whole history as one importable zip of `.curt` files; import auto-detects zip-of-`.curt` batches, so vault-to-vault moves are a single file.
+- **Memory provenance** — every fact captured from chat records which conversation it was learned from. Settings → Memory shows "learned <date> · from <conversation>" per fact with a jump button. The provenance rides in the memory file's hidden comment; pre-2.0 files parse unchanged.
+- **Memory chips** — assistant replies show how many remembered facts were in context for that answer. The chip opens the fact list with learned dates and a "view conversation" link where provenance exists, plus a shortcut to the memory file. Chips resolve against the current memory file, so edited or deleted facts degrade honestly ("since removed") instead of showing stale text.
+- **Session recaps** — `/recap` or Export → "Recap conversation" summarizes the chat into 2-3 terse bullets (worked on / decided / left open), appends the summary to the conversation, and logs it to the journal.
+- **Curtis Journal** — an append-only markdown file (default `AI/Curtis Journal.md`) with one entry per recap and a link back to the conversation. Plain markdown in your vault; Curtis only ever appends. Path and on/off live in Settings → Conversations.
+- **Relevance pulse** — opening a note that closely matches an indexed past conversation shows a quiet "discussed in <title> · <date>" hint under the chat header; click jumps straight into that conversation. Local-only similarity over the existing vault index (no embedding calls), with a high precision floor so it stays out of the way. On by default in Settings → Vault retrieval; requires the index.
+- **First-run welcome** — new installs get a short panel in the empty state: what Curtis is, that memory is one editable file, an optional "read my vault" indexing pass with visible progress, and two starter questions whose answers flow through normal fact capture. Skippable in one click; upgrading installs never see it (settings migration marks onboarding complete).
+
+### Fixed
+
+- **Fact-extraction race** — switching conversations while a reply was streaming could run fact extraction against the wrong conversation. Extraction now follows the conversation the reply was pinned to, which is also what gives captured facts their provenance.
+
 ## [1.6.0] — 2026-10-07
 
 Brand and direction: a custom Curtis mark across the plugin, a theme-adaptive logo disc on the empty state, and right-to-left layout that mirrors cleanly.

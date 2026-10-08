@@ -13,7 +13,7 @@
 
 import type { ProviderConfig } from '../types';
 
-export const CURRENT_VERSION = 6;
+export const CURRENT_VERSION = 7;
 
 /**
  * Pre-v4.0.0 default system prompt. Used to detect users upgrading from
@@ -250,6 +250,22 @@ export const MIGRATIONS: Migration[] = [
 				settings.memoryCaptureMode = 'confirm';
 			}
 			settings._version = 6;
+			return settings;
+		},
+	},
+	{
+		version: 7,
+		description: 'v2.0.0 — existing installs skip the new onboarding flow',
+		migrate: (settings: SettingsData): SettingsData => {
+			// Reaching this migration means the settings predate 2.0 — a
+			// returning user, not a fresh install. Fresh installs have no
+			// data.json, never run migrations, and keep the
+			// onboardingCompleted default of false, so only they see the
+			// first-run panel.
+			if (settings.onboardingCompleted === undefined) {
+				settings.onboardingCompleted = true;
+			}
+			settings._version = 7;
 			return settings;
 		},
 	},

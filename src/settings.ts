@@ -8,10 +8,14 @@ import { CustomProviderModal } from './ui/modals/custom-provider-modal';
 import { McpServerModal } from './ui/modals/mcp-server-modal';
 import { FolderSuggestModal } from './ui/modals/folder-suggest-modal';
 import { ImageSuggestModal } from './ui/modals/image-suggest-modal';
+import { ensureJournalFile } from './memory/journal';
 import { EditFactModal } from './ui/modals/edit-fact-modal';
 import { CORE_SYSTEM_PROMPT } from './core/system-prompt';
 import { setApiKeyForProvider, getSecretStorage, resolveApiKey } from './core/secrets';
 import { rebuildIndexWithProgress } from './rag';
+import { openImportDialog } from './import/importer';
+import { downloadConversationsCurtZip } from './import/curt';
+import { ensureNotificationPermission, isSystemNotificationSupported } from './chat/notifications';
 import type CurtisPlugin from './main';
 
 export const DEFAULT_SETTINGS: CurtisSettings = {
@@ -44,6 +48,8 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 	showTokenUsage: true,
 
 	chatViewPosition: 'right',
+	notifyOnCompletion: false,
+	notifyOnError: false,
 
 	noteSaveFolder: 'AI Notes',
 	autoSaveAssistantResponses: false,
@@ -59,7 +65,11 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 
 	conversationsFolder: 'AI/Conversations',
 
+	enableJournal: true,
+	journalFilePath: 'AI/Curtis Journal.md',
+
 	enableRag: false,
+	enableRelevancePulse: true,
 	ragChunkSize: 500,
 	ragChunkOverlap: 50,
 	ragTopK: 5,
@@ -72,10 +82,22 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 	enableMcp: false,
 	mcpServers: [],
 	showDaySeparators: true,
+
+	onboardingCompleted: false,
 };
 
 export class CurtisSettingTab extends PluginSettingTab {
 	plugin: CurtisPlugin;
+
+	/** Shared enable-path for the notification toggles: request permission on
+	 *  desktop, and tell unsupported platforms (mobile) what they get. */
+	private static async warnWhenNotificationsUnsupported(): Promise<void> {
+		if (isSystemNotificationSupported()) {
+			await ensureNotificationPermission();
+			return;
+		}
+		new Notice('System notifications are not available here — completions will surface as in-app notices instead.');
+	}
 
 	constructor(app: App, plugin: CurtisPlugin) {
 		super(app, plugin);
@@ -664,6 +686,24 @@ export class CurtisSettingTab extends PluginSettingTab {
 								});
 							});
 					}),
+					this.row('Import chats from other AI tools', 'Bring conversations from ChatGPT, Claude, or any role-labeled export into Curtis. Auto-detects official data exports (.json or .zip), .curt files, and generic markdown transcripts. Also available as a command and via drag-and-drop onto the chat.', (el) => {
+						new Setting(el)
+							.setName('Import chats from other AI tools')
+							.setDesc('Bring conversations from ChatGPT, Claude, or any role-labeled export into Curtis. Auto-detects official data exports (.json or .zip), .curt files, and generic markdown transcripts.')
+							.addButton((btn) => {
+								btn.setButtonText('Import…').setCta().onClick(() => openImportDialog(this.plugin));
+							});
+					}),
+					this.row('Export all chats as .curt', 'Download every conversation as portable .curt files in one zip — for backup, moving to another vault or machine, or handing to Curtis Porter. Re-importing the zip skips conversations already present.', (el) => {
+						new Setting(el)
+							.setName('Export all chats as .curt')
+							.setDesc('Download every conversation as portable .curt files in one zip — for backup, moving to another vault or machine, or handing to Curtis Porter.')
+							.addButton((btn) => {
+								btn.setButtonText('Export all…').onClick(() =>
+									downloadConversationsCurtZip(this.plugin.conversationStore.getAllConversations())
+								);
+							});
+					}),
 				],
 			};
 		}
@@ -868,6 +908,32 @@ export class CurtisSettingTab extends PluginSettingTab {
 								s.enterKeyBehavior = val as 'send' | 'newline';
 								await this.plugin.saveSettings();
 								this.plugin.refreshAllChatViews();
+							});
+						});
+				}),
+				this.row('Notify when responses complete', 'Show a system notification when a response finishes. Skipped while you are viewing the chat; in-app notice on mobile.', (el) => {
+					new Setting(el)
+						.setName('Notify when responses complete')
+						.setDesc('Show a system notification when a response finishes. Skipped while you are viewing the chat; in-app notice on mobile.')
+						.addToggle((toggle) => {
+							toggle.setValue(s.notifyOnCompletion === true);
+							toggle.onChange(async (val) => {
+								s.notifyOnCompletion = val;
+								await this.plugin.saveSettings();
+								if (val) await CurtisSettingTab.warnWhenNotificationsUnsupported();
+							});
+						});
+				}),
+				this.row('Notify when requests fail', 'Show a system notification when a request fails (completions toggle above covers successes).', (el) => {
+					new Setting(el)
+						.setName('Notify when requests fail')
+						.setDesc('Show a system notification when a request fails (completions toggle above covers successes).')
+						.addToggle((toggle) => {
+							toggle.setValue(s.notifyOnError === true);
+							toggle.onChange(async (val) => {
+								s.notifyOnError = val;
+								await this.plugin.saveSettings();
+								if (val) await CurtisSettingTab.warnWhenNotificationsUnsupported();
 							});
 						});
 				}),
@@ -1110,10 +1176,20 @@ export class CurtisSettingTab extends PluginSettingTab {
 			} else {
 				for (const fact of facts) {
 					const preview = fact.content.length > 80 ? fact.content.slice(0, 80) + '…' : fact.content;
-					items.push(this.row(preview, fact.category ? `Category: ${fact.category}` : 'Uncategorized', (el) => {
-						new Setting(el)
+					// Provenance line: category · learned date · source conversation.
+					const conv = fact.sourceConversationId
+						? this.plugin.conversationStore.getConversation(fact.sourceConversationId)
+						: undefined;
+					const descParts = [
+						fact.category ? `Category: ${fact.category}` : 'Uncategorized',
+						`learned ${new Date(fact.timestamp).toLocaleDateString()}`,
+					];
+					if (conv) descParts.push(`from “${conv.title}”`);
+					const desc = descParts.join(' · ');
+					items.push(this.row(preview, desc, (el) => {
+						const setting = new Setting(el)
 							.setName(preview)
-							.setDesc(fact.category ? `Category: ${fact.category}` : 'Uncategorized')
+							.setDesc(desc)
 							.addButton((btn) => btn.setButtonText('Edit').onClick(() => {
 								new EditFactModal(this.app, fact, (content, category) => {
 									void (async () => {
@@ -1130,6 +1206,20 @@ export class CurtisSettingTab extends PluginSettingTab {
 									this.update();
 								});
 							});
+						if (conv) {
+							setting.addExtraButton((btn) => {
+								btn.setIcon('messages-square')
+									.setTooltip('View source conversation')
+									.onClick(() => {
+										const path = this.plugin.conversationStore.getConversationPath(conv.id);
+										if (path) {
+											void this.app.workspace.openLinkText(path, '', false);
+										} else {
+											new Notice('That conversation has no saved file');
+										}
+									});
+							});
+						}
 					}));
 				}
 			}
@@ -1158,15 +1248,49 @@ export class CurtisSettingTab extends PluginSettingTab {
 									await this.plugin.saveSettings();
 								});
 						})
+							.addButton((btn) => {
+								btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
+									new FolderSuggestModal(this.app, (path) => {
+										void (async () => {
+											s.conversationsFolder = path || 'AI/Conversations';
+											await this.plugin.saveSettings();
+											this.update();
+										})();
+									}).open();
+								});
+							});
+					}),
+				this.row('Recap journal', 'When you recap a conversation (/recap or the export menu), also append the summary to a journal file in your vault.', (el) => {
+					new Setting(el)
+						.setName('Recap journal')
+						.setDesc('When you recap a conversation (/recap or the export menu), also append the summary to a journal file in your vault.')
+						.addToggle((toggle) => {
+							toggle.setValue(s.enableJournal);
+							toggle.onChange(async (val) => {
+								s.enableJournal = val;
+								await this.plugin.saveSettings();
+							});
+						});
+				}),
+				this.row('Journal file path', 'Append-only markdown file where recaps are logged. One entry per recap; Curtis never rewrites it.', (el) => {
+					new Setting(el)
+						.setName('Journal file path')
+						.setDesc('Append-only markdown file where recaps are logged. One entry per recap; Curtis never rewrites it.')
+						.addText((text) => {
+							text.setPlaceholder('AI/Curtis Journal.md')
+								.setValue(s.journalFilePath)
+								.onChange(async (val) => {
+									s.journalFilePath = val.trim() || 'AI/Curtis Journal.md';
+									await this.plugin.saveSettings();
+								});
+						})
 						.addButton((btn) => {
-							btn.setIcon('folder').setTooltip('Browse…').onClick(() => {
-								new FolderSuggestModal(this.app, (path) => {
-									void (async () => {
-										s.conversationsFolder = path || 'AI/Conversations';
-										await this.plugin.saveSettings();
-										this.update();
-									})();
-								}).open();
+							btn.setButtonText('Open').setTooltip('Open journal file').onClick(async () => {
+								await ensureJournalFile(this.plugin);
+								const p = s.journalFilePath || 'AI/Curtis Journal.md';
+								if (this.app.vault.getAbstractFileByPath(p)) {
+									await this.app.workspace.openLinkText(p, '', false);
+								}
 							});
 						});
 				}),
@@ -1191,6 +1315,18 @@ export class CurtisSettingTab extends PluginSettingTab {
 							// Hot-reload the agent tool — no Obsidian reload needed.
 							this.plugin.toolRegistry.setRagToolEnabled(val);
 							this.update();
+						});
+					});
+			}),
+			this.row('Relevance pulse', 'When the note you open closely matches a past conversation, show a "discussed in …" hint under the chat header. Local-only similarity over the vault index — no API calls. Requires the index.', (el) => {
+				new Setting(el)
+					.setName('Relevance pulse')
+					.setDesc('When the note you open closely matches a past conversation, show a "discussed in …" hint under the chat header. Local-only similarity over the vault index — no API calls. Requires the index.')
+					.addToggle((toggle) => {
+						toggle.setValue(s.enableRelevancePulse);
+						toggle.onChange(async (val) => {
+							s.enableRelevancePulse = val;
+							await this.plugin.saveSettings();
 						});
 					});
 			}),

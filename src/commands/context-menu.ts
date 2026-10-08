@@ -59,9 +59,16 @@ export function registerContextMenu(plugin: CurtisPlugin): void {
 								// Prefill the composer with the selection as a
 								// quote instead of opening an empty chat that
 								// silently discards what the user selected.
+								// Target the chat pane the user is already in
+								// (multi-pane); fall back to the standard one.
 								const quote = selection.length > 8000
 									? selection.slice(0, 8000) + '\n…[truncated]'
 									: selection;
+								const activeView = plugin.app.workspace.getActiveViewOfType(ChatView);
+								if (activeView) {
+									activeView.setInputValue(`> ${quote.replace(/\n/g, '\n> ')}\n\n`);
+									return;
+								}
 								void plugin.activateChatView().then(() => {
 									const leaf = plugin.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0];
 									if (leaf?.view instanceof ChatView) {

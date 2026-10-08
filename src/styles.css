@@ -15,6 +15,10 @@
 	overflow: hidden;
 	background: var(--background-primary);
 	position: relative;
+	/* Container query anchor — lets the header stack based on the PANE width
+	 * (not the viewport), so a narrow desktop sidebar gets the same double-deck
+	 * header as a phone. */
+	container-type: inline-size;
 }
 
 /* ============================================================================
@@ -32,6 +36,45 @@
 	/* Foreground element — sits above the .ai-chat-background watermark. */
 	position: relative;
 	z-index: 3;
+}
+
+/* Primary row — new chat, active-note pill, model picker (picker stretches). */
+.ai-chat-header-main {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-3);
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+/* Tools row — arena/auto-speak/history/export/search. Inline at wide widths;
+ * stacks under the primary row on narrow panes (see the container + phone
+ * media queries below). */
+.ai-chat-header-tools {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	flex-shrink: 0;
+}
+
+/* Double-deck header on narrow panes: primary row up top, tools row beneath.
+ * Pane-width based so narrow desktop sidebars stack like phones. The tools
+ * cluster CENTERS in the stacked layout — left-packed it reads as shifted
+ * against the full-width picker row above (visible in wide-but-stacked center
+ * panes, e.g. a half-screen split). */
+@container (max-width: 560px) {
+	.ai-chat-header {
+		flex-direction: column;
+		align-items: stretch;
+		gap: var(--size-4-1);
+		height: auto;
+		min-height: 48px;
+		padding: var(--size-4-2) var(--size-4-3);
+	}
+
+	.ai-chat-header-tools {
+		justify-content: center;
+	}
 }
 
 .ai-chat-icon-btn {
@@ -242,6 +285,118 @@
 	line-height: 1.5;
 }
 
+/* === ONBOARDING — first-run panel inside the empty-state hero === */
+.ai-onboard {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--size-4-2);
+	max-width: 360px;
+	margin-top: var(--size-4-2);
+}
+
+.ai-onboard-line {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	line-height: 1.5;
+}
+
+.ai-onboard-faint {
+	font-size: var(--font-ui-smallest);
+	color: var(--text-faint);
+}
+
+.ai-onboard-actions {
+	margin-top: var(--size-4-2);
+}
+
+.ai-onboard-btn {
+	font-size: var(--font-ui-small);
+}
+
+.ai-onboard-progress {
+	font-size: var(--font-ui-smallest);
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+.ai-onboard-progress.is-hidden {
+	display: none;
+}
+
+.ai-onboard-chips {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-3);
+}
+
+.ai-onboard-chip {
+	font-size: var(--font-ui-smallest);
+	color: var(--text-muted);
+	background: var(--background-modifier-hover);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	padding: 4px 10px;
+	cursor: pointer;
+	transition: color 150ms ease, border-color 150ms ease;
+}
+
+.ai-onboard-chip:hover {
+	color: var(--text-normal);
+	border-color: var(--background-modifier-border-hover);
+}
+
+.ai-onboard-skip {
+	background: none;
+	border: none;
+	box-shadow: none;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smallest);
+	cursor: pointer;
+	padding: 0;
+	margin-top: var(--size-4-2);
+}
+
+.ai-onboard-skip:hover {
+	color: var(--text-muted);
+	text-decoration: underline;
+}
+
+/* === RELEVANCE PULSE — "discussed in …" hint under the header === */
+.ai-chat-pulse {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--size-4-1);
+	margin: var(--size-4-1) var(--size-4-2) 0;
+	padding: 3px var(--size-4-2);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	font-size: var(--font-ui-smallest);
+	color: var(--text-muted);
+	z-index: 3;
+}
+
+.ai-chat-pulse-label {
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ai-chat-pulse-label:hover {
+	color: var(--text-normal);
+}
+
+.ai-chat-pulse-close {
+	padding: 2px;
+	height: auto;
+	width: auto;
+}
+
 /* Message container */
 .ai-message {
 	display: flex;
@@ -292,6 +447,86 @@
 
 .ai-message-info {
 	font-variant-numeric: tabular-nums;
+}
+
+/* === MEMORY CHIP — "N memories" badge in the assistant meta row === */
+.ai-message-mem {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	color: var(--text-faint);
+	cursor: pointer;
+	padding: 1px 5px;
+	border-radius: var(--radius-s);
+	transition: color 150ms ease, background-color 150ms ease;
+}
+
+.ai-message-mem:hover,
+.ai-message-mem:active {
+	color: var(--text-muted);
+	background: var(--background-modifier-hover);
+}
+
+.ai-message-mem .svg-icon {
+	width: 12px;
+	height: 12px;
+}
+
+.ai-message-mem-count {
+	font-variant-numeric: tabular-nums;
+}
+
+/* Facts popover — in-flow panel under the message that opened it. */
+.ai-mem-popover {
+	align-self: flex-start;
+	max-width: 88%;
+	margin: -2px 0 10px var(--size-4-2);
+	padding: var(--size-4-2) var(--size-4-3);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-2);
+}
+
+.ai-mem-popover-row {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.ai-mem-popover-fact {
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	line-height: 1.45;
+}
+
+.ai-mem-popover-fact.is-removed {
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+.ai-mem-popover-meta {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	font-size: var(--font-ui-smallest);
+	color: var(--text-faint);
+}
+
+.ai-mem-popover-link {
+	color: var(--text-accent);
+	cursor: pointer;
+}
+
+.ai-mem-popover-link:hover {
+	text-decoration: underline;
+}
+
+.ai-mem-popover-footer {
+	border-top: 1px solid var(--background-modifier-border);
+	padding-top: var(--size-4-2);
 }
 
 /* === USER BUBBLE — accent gradient, inline-end-aligned, asymmetric tail === */
@@ -501,16 +736,11 @@ pre:hover .ai-code-copy-btn {
 }
 
 /*
- * Input row — flex container holding the textarea card and the send button
- * as siblings. The button sits OUTSIDE the textarea's focus halo so the
- * focus ring never "traps" the button visually.
+ * Input row — holds ONLY the textarea card so the box gets its own
+ * full-width line. Attach/mic/hint/send live on the action row beneath.
  */
 .ai-chat-input-row {
 	display: flex;
-	align-items: flex-end;
-	/* Generous gap so the send button reads as a separate action, not an
-	 * attachment of the textarea card. */
-	gap: var(--size-4-3);
 }
 
 /*
@@ -558,17 +788,17 @@ pre:hover .ai-code-copy-btn {
 	color: var(--text-faint);
 }
 
-/* Send button column — sits to the right of the textarea, outside its halo. */
+/* Send button group — right end of the action row under the box. */
 .ai-chat-send-col {
 	display: flex;
-	align-items: flex-end;
+	align-items: center;
 	flex-shrink: 0;
 }
 
-/* Paperclip column — symmetric with the send column. */
+/* Attach group — left end of the action row under the box. */
 .ai-chat-attach-col {
 	display: flex;
-	align-items: flex-end;
+	align-items: center;
 	gap: var(--size-4-2);
 	flex-shrink: 0;
 }
@@ -736,16 +966,20 @@ pre:hover .ai-code-copy-btn {
 	display: none;
 }
 
+/* Action row under the box — attach + mic left, hint centered between the
+ * groups, send right. The hint's flex:1 does the centering, so no
+ * space-between needed. */
 .ai-chat-btn-row {
 	display: flex;
 	align-items: center;
-	/* Only one child (the hint) — no space-between. */
-	justify-content: center;
 	gap: var(--size-4-2);
-	margin-top: var(--size-4-3);
+	margin-top: var(--size-4-2);
 }
 
 .ai-chat-input-hint {
+	/* Soak up the space between the attach group and the send button. */
+	flex: 1;
+	min-width: 0;
 	font-size: var(--font-ui-smallest);
 	color: var(--text-faint);
 	text-align: center;
@@ -1211,11 +1445,21 @@ pre:hover .ai-code-copy-btn {
 		font-size: var(--font-ui-medium);
 	}
 
-	/* Tighter header padding to fit all three buttons on a narrow bar. */
+	/* Double-deck header on phones — mirrors the container query so devices
+	 * without container-query support still stack the two rows (on phones
+	 * the pane spans the viewport, so a media query lands the same layout). */
 	.ai-chat-header {
-		height: 44px;
-		padding: 0 var(--size-4-2);
-		gap: var(--size-4-2);
+		flex-direction: column;
+		align-items: stretch;
+		gap: var(--size-4-1);
+		height: auto;
+		min-height: 48px;
+		padding: var(--size-4-2) var(--size-4-2);
+	}
+
+	/* Centered tools cluster — mirrors the container-query stacked layout. */
+	.ai-chat-header-tools {
+		justify-content: center;
 	}
 
 	/* The model picker should not push history button off-screen on phones. */
@@ -2195,4 +2439,118 @@ textarea.ai-system-prompt-core.ai-system-prompt-core {
 .ai-memory-proposal-actions button {
 	font-size: var(--font-ui-smaller);
 	padding: 2px 10px;
+}
+
+/* ==========================================================================
+   .curt import view — landing page when a .curt file is opened in the vault
+   ========================================================================== */
+
+.curt-import-view {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--size-4-6);
+}
+
+.curt-import-card {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--size-4-2);
+	max-width: 420px;
+	padding: var(--size-4-6);
+	text-align: center;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-l);
+	background: var(--background-secondary);
+}
+
+.curt-import-icon {
+	width: 48px;
+	height: 48px;
+	color: var(--interactive-accent);
+}
+
+.curt-import-icon .svg-icon {
+	width: 100%;
+	height: 100%;
+}
+
+.curt-import-title {
+	font-size: var(--font-ui-large);
+	font-weight: var(--font-semibold);
+	color: var(--text-normal);
+	word-break: break-word;
+}
+
+.curt-import-meta {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.curt-import-actions {
+	display: flex;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-2);
+}
+
+.curt-import-error {
+	color: var(--text-error);
+	font-size: var(--font-ui-medium);
+	text-align: center;
+	padding: var(--size-4-6);
+}
+
+/* Import summary modal — per-file breakdown after a run */
+.curt-import-summary {
+	max-width: 480px;
+}
+
+.curt-import-summary-title {
+	font-size: var(--font-ui-large);
+	font-weight: var(--font-semibold);
+	margin-bottom: var(--size-2-2);
+}
+
+.curt-import-summary-headline {
+	color: var(--text-muted);
+	margin-bottom: var(--size-4-2);
+}
+
+.curt-import-summary-row {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--size-4-2);
+	padding: var(--size-2-1) 0;
+}
+
+.curt-import-summary-icon {
+	color: var(--text-success);
+	flex-shrink: 0;
+	padding-top: 2px;
+}
+
+.curt-import-summary-icon.is-error {
+	color: var(--text-error);
+}
+
+.curt-import-summary-body {
+	min-width: 0;
+}
+
+.curt-import-summary-file {
+	font-size: var(--font-ui-medium);
+	color: var(--text-normal);
+	word-break: break-all;
+}
+
+.curt-import-summary-detail {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.curt-import-summary-actions {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: var(--size-4-2);
 }

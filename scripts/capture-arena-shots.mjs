@@ -50,11 +50,12 @@ const OBSIDIAN_EXE =
 // bursts and then degenerates into ~40-char stubs), while deepseek serves
 // reliably all night. Two models from one provider is a valid duel — the
 // arena keys columns by provider:model, and same-provider pairs are exactly
-// the "same model via two plans" variance test.
+// the "same model via two plans" variance test. V4.1 Flash vs V4 Pro is
+// today's speed-vs-quality pairing (slugs verified 2026-10-08).
 const PROVIDER_A = 'deepseek';
-const MODEL_A = 'chat';
+const MODEL_A = 'deepseek-flash';
 const PROVIDER_B = 'deepseek';
-const MODEL_B = 'deepseek-v4-flash';
+const MODEL_B = 'deepseek-v4-pro';
 
 // ~400 words keeps both streams alive well past first tokens: a mid-stream
 // shot with real partial text, a per-column stop with the sibling still
@@ -215,10 +216,23 @@ async function killObsidian() {
 }
 
 async function bootInstance(port) {
-	const child = spawn(OBSIDIAN_EXE, [VAULT, `--remote-debugging-port=${port}`], {
-		detached: false,
-		stdio: 'ignore',
-	});
+	const child = spawn(
+		OBSIDIAN_EXE,
+		[
+			VAULT,
+			`--remote-debugging-port=${port}`,
+			// Windows pauses an occluded Electron window's renderer, which
+			// stalls page.screenshot's wait-for-frame when the capture window
+			// gets buried under other windows mid-run.
+			'--disable-backgrounding-occluded-windows',
+			'--disable-background-timer-throttling',
+			'--disable-renderer-backgrounding',
+		],
+		{
+			detached: false,
+			stdio: 'ignore',
+		},
+	);
 
 	const version = await waitForDebugPort(port, 25000);
 	if (!version) {
@@ -351,6 +365,33 @@ const scrollChatToTop = () => {
 	for (const c of els) c.scrollTop = 0;
 };
 
+// Column answer areas keep whatever scroll offset streaming left them at,
+// which slices a line mid-glyph at the card edge in settled shots. Park the
+// scroll at a whole-line offset (clean top edge) and fade the last 18px out
+// (no visible cut at the bottom) — no layout shift, safe mid-stream.
+const scrollArenaColumnsToEnd = () => {
+	for (const col of document.querySelectorAll('.ai-arena-column')) {
+		for (const el of [col, ...col.querySelectorAll('*')]) {
+			if (el.clientHeight < 40 || el.scrollHeight <= el.clientHeight + 4) continue;
+			const lh = parseFloat(getComputedStyle(el).lineHeight) || 20;
+			el.scrollTop = Math.floor((el.scrollHeight - el.clientHeight) / lh) * lh;
+			const fade = 'linear-gradient(to bottom, black calc(100% - 18px), transparent 100%)';
+			el.style.webkitMaskImage = fade;
+			el.style.maskImage = fade;
+		}
+	}
+};
+
+// Hover tooltips ("Stop generating", "Send") linger over the button a scripted
+// click just left and photobomb the next shot; park the pointer over plain
+// message text right-of-center (dead corner (2,2) is the sidebar collapse
+// toggle's hover zone in this layout) and let the tooltip drop.
+async function parkMouse(page) {
+	const box = page.viewportSize() ?? { width: 1280, height: 800 };
+	await page.mouse.move(Math.round(box.width * 0.55), Math.round(box.height * 0.35));
+	await page.waitForTimeout(450);
+}
+
 // --- shared arena flow -------------------------------------------------------
 
 /** Point the active provider at pair member A (the picker pre-selects it),
@@ -418,6 +459,7 @@ async function startArena(page, ctx, modelBName, pickerShot) {
 	if (pickerShot) {
 		const counter = await page.locator('.ai-arena-picker-counter').textContent();
 		console.log(`[arena] picker counter: "${counter?.trim()}"`);
+		await parkMouse(page);
 		await page.screenshot({ path: resolve(OUT_DIR, pickerShot) });
 		console.log(`[arena] ${pickerShot}`);
 	}
@@ -439,7 +481,9 @@ async function sendArenaPrompt(page, ctx) {
 /** Force the chat split wide via inline !important properties and verify the
  *  measured width. The stylesheet injection alone races Obsidian's own layout
  *  pass (the first round captured 116px columns); inline properties win
- *  deterministically, and the retry loop covers async re-layouts. */
+ *  deterministically, and the retry loop covers async re-layouts. Fixed px,
+ *  not 62vw: a narrow restored window collapses the vw math and the arena
+ *  columns end up cramped (same fix as record-arena-demo.mjs). */
 async function ensureWideChat(page) {
 	let lastWidth = -1;
 	for (let i = 0; i < 10; i++) {
@@ -448,7 +492,7 @@ async function ensureWideChat(page) {
 			const split = leaf?.closest('.workspace-split');
 			if (!split) return -1;
 			for (const prop of ['width', 'max-width', 'flex-basis']) {
-				split.style.setProperty(prop, 'min(62vw, 980px)', 'important');
+				split.style.setProperty(prop, '980px', 'important');
 			}
 			return split.offsetWidth;
 		});
@@ -478,7 +522,7 @@ const diagnoseColumns = () =>
 
 /** Any arena column visibly live: real text on screen while its stop button
  *  is still up. Catching BOTH columns mid-flight is a race the fast sibling
- *  always loses (deepseek-v4-flash settles before glm-5.3's first token), so
+ *  always loses (the flash sibling settles before V4 Pro's first token), so
  *  "one live column beside a settled sibling" is the honest streaming shot.
  *  NOTE: predicates passed to page.evaluate must be self-contained —
  *  Playwright evaluates the function SOURCE in the page, so closure
@@ -537,6 +581,30 @@ async function pollVaultState(ctx, pred, timeoutMs) {
 
 // --- passes ------------------------------------------------------------------
 
+/** DeepSeek V4.1 defaults to thinking mode server-side — temperature is
+ *  ignored and the first content token lands 10-30s late, which empties the
+ *  mid-flight streaming shots. Patch the live provider instance (built once
+ *  at onload, so it survives settings saves and reloads are handled by
+ *  re-patching) to send thinking:disabled per DeepSeek's API. */
+async function patchDeepseekThinking(page) {
+	await page.evaluate(() => {
+		const prov = window.app.plugins.plugins['curtis-ai-chat'].providerRegistry.getProvider('deepseek');
+		if (!prov) throw new Error('deepseek provider not initialized');
+		if (prov.__thinkingPatched) return;
+		const orig = prov.formatRequest.bind(prov);
+		prov.formatRequest = (messages, options) => {
+			const init = orig(messages, options);
+			try {
+				const body = JSON.parse(init.body);
+				body.thinking = { type: 'disabled' };
+				init.body = JSON.stringify(body);
+			} catch { /* body already gone — leave it untouched */ }
+			return init;
+		};
+		prov.__thinkingPatched = true;
+	});
+}
+
 async function desktopPass() {
 	console.log('[arena] pass 1: desktop × both themes');
 	const inst = await bootInstance(9225);
@@ -559,6 +627,20 @@ async function desktopPass() {
 			15000,
 			'command registration (desktop reload)'
 		);
+		await patchDeepseekThinking(page);
+
+		// Electron ignores --window-size in packaged apps and Obsidian's
+		// restored bounds are whatever the last window was (a ~840px window
+		// collapses the min(62vw,…) math and the chat split won't widen —
+		// the 2026-10-08 run died at 521px exactly this way). resizeTo works
+		// on non-maximized windows — resize and verify, like the recorder.
+		await page.evaluate(() => window.resizeTo(1440, 900));
+		await page.waitForTimeout(800);
+		const vp = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+		console.log(`[arena] viewport: ${vp.w}x${vp.h}`);
+		if (!vp.w || vp.w < 1100) {
+			throw new Error(`window too narrow after resizeTo (${vp.w}px) — close other Obsidian windows and retry`);
+		}
 
 		const report = await page.evaluate(authReport);
 		const authed = Object.fromEntries(report.map((r) => [r.id, r]));
@@ -588,8 +670,9 @@ async function desktopPass() {
 		// and put a real note behind it so the workspace reads lived-in.
 		await page.addStyleTag({
 			content: `
-				.workspace-split.mod-right-split { width: min(62vw, 980px) !important; max-width: min(62vw, 980px) !important; }
+				.workspace-split.mod-right-split { width: 980px !important; max-width: 980px !important; }
 				.workspace-leaf-content[data-type="curtis-chat"] { width: 100% !important; }
+				.notice-container { display: none !important; }
 			`,
 		});
 		await page.evaluate(() => window.app.workspace.openLinkText('Daily/2026-10-02.md', ''));
@@ -636,6 +719,8 @@ async function desktopPass() {
 				if (livePage) {
 					page = livePage;
 					await page.waitForTimeout(500);
+					await page.evaluate(scrollArenaColumnsToEnd);
+					await parkMouse(page);
 					await page.screenshot({ path: resolve(OUT_DIR, `arena-streaming-${theme}.png`) });
 					console.log(`[arena] arena-streaming-${theme}.png (column 1 live with text)`);
 					caughtLive = true;
@@ -644,10 +729,21 @@ async function desktopPass() {
 					// text; the sibling keeps streaming beside it. Captured
 					// the instant column 1 settles, before the sibling can
 					// finish (otherwise it is pixel-identical to final).
-					await page.locator('.ai-arena-stop-btn').first().click();
+					// Streaming re-renders replace the button node on every
+					// chunk, so Playwright's stability check can stall out —
+					// click via JS dispatch and retry across re-renders.
+					for (let click = 0; click < 4; click++) {
+						try {
+							await page.locator('.ai-arena-stop-btn').first().evaluate((el) => el.click());
+							break;
+						} catch { /* button detached mid-click — retry */ }
+						await page.waitForTimeout(250);
+					}
 					const stoppedPage = await pollVaultState(ctx, col0Settled, 8000);
 					if (!stoppedPage) console.log('[arena] WARNING: column 1 did not settle after stop');
 					page = stoppedPage ?? page;
+					await page.evaluate(scrollArenaColumnsToEnd);
+					await parkMouse(page);
 					await page.screenshot({ path: resolve(OUT_DIR, `arena-stopped-${theme}.png`) });
 					console.log(`[arena] arena-stopped-${theme}.png (column 1 stopped mid-stream)`);
 					stoppedIdx = 0;
@@ -679,13 +775,17 @@ async function desktopPass() {
 					// poll window) — the settled round is still a honest,
 					// full-content shot.
 					await page.evaluate(scrollChatToTop);
+					await page.evaluate(scrollArenaColumnsToEnd);
 					await page.waitForTimeout(400);
+					await parkMouse(page);
 					await page.screenshot({ path: resolve(OUT_DIR, `arena-streaming-${theme}.png`) });
 					console.log(`[arena] arena-streaming-${theme}.png (settled — no live moment caught)`);
 				}
 
 				await page.waitForTimeout(1200);
 				await page.evaluate(scrollChatToTop);
+				await page.evaluate(scrollArenaColumnsToEnd);
+				await parkMouse(page);
 				await page.screenshot({ path: resolve(OUT_DIR, `arena-final-${theme}.png`) });
 				console.log(`[arena] arena-final-${theme}.png`);
 				// Guard against a stopped shot captured after everything
@@ -709,6 +809,7 @@ async function desktopPass() {
 						userBubbles: document.querySelectorAll('.ai-message-user').length,
 					}));
 					console.log('[arena] post-promote DOM:', JSON.stringify(postDom));
+					await parkMouse(page);
 					await page.screenshot({ path: resolve(OUT_DIR, `arena-promoted-${theme}.png`) });
 					console.log(`[arena] arena-promoted-${theme}.png`);
 					const storeAfterPromote = await page.evaluate(storeSnapshot);
@@ -761,6 +862,7 @@ async function phonePass() {
 			15000,
 			'command registration (phone)'
 		);
+		await patchDeepseekThinking(page);
 		await page.evaluate(openChatAndRender);
 		await page.addStyleTag({
 			content: `
@@ -770,6 +872,7 @@ async function phonePass() {
 				.workspace-split.mod-left-split { width: 100% !important; max-width: 100% !important; border: none !important; }
 				.workspace-leaf-content[data-type="curtis-chat"] { width: 100% !important; }
 				.workspace-tabs { flex: 1 !important; }
+				.notice-container { display: none !important; }
 			`,
 		});
 		const captureViaCdp = async (outName) => {
@@ -832,7 +935,9 @@ async function phonePass() {
 				}
 				await page.waitForTimeout(800);
 				await page.evaluate(scrollChatToTop);
+				await page.evaluate(scrollArenaColumnsToEnd);
 				await page.waitForTimeout(300);
+				await parkMouse(page);
 				await captureViaCdp(`phone-arena-${theme}.png`);
 				console.log(`[arena] phone-arena-${theme}.png (settled, stacked)`);
 
@@ -842,6 +947,7 @@ async function phonePass() {
 					await page.waitForTimeout(2200);
 					await page.evaluate(scrollChatToTop);
 					await page.waitForTimeout(400);
+					await parkMouse(page);
 					await captureViaCdp(`phone-arena-promoted-${theme}.png`);
 					console.log(`[arena] phone-arena-promoted-${theme}.png`);
 				}

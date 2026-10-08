@@ -176,6 +176,11 @@ export interface ConversationMessage {
 	tool_call_id?: string;
 	/** True when a tool returned an error — used to style the result bubble. */
 	tool_error?: boolean;
+	/** Ids of the memory facts injected into the system prompt for this turn
+	 *  (role='assistant' only). Powers the "N memories" chip; stored as ids —
+	 *  not contents — so the chip stays truthful after facts are edited or
+	 *  removed. */
+	memoriesUsedIds?: string[];
 }
 
 export interface Conversation {
@@ -228,6 +233,12 @@ export interface CurtisSettings {
 	// Chat settings
 	chatViewPosition: 'right' | 'left';
 
+	/** System notification when a response finishes. Suppressed while the
+	 *  user is viewing the chat pane; in-app Notice fallback on mobile. */
+	notifyOnCompletion: boolean;
+	/** System notification when a request fails. */
+	notifyOnError: boolean;
+
 	/** Folder where Save-as-note and slash /note drop new notes. '' = vault root. */
 	noteSaveFolder: string;
 	/** Auto-save each assistant response to a note (no prompt). */
@@ -256,8 +267,19 @@ export interface CurtisSettings {
 	 *  stored as one markdown file per conversation. */
 	conversationsFolder: string;
 
+	/** Session recaps: /recap and the header export menu summarize the
+	 *  current conversation; when this is on, the summary is also appended
+	 *  to the journal file below. */
+	enableJournal: boolean;
+	/** Path (relative to vault root) of the append-only journal markdown file. */
+	journalFilePath: string;
+
 	// RAG
 	enableRag: boolean;
+	/** Relevance pulse: when the active note closely matches an indexed past
+	 *  conversation, show a quiet "discussed in …" hint under the chat header.
+	 *  Local-only cosine over the existing index — costs no API calls. */
+	enableRelevancePulse: boolean;
 	ragChunkSize: number;
 	ragChunkOverlap: number;
 	ragTopK: number;
@@ -281,6 +303,11 @@ export interface CurtisSettings {
 	/** Render "Today / Yesterday / date" dividers between messages that
 	 *  cross a calendar-date boundary. Matches iMessage/Telegram feel. */
 	showDaySeparators: boolean;
+
+	/** False until the user sends their first message (or skips) — gates the
+	 *  first-run panel in the empty state. Existing installs are migrated to
+	 *  true; only fresh installs ever see onboarding. */
+	onboardingCompleted: boolean;
 }
 
 // ============================================================================
@@ -291,6 +318,9 @@ export interface MemoryFact {
 	id: string;
 	content: string;
 	category?: string;
+	/** Conversation the fact was learned from, when captured from chat.
+	 *  Round-trips through the memory file's hidden comment as `conv:`. */
+	sourceConversationId?: string;
 	timestamp: number;
 	accessCount: number;
 	lastAccessed: number;
@@ -301,6 +331,9 @@ export interface MemoryFact {
 export interface MemoryProposal {
 	content: string;
 	category?: string;
+	/** Conversation the proposal was extracted from — carried onto the saved
+	 *  fact for provenance. */
+	sourceConversationId?: string;
 }
 
 // ============================================================================

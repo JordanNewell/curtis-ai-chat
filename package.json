@@ -1,6 +1,6 @@
 {
 	"name": "curtis-ai-chat",
-	"version": "1.6.0",
+	"version": "2.0.0",
 	"description": "Curtis AI Chat — your polyglot AI chat for Obsidian. 30+ providers, image attachments, memory, slash commands.",
 	"main": "main.js",
 	"scripts": {
@@ -10,6 +10,8 @@
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"site:sync": "node scripts/site-sync.mjs",
 		"shots": "node scripts/capture-screenshots.mjs",
+		"smoke:v2": "node scripts/v2-smoke.mjs",
+		"smoke:panes": "node scripts/smoke-panes.mjs",
 		"mockups": "python scripts/phone_mockup.py assets/screenshots/phone-chat.png assets/screenshots/phone-chat-framed.png && python scripts/phone_mockup.py assets/screenshots/ollama-provider-settings.png assets/screenshots/phone-settings-framed.png",
 		"marketplace": "python scripts/marketplace_shots.py"
 	},

@@ -19,6 +19,8 @@ import { ConversationStore } from './chat/conversation-store';
 import { ChatSearchModal } from './ui/modals/chat-search-modal';
 import { DiffRewriteModal } from './ui/modals/diff-rewrite-modal';
 import { CHAT_VIEW_TYPE, ChatView } from './chat/view';
+import { CURT_VIEW_TYPE, CurtImportView } from './import/curt-import-view';
+import { importChats, reportResult } from './import/importer';
 import { registerCommands } from './commands';
 import { registerContextMenu } from './commands/context-menu';
 import { SELECTION_ACTIONS } from './commands/selection';
@@ -112,6 +114,10 @@ export default class CurtisPlugin extends Plugin {
 
 		// 4. Register views
 		this.registerView(CHAT_VIEW_TYPE, (leaf) => new ChatView(leaf, this));
+		// .curt files (Curtis's portable conversation format) open a branded
+		// landing page offering one-click import — see src/import/curt.ts.
+		this.registerView(CURT_VIEW_TYPE, (leaf) => new CurtImportView(leaf, this));
+		this.registerExtensions(['curt'], CURT_VIEW_TYPE);
 
 		// 5. Register commands
 		registerCommands(this);
@@ -119,7 +125,29 @@ export default class CurtisPlugin extends Plugin {
 		// 6. Register context menu
 		registerContextMenu(this);
 
-		// 6b. Vault file listeners keep the RAG index in step with edits.
+		// 6b. Right-click "Import into Curtis" on importable files in the
+		//     vault explorer (.curt bundles, export JSON/zip, transcripts).
+		this.registerEvent(
+			this.app.workspace.on('file-menu', (menu, file) => {
+				if (!(file instanceof TFile)) return;
+				if (!['curt', 'json', 'zip', 'md', 'txt'].includes(file.extension)) return;
+				menu.addItem((item) => {
+					item
+						.setTitle('Curtis: import this file')
+						.setIcon(CURTIS_ICON_ID)
+						.onClick(() => {
+							void (async () => {
+								const summary = await importChats(this, [
+									{ name: file.name, buffer: await this.app.vault.readBinary(file) },
+								]);
+								reportResult(summary, this);
+							})();
+						});
+				});
+			})
+		);
+
+		// 6c. Vault file listeners keep the RAG index in step with edits.
 		//     Registered unconditionally — the manager no-ops when vault
 		//     retrieval is disabled or the index was never built.
 		this.registerVaultIndexListeners();
@@ -129,7 +157,7 @@ export default class CurtisPlugin extends Plugin {
 
 		// 8. Ribbon icon — custom Curtis mark, registered before first use
 		addIcon(CURTIS_ICON_ID, CURTIS_ICON_SVG);
-		this.addRibbonIcon(CURTIS_ICON_ID, 'Open AI chat', () => {
+		this.addRibbonIcon(CURTIS_ICON_ID, 'Curtis AI', () => {
 			void this.activateChatView();
 		});
 	}
@@ -231,17 +259,34 @@ export default class CurtisPlugin extends Plugin {
 		}
 	}
 
-	/** Open the cross-conversation search modal. Ensures the chat view exists
-	 *  first so onChooseItem has somewhere to render the result. */
-	async openChatSearch(): Promise<void> {
-		await this.activateChatView();
-		new ChatSearchModal(this.app, this).open();
+	/** Open the cross-conversation search modal. When `onSelect` is given (a
+	 *  pane launched the search), the chosen conversation opens in that pane
+	 *  and no view is activated — revealing the first chat leaf here would
+	 *  steal focus from the pane the user clicked. The command-path fallback
+	 *  activates a view first so there is somewhere to render the result. */
+	async openChatSearch(onSelect?: (conversationId: string) => void): Promise<void> {
+		let selector = onSelect;
+		if (!selector) {
+			await this.activateChatView();
+			const activeView = this.app.workspace.getActiveViewOfType(ChatView);
+			const view = activeView instanceof ChatView
+				? activeView
+				: this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0]?.view;
+			if (view instanceof ChatView) {
+				selector = (id) => view.switchConversation(id);
+			}
+		}
+		new ChatSearchModal(this.app, this, selector).open();
 	}
 
 	async activateChatView(newChat?: boolean): Promise<void> {
 		const { workspace } = this.app;
 
-		let leaf = workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0];
+		// Multi-pane: prefer the chat pane the user is already in (e.g. a
+		// popout they are typing in); fall back to the first existing chat
+		// leaf; create one when none exists.
+		let leaf = workspace.getActiveViewOfType(ChatView)?.leaf
+			?? workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0];
 
 		if (!leaf) {
 			const position = this.settings.chatViewPosition === 'left' ? 'left' : 'right';
@@ -262,6 +307,27 @@ export default class CurtisPlugin extends Plugin {
 		if (newChat && leaf.view instanceof ChatView) {
 			leaf.view.startNewChat();
 		}
+	}
+
+	/** Open an ADDITIONAL chat pane — a popout window, or a split in the
+	 *  CENTER area beside the notes. Deliberately not a split of the chat
+	 *  sidebar leaf: two sidebar columns bunch up unless the app window is
+	 *  maximized, while the center split gives the pane real room. The new
+	 *  pane binds to the most recent conversation and works independently of
+	 *  any pane that is already open. */
+	async openNewChatPane(target: 'split' | 'window'): Promise<void> {
+		const { workspace } = this.app;
+		const leaf = target === 'window'
+			? workspace.getLeaf('window')
+			: // `children` exists on every WorkspaceParent at runtime but is not
+				// declared in the API typings — appending at the end is the
+				// "split the center area" index Obsidian itself uses.
+				workspace.createLeafInParent(
+					workspace.rootSplit,
+					(workspace.rootSplit as unknown as { children: unknown[] }).children.length
+				);
+		await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
+		void workspace.revealLeaf(leaf);
 	}
 
 	// ---- Selection Processing ----
@@ -707,7 +773,8 @@ export default class CurtisPlugin extends Plugin {
 	async extractAndStoreFacts(
 		userText: string,
 		assistantText: string,
-		onPropose?: (proposals: MemoryProposal[]) => void
+		onPropose?: (proposals: MemoryProposal[]) => void,
+		sourceConversationId?: string
 	): Promise<void> {
 		if (!this.settings.enableMemory) return;
 		const mode = this.settings.memoryCaptureMode;
@@ -748,12 +815,16 @@ export default class CurtisPlugin extends Plugin {
 				if (typeof f?.content !== 'string') continue;
 				const content = f.content.replace(/\s+/g, ' ').trim();
 				if (!content || existing.has(content.toLowerCase())) continue;
-				proposals.push({ content, category: typeof f.category === 'string' ? f.category : undefined });
+				proposals.push({
+					content,
+					category: typeof f.category === 'string' ? f.category : undefined,
+					...(sourceConversationId ? { sourceConversationId } : {}),
+				});
 			}
 			if (proposals.length === 0) return;
 			if (mode === 'auto') {
 				for (const p of proposals) {
-					await this.memoryStore.addFact(p.content, p.category);
+					await this.memoryStore.addFact(p.content, p.category, p.sourceConversationId);
 				}
 				return;
 			}

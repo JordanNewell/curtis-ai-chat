@@ -8,10 +8,10 @@
 </p>
 
 <p align="center">
-  <img src="assets/demo-arena-local-vs-cloud.gif" alt="The arena in motion — one prompt typed once, streaming in parallel to a local Ollama model and a cloud DeepSeek model, per-column stop, then Promote-to-chat keeps the winner" width="720">
+  <img src="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/demo-arena-cloud-vs-cloud.gif" alt="The arena in motion — one prompt typed once, streaming in parallel to Gemini via OpenRouter and DeepSeek via its official API, per-column stop, then Promote-to-chat keeps the winner" width="720">
 </p>
 
-<p align="center"><em>The arena, live: local Llama vs cloud DeepSeek, stop one column, promote the winner.</em></p>
+<p align="center"><em>The arena, live: same prompt through two APIs — OpenRouter vs DeepSeek — stop one column, promote the winner.</em></p>
 
 <p align="center">
   <a href="https://jordannewell.github.io/curtis-ai-chat/"><img src="https://img.shields.io/badge/website-live-00FF41" alt="Live site"></a>
@@ -41,10 +41,10 @@ Real captures, regenerated any time with `npm run shots && npm run mockups` (gen
 
 | | |
 |---|---|
-| <img src="assets/screenshots/arena-streaming-dark.png" alt="Arena — one prompt streaming to two models side by side, per-column Stop while streaming" width="100%"> | |
-| <img src="assets/screenshots/arena-final-light.png" alt="Arena, light theme — both answers complete, Promote to chat on each column" width="100%"> | <img src="assets/screenshots/phone-arena-framed-dark.png" alt="Arena on a phone — columns stack vertically" width="220"> |
-| <img src="assets/demo-memory.gif" alt="Memory — after a turn, proposed facts appear with Save/Skip; nothing persists until you tap Save" width="720"> | |
-| <img src="assets/screenshots/desktop-chat.png" alt="Desktop — vault open, agent conversation on a local Ollama model with tool call and result" width="100%"> | <img src="assets/screenshots/phone-chat-framed.png" alt="Phone — the agent conversation at phone width" width="220"> |
+| <img src="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/screenshots/arena-streaming-dark.png" alt="Arena — one prompt streaming to two models side by side, per-column Stop while streaming" width="100%"> | |
+| <img src="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/screenshots/arena-final-light.png" alt="Arena, light theme — both answers complete, Promote to chat on each column" width="100%"> | <img src="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/screenshots/phone-arena-framed-dark.png" alt="Arena on a phone — columns stack vertically" width="220"> |
+| <img src="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/demo-memory.gif" alt="Memory — after a turn, proposed facts appear with Save/Skip; nothing persists until you tap Save" width="720"> | |
+| <img src="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/screenshots/desktop-chat.png" alt="Desktop — vault open, agent conversation on a local Ollama model with tool call and result" width="100%"> | <img src="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/screenshots/phone-chat-framed.png" alt="Phone — the agent conversation at phone width" width="220"> |
 
 ---
 
@@ -80,7 +80,9 @@ The flagship features. Full details in [CHANGELOG.md](CHANGELOG.md) and the per-
 | 🎙️ | **[Voice I/O](docs/VOICE.md)** | Whisper speech-to-text on the mic button. Browser TTS on every assistant message. |
 | 🔍 | **Cross-conversation search** | Assignable hotkey opens a fuzzy-matched picker across all conversations and messages. |
 | 📝 | **Markdown export** | Download any conversation as `.md`. `/export` slash command or download icon. |
-| 🧠 | **[Memory](docs/MEMORY.md)** | Ask-before-saving capture: proposed facts show a Save/Skip bar, nothing persists without your tap. Plus a full edit/delete UI in Settings → Memory. |
+| 📥 | **[Chat import + `.curt`](docs/IMPORT.md)** | Bring ChatGPT, Claude, or any role-labeled chat history into Curtis — exports auto-detected, imports land as normal vault files. One `.curt` file = one portable conversation. |
+| 🧠 | **[Memory](docs/MEMORY.md)** | Ask-before-saving capture with provenance: every fact records the conversation it came from, and replies show a "N memories" chip with the fact list behind it. |
+| 📓 | **Recaps + Curtis Journal** | `/recap` writes a terse session summary into the chat and an append-only journal note — plus a "discussed in …" hint when your open note matches a past conversation. |
 | 🗂️ | **Conversations as vault files** | Every chat persists as a markdown note in `AI/Conversations/` — synced across devices, in native Obsidian search, and readable by the agent. Old localStorage history imports itself. |
 
 Plus a full type-safety pass: every AI provider response shape is strictly typed, with type-guard narrowing at every JSON boundary. Zero lint warnings on `npm run build`.
@@ -167,11 +169,21 @@ Right-click any selection in a note for **Explain · ELI5 · Summarize · TL;DR 
 Curtis remembers durable facts about you across conversations — preferences, identity, projects, standing instructions. Facts live in a markdown file in your vault.
 
 - **Ask before saving**: after each turn the model proposes up to 3 facts — Save/Skip each, nothing persists without your tap
+- **Provenance**: every captured fact records the conversation it was learned from; Settings → Memory shows "learned <date> · from <conversation>" with a jump button
+- **Memory chips**: assistant replies show how many facts were in context; click to open the list with learned dates and source-conversation links. Removed facts say so instead of showing stale text
 - **Manual**: `/remember <fact>` or right-click selection → **Save to memory**
 - **Edit UI**: edit/delete individual facts from Settings → Memory
 - **Recall**: every prompt includes a `## What you know about the user` block
 
 → [docs/MEMORY.md](docs/MEMORY.md)
+
+### 📓 Session recaps + Curtis Journal
+
+Close out a working session with a summary you can find later.
+
+- **`/recap`** or Export → **Recap conversation**: 2-3 terse bullets — worked on, decided, left open — appended to the chat and logged to `AI/Curtis Journal.md`
+- The journal is plain append-only markdown in your vault, one entry per recap with a link back to the conversation
+- **Relevance pulse**: open a note that closely matches a past conversation and a quiet "discussed in …" hint appears under the chat header — click to jump straight back into it. Local similarity over your vault index, no API calls (Settings → Vault retrieval)
 
 ### 🔎 Vault retrieval (RAG)
 
@@ -187,7 +199,7 @@ Enable in Settings → Vault retrieval, then **Rebuild index**.
 
 ### ⌨️ Slash commands
 
-Type `/` in the chat input for an autocomplete menu of 17 commands — `/clear`, `/regen` (alias `/regenerate`), `/title`, `/copy`, `/note`, `/save-all`, `/paste`, `/model`, `/provider`, `/system`, `/stats`, `/remember`, `/forget`, `/memory`, `/export`, `/help`.
+Type `/` in the chat input for an autocomplete menu of 18 commands — `/clear`, `/regen` (alias `/regenerate`), `/title`, `/copy`, `/note`, `/save-all`, `/paste`, `/model`, `/provider`, `/system`, `/stats`, `/remember`, `/forget`, `/memory`, `/recap`, `/export`, `/help`.
 
 → [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md)
 
@@ -373,6 +385,6 @@ No GitHub account? Email [hello@jordannewell.com](mailto:hello@jordannewell.com)
 
 <p align="right">
   <a href="https://jordannewell.com" title="Built by Jordan Newell">
-    <img src="assets/newell-badge.png" alt="Built by Jordan Newell" width="48" height="48">
+    <img src="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/newell-badge.png" alt="Built by Jordan Newell" width="48" height="48">
   </a>
 </p>

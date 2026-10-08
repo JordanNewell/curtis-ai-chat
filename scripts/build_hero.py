@@ -20,6 +20,7 @@ Outputs:
 Usage: python scripts/build_hero.py
 """
 
+import json
 import shutil
 from pathlib import Path
 
@@ -125,9 +126,22 @@ def fill_canvas(mark, size):
 
 
 def chat_crop(shot):
-    """The plugin column sits on the left of the 1920-wide desktop capture."""
+    """The plugin column, located by the bounds the capture script records.
+
+    The workspace ribbon offsets the chat column from x=0, so a fixed
+    fraction of the frame slices the column's right edge; prefer the exact
+    rect written by capture-screenshots.mjs next to the shot.
+    """
+    bounds = SHOTS / "desktop-chat-bounds.json"
+    if bounds.exists():
+        b = json.loads(bounds.read_text(encoding="utf-8"))
+        dpr = b.get("dpr", 1)
+        x0 = round(b["left"] * dpr)
+        x1 = round((b["left"] + b["width"]) * dpr)
+        return shot.crop((x0, 0, x1, shot.height))
     w, h = shot.size
-    # 784/1920 is the chat column's right edge on the current desktop capture.
+    # Legacy fallback: 784/1920 was the chat column's right edge on the
+    # 1920-wide capture this pipeline was tuned against.
     return shot.crop((0, 0, round(w * 0.408), h))
 
 
@@ -235,7 +249,7 @@ def main():
 
     # Pages references these; they lived only under assets/ and 404'd on the site.
     pairs = [
-        (ROOT / "assets" / "demo-arena-local-vs-cloud.mp4", DOCS / "assets" / "demo-arena-local-vs-cloud.mp4"),
+        (ROOT / "assets" / "demo-arena-cloud-vs-cloud.mp4", DOCS / "assets" / "demo-arena-cloud-vs-cloud.mp4"),
         (ROOT / "assets" / "demo-memory.mp4", DOCS / "assets" / "demo-memory.mp4"),
         (SHOTS / "arena-streaming-dark.png", DOCS / "assets" / "screenshots" / "arena-streaming-dark.png"),
         (SHOTS / "phone-arena-framed-dark.png", DOCS / "assets" / "screenshots" / "phone-arena-framed-dark.png"),

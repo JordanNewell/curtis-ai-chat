@@ -31,6 +31,10 @@ const MIN_SCORE = 0.1;
 const PER_FILE_CAP = 2;
 /** Debounce for re-embedding a note after an edit. */
 const EDIT_DEBOUNCE_MS = 1500;
+/** Relevance pulse floor — deliberately far above MIN_SCORE: a false
+ *  "we discussed this" is embarrassing, a missed one is invisible, so the
+ *  pulse trades recall for precision. */
+const PULSE_MIN_SCORE = 0.8;
 
 /** Quantized on-disk chunk shape. */
 interface StoredChunk {
@@ -76,6 +80,14 @@ export interface RagIndexStatus {
 	/** Chunk settings changed (search still works; rebuild applies them). */
 	settingsChanged: boolean;
 	building: boolean;
+}
+
+/** A conversation file the relevance pulse matched for the active note. */
+export interface PulseMatch {
+	/** Vault path of the conversation markdown file. */
+	filePath: string;
+	/** Best cosine similarity between the note's and the conversation's chunks. */
+	score: number;
 }
 
 export class RagIndexManager {
@@ -351,6 +363,52 @@ export class RagIndexManager {
 		}
 		scored.sort((a, b) => b.score - a.score);
 		return diversifyByFile(scored, Math.max(1, topK));
+	}
+
+	// ---- Relevance pulse ------------------------------------------------------
+
+	/**
+	 * Find past conversations whose indexed content is semantically close to a
+	 * note — pure local cosine over the in-memory index, no embedding call, so
+	 * it is safe to run on every note switch. Conversations are ordinary vault
+	 * markdown files (kept fresh by the live modify watcher), which is what
+	 * makes this free: the vectors already exist. Returns [] when the index is
+	 * inactive, the note isn't indexed, or nothing clears PULSE_MIN_SCORE.
+	 */
+	async findRelatedConversations(notePath: string, limit = 1): Promise<PulseMatch[]> {
+		await this.ensureLoaded();
+		if (!this.isActive()) return [];
+		const noteRec = this.files.get(notePath);
+		if (!noteRec) return [];
+
+		const noteVecs = noteRec.chunks
+			.map((c) => ({ v: c.embedding, norm: vectorNorm(c.embedding) }))
+			.filter((x) => x.norm > 0);
+		if (noteVecs.length === 0) return [];
+
+		const s = this.plugin.settings;
+		const convPrefix = `${(s.conversationsFolder || 'AI/Conversations').replace(/\/+$/, '')}/`;
+		// Curtis's own artifacts are indexed too — never suggest them back.
+		const excluded = new Set<string>(
+			[s.memoryFilePath, s.journalFilePath].filter((p): p is string => !!p)
+		);
+
+		const matches: PulseMatch[] = [];
+		for (const [path, rec] of this.files) {
+			if (!path.startsWith(convPrefix) || excluded.has(path) || path === notePath) continue;
+			let top = 0;
+			for (const convChunk of rec.chunks) {
+				const bNorm = vectorNorm(convChunk.embedding);
+				if (bNorm === 0) continue;
+				for (const nv of noteVecs) {
+					const score = cosine(convChunk.embedding, bNorm, nv.v);
+					if (score > top) top = score;
+				}
+			}
+			if (top >= PULSE_MIN_SCORE) matches.push({ filePath: path, score: top });
+		}
+		matches.sort((a, b) => b.score - a.score);
+		return matches.slice(0, Math.max(1, limit));
 	}
 
 	// ---- Live vault events ---------------------------------------------------

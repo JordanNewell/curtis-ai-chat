@@ -18,7 +18,9 @@ export default [
 			// sentence-case — it's a protocol name the rule doesn't know, and
 			// passing `acronyms` here REPLACES the built-in list, so exempting
 			// the strings is the maintainable way to keep "MCP servers" uppercase.
-			'obsidianmd/ui/sentence-case': ['warn', { enforceCamelCaseLower: true, ignoreRegex: ['MCP'] }],
+			// "Curtis" is exempt for the same reason: it's the product name, and
+			// sentence-case would demand "curtis" mid-string.
+			'obsidianmd/ui/sentence-case': ['warn', { enforceCamelCaseLower: true, ignoreRegex: ['MCP', 'Curtis'] }],
 		},
 	},
 ];

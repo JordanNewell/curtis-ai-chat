@@ -250,6 +250,15 @@ const scrollChatToTop = () => {
 	return els.length;
 };
 
+// Hover tooltips linger over the button a scripted click just left and
+// photobomb the next shot; park the pointer over plain message text
+// right-of-center and let the tooltip drop before capturing.
+async function parkMouse(page) {
+	const box = page.viewportSize() ?? { width: 1280, height: 800 };
+	await page.mouse.move(Math.round(box.width * 0.55), Math.round(box.height * 0.35));
+	await page.waitForTimeout(450);
+}
+
 // ---------------------------------------------------------------------------
 // Boot + attach
 // ---------------------------------------------------------------------------
@@ -312,10 +321,24 @@ async function killObsidian() {
  * booted handle: plugin enabled, onload complete, commands registered.
  */
 async function bootInstance(port, extraArgs = []) {
-	const child = spawn(OBSIDIAN_EXE, [VAULT, `--remote-debugging-port=${port}`, ...extraArgs], {
-		detached: false,
-		stdio: 'ignore',
-	});
+	const child = spawn(
+		OBSIDIAN_EXE,
+		[
+			VAULT,
+			`--remote-debugging-port=${port}`,
+			// Windows pauses an occluded Electron window's renderer, which
+			// stalls page.screenshot's wait-for-frame when the capture window
+			// gets buried under other windows mid-run.
+			'--disable-backgrounding-occluded-windows',
+			'--disable-background-timer-throttling',
+			'--disable-renderer-backgrounding',
+			...extraArgs,
+		],
+		{
+			detached: false,
+			stdio: 'ignore',
+		},
+	);
 
 	const version = await waitForDebugPort(port, 25000);
 	if (!version) {
@@ -424,7 +447,31 @@ async function main() {
 			'seeded conversation rendered'
 		);
 		await page.evaluate(scrollChatToTop);
+		// Pin the chat column to 784px — the width build_hero.py's chat_crop()
+		// (784/1920) expects — so the header model pill renders untruncated and
+		// the hero crop contains the column edge-to-edge with no note slice.
+		const chatWidth = await page.evaluate(() => {
+			const leaf = document.querySelector('.workspace-leaf-content[data-type="curtis-chat"]');
+			const split = leaf?.closest('.workspace-split');
+			if (!split) return -1;
+			for (const prop of ['width', 'max-width', 'flex-basis']) {
+				split.style.setProperty(prop, '784px', 'important');
+			}
+			return split.offsetWidth;
+		});
+		console.log(`[shots] chat split width: ${chatWidth}px`);
+		// Record the column's on-screen bounds so build_hero.py's chat_crop()
+		// can cut to the exact pixels (the ribbon offsets the column from x=0).
+		const bounds = await page.evaluate(() => {
+			const leaf = document.querySelector('.workspace-leaf-content[data-type="curtis-chat"]');
+			const r = leaf?.closest('.workspace-split')?.getBoundingClientRect();
+			return r ? { left: r.left, width: r.width, dpr: window.devicePixelRatio } : null;
+		});
+		if (bounds) writeFileSync(resolve(OUT_DIR, 'desktop-chat-bounds.json'), JSON.stringify(bounds));
+		// Toasts ("Enabled Ollama", …) linger into the shot otherwise.
+		await page.addStyleTag({ content: `.notice-container { display: none !important; }` });
 		await page.waitForTimeout(1500);
+		await parkMouse(page);
 		await page.screenshot({ path: resolve(OUT_DIR, 'desktop-chat.png') });
 		console.log('[shots] desktop-chat.png');
 
@@ -445,6 +492,7 @@ async function main() {
 			el?.scrollIntoView({ block: 'start' });
 		});
 		await settingsPage.waitForTimeout(800);
+		await parkMouse(settingsPage);
 		await settingsPage.screenshot({ path: resolve(OUT_DIR, 'desktop-settings-providers.png') });
 		console.log('[shots] desktop-settings-providers.png');
 	} finally {
@@ -459,8 +507,9 @@ async function main() {
 	// alone (the is-mobile body class blanks it). So: dock the chat to the
 	// LEFT, hide the ribbon/editor/status bar via injected CSS, and the
 	// emulated viewport becomes a clean full-bleed phone screen — captured at
-	// 2x DPR (900x1600, the directory's recommended mobile size).
-	console.log('[shots] pass 2: phone-width (450x800 @2x DPR, chat docked left)');
+	// 2x DPR (780x1688). 390x844 logical is the phone_mockup.py screen size
+	// exactly, so framing needs no center-crop (450x800 ate ~40px per side).
+	console.log('[shots] pass 2: phone-width (390x844 @2x DPR, chat docked left)');
 	const mob = await bootInstance(9223);
 	try {
 		let { page, ctx } = mob;
@@ -474,8 +523,8 @@ async function main() {
 		// build exposes Emulation domains there, but not Browser.* domains.
 		const cdp = await ctx.newCDPSession(page);
 		await cdp.send('Emulation.setDeviceMetricsOverride', {
-			width: 450,
-			height: 800,
+			width: 390,
+			height: 844,
 			deviceScaleFactor: 2,
 			mobile: true,
 		});
@@ -512,6 +561,7 @@ async function main() {
 				.workspace-split.mod-left-split { width: 100% !important; max-width: 100% !important; border: none !important; }
 				.workspace-leaf-content[data-type="curtis-chat"] { width: 100% !important; }
 				.workspace-tabs { flex: 1 !important; }
+				.notice-container { display: none !important; }
 			`,
 		});
 		await page.evaluate(scrollChatToTop);
@@ -554,6 +604,7 @@ async function main() {
 			.last();
 		await ollamaSection.scrollIntoViewIfNeeded().catch(() => {});
 		await settingsPage.waitForTimeout(400);
+		await parkMouse(settingsPage);
 		await ollamaSection.screenshot({ path: resolve(OUT_DIR, 'ollama-provider-settings.png') });
 		console.log('[shots] ollama-provider-settings.png');
 	} finally {

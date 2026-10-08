@@ -134,7 +134,7 @@ export class MemoryStore {
 	}
 
 	/** Add a fact, dedupe against existing, persist. */
-	async addFact(content: string, category?: string): Promise<MemoryFact | null> {
+	async addFact(content: string, category?: string, sourceConversationId?: string): Promise<MemoryFact | null> {
 		// One fact = one bullet line; newlines would silently truncate the fact
 		// on the next parse of the memory file.
 		const trimmed = content.replace(/\s+/g, ' ').trim();
@@ -145,6 +145,11 @@ export class MemoryStore {
 			exists.content = trimmed;
 			exists.timestamp = Date.now();
 			exists.lastAccessed = Date.now();
+			// Provenance is first-learned: only fill it in if the fact somehow
+			// lacks one (e.g. hand-added line later re-captured from chat).
+			if (!exists.sourceConversationId && sourceConversationId) {
+				exists.sourceConversationId = sourceConversationId;
+			}
 			await this.persist();
 			return exists;
 		}
@@ -152,6 +157,7 @@ export class MemoryStore {
 			id: cryptoId(),
 			content: trimmed,
 			category,
+			...(sourceConversationId ? { sourceConversationId } : {}),
 			timestamp: Date.now(),
 			accessCount: 0,
 			lastAccessed: Date.now(),
@@ -212,12 +218,14 @@ export class MemoryStore {
 
 	/**
 	 * Parse bullet lines of the form:
-	 *   - Some durable fact [category] <!-- id:abc updated:1700000000 -->
+	 *   - Some durable fact [category] <!-- id:abc updated:1700000000 conv:conv_1234_xyz -->
 	 *
-	 * The category must be one of the known enum values, so arbitrary
-	 * bracketed text in the fact body (e.g. wikilinks like [[Topic]]) is NOT
-	 * mis-classified as a category. The HTML comment is split off first to
-	 * anchor the rest of the parse to "the trailing bracket before the comment".
+	 * `conv:` (the conversation the fact was learned from) is optional —
+	 * pre-2.0 files and hand-added lines simply lack it. The category must be
+	 * one of the known enum values, so arbitrary bracketed text in the fact
+	 * body (e.g. wikilinks like [[Topic]]) is NOT mis-classified as a
+	 * category. The HTML comment is split off first to anchor the rest of the
+	 * parse to "the trailing bracket before the comment".
 	 */
 	private parseMarkdown(raw: string): MemoryFact[] {
 		const facts: MemoryFact[] = [];
@@ -227,13 +235,15 @@ export class MemoryStore {
 			// 1. Strip the trailing HTML comment (if any) so the rest of the
 			//    regex doesn't have to deal with it.
 			let id: string | undefined;
+			let sourceConversationId: string | undefined;
 			let updated: number = Date.now();
 			let body: string = String(line);
-			const metaMatch: RegExpMatchArray | null = body.match(/<!--\s*id:([^\s]+)\s+updated:(\d+)\s*-->\s*$/);
+			const metaMatch: RegExpMatchArray | null = body.match(/<!--\s*id:([^\s]+)\s+updated:(\d+)(?:\s+conv:([^\s]+))?\s*-->\s*$/);
 			if (metaMatch) {
 				const groups: string[] = Array.from(metaMatch);
 				id = groups[1] ?? '';
 				updated = parseInt(groups[2] ?? '0', 10);
+				sourceConversationId = groups[3];
 				const matchIndex = metaMatch.index;
 				const idx: number = typeof matchIndex === 'number' ? matchIndex : 0;
 				// Slice off the trailing HTML comment, then strip trailing whitespace.
@@ -262,6 +272,7 @@ export class MemoryStore {
 				id: id || cryptoId(),
 				content: text,
 				category,
+				...(sourceConversationId ? { sourceConversationId } : {}),
 				timestamp: updated,
 				accessCount: 0,
 				lastAccessed: updated,
@@ -297,7 +308,8 @@ export class MemoryStore {
 		const bullets = this.facts
 			.map((f) => {
 				const cat = f.category ? ` [${f.category}]` : '';
-				const meta = ` <!-- id:${f.id} updated:${f.timestamp} -->`;
+				const conv = f.sourceConversationId ? ` conv:${f.sourceConversationId}` : '';
+				const meta = ` <!-- id:${f.id} updated:${f.timestamp}${conv} -->`;
 				return `- ${f.content}${cat}${meta}`;
 			})
 			.join('\n');

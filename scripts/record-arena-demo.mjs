@@ -2,18 +2,22 @@
 //
 // Same boot machinery as capture-arena-shots.mjs (real Obsidian on the demo
 // vault over CDP), but instead of stills it records the screen while driving
-// the flow: arena duels between DIFFERENT providers (local Ollama vs cloud
-// DeepSeek, cloud vs cloud) and the memory Save/Skip bar. Frames come from
-// Page.startScreencast, assembled by ffmpeg into MP4 + GIF.
+// the flow. Frames come from Page.startScreencast, assembled by ffmpeg into
+// MP4 + GIF.
+//
+// All-cloud lineup by design: local models load too slowly for a paced take
+// (the Ollama duel was removed for exactly that reason — a column spinning
+// empty while the cloud sibling finishes reads as broken). Stills can still
+// feature Ollama; videos cannot.
 //
 // Outputs (assets/):
-//   demo-arena-local-vs-cloud.mp4/.gif  — Ollama llama3.2:3b vs DeepSeek V4 Flash
-//   demo-arena-cloud-vs-cloud.mp4/.gif  — z.ai GLM flash vs DeepSeek V4 Flash
+//   demo-arena-cloud-vs-cloud.mp4/.gif  — OpenRouter Gemini 3.1 Flash-Lite vs
+//                                         DeepSeek V4.1 Flash (official API)
 //   demo-memory.mp4/.gif                — ask-before-saving proposal bar
 //
 // Usage:  node scripts/record-arena-demo.mjs
 // Env:    OBSIDIAN_EXE (default: %LOCALAPPDATA%\Programs\Obsidian\Obsidian.exe)
-//         DEMOS="local,memory" — comma list to record a subset
+//         DEMOS="cloud" — comma list to record a subset (cloud, memory)
 //
 // The user's running Obsidian is closed for the duration and relaunched at
 // the end (same contract as npm run shots).
@@ -39,11 +43,13 @@ const OBSIDIAN_EXE =
 	resolve(process.env.LOCALAPPDATA, 'Programs/Obsidian/Obsidian.exe');
 
 // Screen-record pacing: the prompt is typed character by character so the
-// video shows a human driving, not a paste.
+// video shows a human driving, not a paste. ~300 words keeps BOTH columns
+// visibly streaming long enough to overlap — the 120-word ask let the cloud
+// flash models finish before the local model's first token landed.
 const PROMPT =
-	'Write a 120-word comparison of side-by-side model testing versus picking an LLM from leaderboards. Two bullet points, one closing sentence, no preamble.';
+	'Write a 220-word comparison of side-by-side model testing versus picking an LLM from leaderboards. Two bullet points, one closing sentence, no preamble. The answer must be at least 200 words.';
 
-const DEMOS = (process.env.DEMOS || 'local,cloud,memory').split(',').map((s) => s.trim());
+const DEMOS = (process.env.DEMOS || 'cloud,memory').split(',').map((s) => s.trim());
 
 // ---------------------------------------------------------------------------
 // Vault bootstrap + registry (same contract as the other capture scripts)
@@ -160,10 +166,27 @@ async function killObsidian() {
 }
 
 async function bootInstance(port) {
-	const child = spawn(OBSIDIAN_EXE, [VAULT, `--remote-debugging-port=${port}`], {
-		detached: false,
-		stdio: 'ignore',
-	});
+	const child = spawn(
+		OBSIDIAN_EXE,
+		[
+			VAULT,
+			`--remote-debugging-port=${port}`,
+			// Pin the window: restored bounds vary (a crashed prior run leaves
+			// a small window, and min(62vw, 980px) chat-width math collapses
+			// with the viewport). 1440x900 frames cleanly at 1280-wide capture.
+			'--window-size=1440,900',
+			// Windows pauses an occluded Electron window's renderer, which
+			// would stall the screencast frames mid-recording when the
+			// capture window gets buried under other windows.
+			'--disable-backgrounding-occluded-windows',
+			'--disable-background-timer-throttling',
+			'--disable-renderer-backgrounding',
+		],
+		{
+			detached: false,
+			stdio: 'ignore',
+		},
+	);
 
 	const version = await waitForDebugPort(port, 25000);
 	if (!version) {
@@ -223,61 +246,101 @@ async function shutdownInstance(instance) {
 }
 
 // ---------------------------------------------------------------------------
-// Recording — CDP screencast frames → ffmpeg → MP4 + GIF
+// Recording — polled CDP screenshots → ffmpeg → MP4 + GIF
 // ---------------------------------------------------------------------------
 
-/** Start a screencast on the page; returns a recorder handle. Frames are
- *  PNG, capped at 1280 wide — enough for a demo, sane for GIF size. The
- *  renderer only emits a frame when pixels change, so idle gaps vanish from
- *  the fixed-framerate assembly (dead air gets skipped — usually what you
- *  want in a demo). */
+/** Start recording the page; returns a recorder handle. Pull-based capture:
+ *  Node asks CDP for a JPEG every ~150ms via Page.captureScreenshot, which
+ *  forces the renderer to produce a frame on demand. The push-based
+ *  screencast alternative died every take the moment both arena columns
+ *  streamed — the starved compositor stopped emitting frames and the video
+ *  just ended. captureScreenshot keeps the pipeline fed under load.
+ *  captureScreenshot waits for each result, so a slow renderer slows the
+ *  cadence instead of dropping it. Frames are deduped (identical consecutive
+ *  shots are skipped) so idle stretches don't bloat the GIF. */
 async function startRecording(page) {
 	const cdp = await page.context().newCDPSession(page);
 	const framesDir = resolve(tmpdir(), `curtis-demo-${randomUUID().slice(0, 8)}`);
 	mkdirSync(framesDir, { recursive: true });
 	let n = 0;
 	let running = true;
-	cdp.on('Page.screencastFrame', async (frame) => {
-		if (!running) return;
-		try {
-			writeFileSync(resolve(framesDir, `f_${String(n++).padStart(5, '0')}.png`), Buffer.from(frame.data, 'base64'));
-		} catch { /* frame raced a shutdown — drop it */ }
-		void cdp.send('Page.screencastFrameAck', { sessionId: frame.sessionId }).catch(() => {});
-	});
-	await cdp.send('Page.startScreencast', {
-		format: 'png',
-		maxWidth: 1280,
-		maxHeight: 860,
-		everyFrame: true,
-	});
+	let lastData = null;
+	let lastStamp = Date.now();
+	let fails = 0;
+	const manifest = [{ file: null, t: 0 }];
+	const captureLoop = (async () => {
+		while (running) {
+			const started = Date.now();
+			try {
+				const shot = await cdp.send('Page.captureScreenshot', {
+					format: 'jpeg',
+					quality: 55,
+				});
+				if (fails > 0) console.log(`[demo] capture recovered after ${fails} misses`);
+				fails = 0;
+				const data = Buffer.from(shot.data, 'base64');
+				if (!lastData || !data.equals(lastData)) {
+					const now = Date.now();
+					manifest.push({ file: `f_${String(n).padStart(5, '0')}.jpg`, t: now - lastStamp });
+					lastStamp = now;
+					writeFileSync(resolve(framesDir, manifest[manifest.length - 1].file), data);
+					lastData = data;
+					n++;
+				}
+			} catch (e) {
+				fails++;
+				if (fails === 1 || fails % 10 === 0) {
+					console.log(`[demo] capture miss #${fails}: ${String(e.message).slice(0, 90)}`);
+				}
+			}
+			const elapsed = Date.now() - started;
+			await new Promise((r) => setTimeout(r, Math.max(0, 150 - elapsed)));
+		}
+	})();
 	return {
 		framesDir,
+		manifest,
 		async stop() {
 			running = false;
-			try { await cdp.send('Page.stopScreencast'); } catch { /* session gone */ }
+			await captureLoop.catch(() => {});
 			try { await cdp.detach(); } catch { /* already detached */ }
 			await new Promise((r) => setTimeout(r, 400));
 		},
 	};
 }
 
-/** Assemble recorded frames into an MP4 and a README-friendly GIF. */
+/** Assemble recorded frames into an MP4 and a README-friendly GIF. The
+ *  capture cadence varies with renderer load (a saturated renderer serves a
+ *  frame every few seconds), so frames carry their wall-clock gaps and the
+ *  concat demuxer plays them at true speed — capped at 1s so dead air cuts
+ *  instead of freezing, floored at 80ms so fast moments don't strobe. */
 function encodeRecording(rec, outBase) {
-	const frames = readdirSync(rec.framesDir).filter((f) => f.endsWith('.png'));
+	const frames = rec.manifest.filter((m) => m.file);
 	if (frames.length < 10) throw new Error(`only ${frames.length} frames recorded — nothing to encode`);
 	console.log(`[demo] encoding ${frames.length} frames → ${outBase}.mp4/.gif`);
-	const fps = 12;
+	const listPath = resolve(rec.framesDir, 'list.txt');
+	// manifest[i].t is the gap since the previous frame, so frame i's display
+	// time is the NEXT entry's gap; the last frame gets a default half-second.
+	const dur = (i) => {
+		const next = frames[i + 1];
+		const ms = next ? next.t : 500;
+		return Math.min(1, Math.max(0.08, ms / 1000));
+	};
+	const list = frames
+		.map((f, i) => `file '${f.file}'\nduration ${dur(i).toFixed(2)}`)
+		.join('\n') + `\nfile '${frames[frames.length - 1].file}'`;
+	writeFileSync(listPath, `ffconcat version 1.0\n${list}\n`);
 	// Screencast frames can arrive at odd heights (e.g. 1280x719); yuv420p
 	// H.264 requires even dimensions or libx264 refuses to open.
 	execSync(
-		`ffmpeg -y -framerate ${fps} -i "${resolve(rec.framesDir, 'f_%05d.png')}" ` +
+		`ffmpeg -y -f concat -safe 0 -i "${listPath}" ` +
 		`-vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" ` +
 		`-c:v libx264 -pix_fmt yuv420p -crf 22 -movflags +faststart "${resolve(OUT_DIR, outBase + '.mp4')}"`,
 		{ stdio: 'ignore' }
 	);
 	execSync(
-		`ffmpeg -y -framerate ${fps} -i "${resolve(rec.framesDir, 'f_%05d.png')}" ` +
-		`-vf "scale=880:-2:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4" ` +
+		`ffmpeg -y -f concat -safe 0 -i "${listPath}" ` +
+		`-vf "scale=720:-2:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=96[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5" ` +
 		`"${resolve(OUT_DIR, outBase + '.gif')}"`,
 		{ stdio: 'ignore' }
 	);
@@ -317,7 +380,9 @@ async function ensureWideChat(page) {
 			const split = leaf?.closest('.workspace-split');
 			if (!split) return -1;
 			for (const prop of ['width', 'max-width', 'flex-basis']) {
-				split.style.setProperty(prop, 'min(62vw, 980px)', 'important');
+				// Fixed px, not 62vw: a narrow restored window collapses the
+				// vw math and the arena columns end up cramped.
+				split.style.setProperty(prop, '980px', 'important');
 			}
 			return split.offsetWidth;
 		});
@@ -360,34 +425,54 @@ const resolveModel = (page, pid, wanted) =>
 		[pid, wanted]
 	);
 
+/** DeepSeek V4.1 defaults to thinking mode server-side: temperature is
+ *  ignored, first content token lands 10-30s late, and the arena column
+ *  sits on a dead spinner through all of it — fatal for a paced recording.
+ *  Patch the live provider instance (built once at onload, so the patch
+ *  survives settings saves) to send thinking:disabled per DeepSeek's API. */
+const disableDeepseekThinking = (page) =>
+	page.evaluate(() => {
+		const prov = window.app.plugins.plugins['curtis-ai-chat'].providerRegistry.getProvider('deepseek');
+		if (!prov) throw new Error('deepseek provider not initialized');
+		if (prov.__thinkingPatched) return;
+		const orig = prov.formatRequest.bind(prov);
+		prov.formatRequest = (messages, options) => {
+			const init = orig(messages, options);
+			try {
+				const body = JSON.parse(init.body);
+				body.thinking = { type: 'disabled' };
+				init.body = JSON.stringify(body);
+			} catch { /* body already gone — leave it untouched */ }
+			return init;
+		};
+		prov.__thinkingPatched = true;
+	});
+
 // ---------------------------------------------------------------------------
 // Demo flows
 // ---------------------------------------------------------------------------
-
-/** Ollama lazy-loads models into VRAM on first call (10-60s) — that gap
- *  blanked the local column in the first recording. Warm the model before
- *  the red light goes on. */
-function warmOllama(modelId) {
-	console.log(`[demo] warming ollama ${modelId}…`);
-	try {
-		execSync(`ollama run ${modelId} "Ready."`, { timeout: 180000, stdio: 'ignore' });
-		console.log(`[demo] ${modelId} warm`);
-	} catch (e) {
-		console.log(`[demo] WARNING: warmup failed (${e.message?.slice(0, 60)}) — local column may stall`);
-	}
-}
 
 /** One recorded arena duel: pick two models, start, type, send, stop one
  *  column mid-stream, promote the winner. */
 async function recordDuel(page, ctx, pair, outBase) {
 	const { providerA, modelAId, providerB, modelBId } = pair;
+	if (providerA === 'openrouter' || providerB === 'openrouter') {
+		// initializeProviders() is fire-and-forget in onload, so OpenRouter's
+		// /models discovery may still be in flight here — resolving early
+		// would silently fall back to openrouter/auto and the duel would run
+		// the wrong model on camera.
+		await page
+			.waitForFunction(() => {
+				const prov = window.app.plugins.plugins['curtis-ai-chat'].providerRegistry.getProvider('openrouter');
+				return !!prov && prov.models.length > 1;
+			}, { timeout: 30000 })
+			.catch(() => console.log('[demo] !! openrouter discovery never landed — auto router will stand in'));
+	}
 	const modelA = await resolveModel(page, providerA, modelAId);
 	const modelB = await resolveModel(page, providerB, modelBId);
 	if (!modelA || !modelB) throw new Error(`could not resolve models for ${providerA}/${modelAId} vs ${providerB}/${modelBId}`);
 	if (modelA.id === modelB.id) throw new Error('both duel members resolved to the same model');
 	console.log(`[demo] duel: ${providerA}/${modelA.id} vs ${providerB}/${modelB.id}`);
-	if (providerA === 'ollama') warmOllama(modelA.id);
-	if (providerB === 'ollama') warmOllama(modelB.id);
 
 	await page.evaluate(([p, m]) => {
 		const plugin = window.app.plugins.plugins['curtis-ai-chat'];
@@ -416,10 +501,14 @@ async function recordDuel(page, ctx, pair, outBase) {
 		await page.locator('.ai-arena-picker-start').click();
 		await page.waitForTimeout(600);
 
-		// Type like a human, then send.
+		// Type like a human, then send. Park the pointer afterwards: it rests
+		// on the send button (which becomes stop-generating) and its tooltip
+		// would ride the rest of the recording.
 		await page.type('.ai-chat-input', PROMPT, { delay: 22 });
 		await page.waitForTimeout(500);
 		await page.click('.ai-chat-send-btn');
+		const vp = page.viewportSize() ?? { width: 1280, height: 800 };
+		await page.mouse.move(Math.round(vp.width * 0.85), Math.round(vp.height * 0.35));
 
 		// Wait for a column to be visibly streaming, then stop the other
 		// side mid-flight to demo the per-column stop.
@@ -434,13 +523,23 @@ async function recordDuel(page, ctx, pair, outBase) {
 			return -1;
 		});
 		if (stoppable >= 0) {
-			await page.locator('.ai-arena-stop-btn').nth(stoppable).click();
+			// Streaming re-renders replace the stop button node on every
+			// chunk, so Playwright's stability check can stall — click via
+			// JS dispatch and retry across re-renders.
+			for (let click = 0; click < 4; click++) {
+				try {
+					await page.locator('.ai-arena-stop-btn').nth(stoppable).evaluate((el) => el.click());
+					break;
+				} catch { /* button detached mid-click — retry */ }
+				await page.waitForTimeout(250);
+			}
 			await page.waitForTimeout(1200);
 		}
 
-		// Let things settle (60s), then abort any column that hung (cold
-		// provider, stalled connection) — a blank stop button lingering into
-		// the promote beat ruined the first take's ending.
+		// Let things settle, then abort any column that hung (cold provider,
+		// stalled connection) — a blank stop button lingering into the
+		// promote beat ruined the first take's ending. Cloud flash models
+		// settle a 220-word answer well inside a minute.
 		await pollState(
 			ctx,
 			() => document.querySelectorAll('.ai-arena-column .ai-arena-stop-btn').length === 0
@@ -502,6 +601,8 @@ async function recordMemoryDemo(page, ctx, providerId, modelId, outBase) {
 		);
 		await page.waitForTimeout(400);
 		await page.click('.ai-chat-send-btn');
+		const vp = page.viewportSize() ?? { width: 1280, height: 800 };
+		await page.mouse.move(Math.round(vp.width * 0.85), Math.round(vp.height * 0.35));
 		// Normal reply streams first; extraction runs after the turn.
 		await pollState(ctx, () => !!document.querySelector('.ai-memory-proposal-bar'), 90000);
 		await page.waitForTimeout(900);
@@ -537,12 +638,30 @@ async function main() {
 
 	bootstrapVault();
 	registerDemoVault();
+	// Reset the demo vault's workspace so Obsidian doesn't restore stale
+	// window bounds — a crashed prior run left a ~840px window once, which
+	// clipped the 980px chat split. With no workspace.json the launch flag's
+	// 1440x900 applies and main() reopens the daily note itself.
+	try { rmSync(resolve(VAULT, '.obsidian/workspace.json')); } catch { /* none */ }
 	console.log('[demo] closing Obsidian if running…');
 	await killObsidian();
 
 	const inst = await bootInstance(9227);
 	try {
 		let { page, ctx } = inst;
+		page.on('crash', () => console.log('[demo] !! renderer crashed'));
+
+		// Electron ignores --window-size in packaged apps and Obsidian's
+		// restored bounds are whatever the last window was (a ~840px window
+		// clips the 980px chat split). resizeTo works on non-maximized
+		// windows — resize and verify, since a silent no-op breaks the stage.
+		await page.evaluate(() => window.resizeTo(1440, 900));
+		await page.waitForTimeout(800);
+		const vp = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+		console.log(`[demo] viewport: ${vp.w}x${vp.h}`);
+		if (!vp.w || vp.w < 1100) {
+			throw new Error(`window too narrow after resizeTo (${vp.w}px) — close other Obsidian windows and retry`);
+		}
 
 		// Deterministic stage: memory off for the duels, dark theme, wide
 		// chat, note behind it.
@@ -550,11 +669,6 @@ async function main() {
 			const plugin = window.app.plugins.plugins['curtis-ai-chat'];
 			plugin.settings.enableMemory = false;
 			plugin.settings.enableRag = false;
-			// Ollama needs no key — make sure it is enabled for the local duel.
-			plugin.settings.providerConfigs.ollama = Object.assign(
-				{ enabled: true },
-				plugin.settings.providerConfigs.ollama || {}
-			);
 			plugin.saveSettings();
 		});
 		await page.evaluate(() => location.reload());
@@ -571,30 +685,29 @@ async function main() {
 			'command registration (demo reload)'
 		);
 
+		await disableDeepseekThinking(page);
+
 		await page.evaluate(openChatAndRender);
+		// Toasts ("Arena ready…", "Enabled Ollama") linger into the recording.
+		await page.addStyleTag({ content: `.notice-container { display: none !important; }` });
 		const meas = await page.evaluate(setBodyTheme, 'dark');
 		if (meas.lum > 0.25) throw new Error(`dark theme flip failed (bg rgb(${meas.bg}))`);
 		await ensureWideChat(page);
 		await page.evaluate(() => window.app.workspace.openLinkText('Daily/2026-10-02.md', ''));
 		await page.waitForTimeout(800);
 
-		if (DEMOS.includes('local')) {
-			console.log('[demo] recording: local Ollama vs cloud DeepSeek');
-			await recordDuel(
-				page, ctx,
-				{ providerA: 'ollama', modelAId: 'llama3.2:3b', providerB: 'deepseek', modelBId: 'deepseek-v4-flash' },
-				'demo-arena-local-vs-cloud'
-			);
-		}
 		if (DEMOS.includes('memory')) {
 			console.log('[demo] recording: memory Save/Skip bar');
-			await recordMemoryDemo(page, ctx, 'deepseek', 'deepseek-v4-flash', 'demo-memory');
+			await recordMemoryDemo(page, ctx, 'deepseek', 'deepseek-flash', 'demo-memory');
 		}
 		if (DEMOS.includes('cloud')) {
-			console.log('[demo] recording: z.ai GLM vs DeepSeek');
+			// The two-API duel: same tier, different vendors and pipes —
+			// Gemini 3.1 Flash-Lite served by OpenRouter against DeepSeek's
+			// official V4.1 Flash. Two different APIs, visibly different prose.
+			console.log('[demo] recording: OpenRouter Gemini vs official DeepSeek');
 			await recordDuel(
 				page, ctx,
-				{ providerA: 'zai-glm', modelAId: 'flash', providerB: 'deepseek', modelBId: 'deepseek-v4-flash' },
+				{ providerA: 'openrouter', modelAId: 'google/gemini-3.1-flash-lite', providerB: 'deepseek', modelBId: 'deepseek-flash' },
 				'demo-arena-cloud-vs-cloud'
 			);
 		}

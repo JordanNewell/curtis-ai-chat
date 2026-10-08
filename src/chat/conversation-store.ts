@@ -25,6 +25,7 @@
 
 import { App, Notice, TFile, parseYaml, stringifyYaml } from 'obsidian';
 import type { Conversation, ConversationMessage, ConversationStats, TokenUsage } from '../types';
+import type { ConversationChangeKind } from '../core/events';
 import type CurtisPlugin from '../main';
 
 const DEFAULT_CONVERSATIONS_FOLDER = 'AI/Conversations';
@@ -159,6 +160,7 @@ export class ConversationStore {
 					if (this.currentConversationId === id) {
 						this.currentConversationId = null;
 					}
+					this.notifyChanged(id, 'delete');
 				})
 			);
 			// The debounced write can lose the last ≤200ms of messages on a fast
@@ -197,6 +199,7 @@ export class ConversationStore {
 		if (conv && conv.id === id) {
 			this.conversations.set(id, conv);
 			this.dirty.delete(id);
+			this.notifyChanged(id, 'messages');
 		}
 	}
 
@@ -220,6 +223,7 @@ export class ConversationStore {
 		this.currentConversationId = id;
 		// Empty conversations are not persisted — the first message creates
 		// the file, so clicking "New chat" never litters the vault.
+		this.notifyChanged(id, 'meta');
 		return conv;
 	}
 
@@ -232,6 +236,23 @@ export class ConversationStore {
 		if (this.conversations.has(id)) {
 			this.currentConversationId = id;
 		}
+	}
+
+	/** Conversation by id, independent of the current-conversation pointer. */
+	getConversation(id: string): Conversation | undefined {
+		return this.conversations.get(id);
+	}
+
+	/** Vault path of a conversation's markdown file. Undefined while the
+	 *  conversation is still empty (memory-only, never written). */
+	getConversationPath(id: string): string | undefined {
+		return this.paths.get(id);
+	}
+
+	/** Conversation backed by a given vault file path, if any. */
+	getConversationByPath(path: string): Conversation | undefined {
+		const id = this.findByPath(path);
+		return id ? this.conversations.get(id) : undefined;
 	}
 
 	addMessage(message: Omit<ConversationMessage, 'id' | 'timestamp'>): ConversationMessage {
@@ -265,7 +286,31 @@ export class ConversationStore {
 		}
 
 		this.markDirty(conv.id);
+		this.notifyChanged(conv.id, 'messages');
 		return fullMessage;
+	}
+
+	/**
+	 * Persist an externally-built conversation (chat importer). Assigns a
+	 * fresh conv id on collision, fills in any missing message ids, writes
+	 * the file immediately (no debounce — the summary must reflect reality),
+	 * and returns the final id. Returns null when the conversation has no
+	 * messages (nothing worth a file).
+	 */
+	async importConversation(conv: Conversation): Promise<string | null> {
+		if (!conv || !Array.isArray(conv.messages) || conv.messages.length === 0) return null;
+		while (!conv.id || this.conversations.has(conv.id)) {
+			conv.id = `conv_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+		}
+		for (const msg of conv.messages) {
+			if (!msg.id || conv.messages.some((m, i) => m !== msg && m.id === msg.id)) {
+				msg.id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+			}
+		}
+		this.conversations.set(conv.id, conv);
+		this.dirty.add(conv.id);
+		await this.flush(conv.id);
+		return conv.id;
 	}
 
 	getAllConversations(): Conversation[] {
@@ -282,6 +327,7 @@ export class ConversationStore {
 		if (this.currentConversationId === id) {
 			this.currentConversationId = null;
 		}
+		this.notifyChanged(id, 'delete');
 		if (path) {
 			void this.enqueue(id, async () => {
 				const file = this.app.vault.getAbstractFileByPath(path);
@@ -334,9 +380,9 @@ export class ConversationStore {
 		};
 	}
 
-	/** Last user message in the current conversation, or undefined. */
-	getLastUserMessage(): ConversationMessage | undefined {
-		const conv = this.getCurrentConversation();
+	/** Last user message in the given conversation (default: current), or undefined. */
+	getLastUserMessage(conversationId?: string): ConversationMessage | undefined {
+		const conv = conversationId ? this.conversations.get(conversationId) : this.getCurrentConversation();
 		if (!conv) return undefined;
 		for (let i = conv.messages.length - 1; i >= 0; i--) {
 			if (conv.messages[i].role === 'user') return conv.messages[i];
@@ -344,9 +390,9 @@ export class ConversationStore {
 		return undefined;
 	}
 
-	/** Last assistant message in the current conversation, or undefined. */
-	getLastAssistantMessage(): ConversationMessage | undefined {
-		const conv = this.getCurrentConversation();
+	/** Last assistant message in the given conversation (default: current), or undefined. */
+	getLastAssistantMessage(conversationId?: string): ConversationMessage | undefined {
+		const conv = conversationId ? this.conversations.get(conversationId) : this.getCurrentConversation();
 		if (!conv) return undefined;
 		for (let i = conv.messages.length - 1; i >= 0; i--) {
 			if (conv.messages[i].role === 'assistant') return conv.messages[i];
@@ -354,15 +400,16 @@ export class ConversationStore {
 		return undefined;
 	}
 
-	/** Remove and return a message by id from the current conversation. */
-	deleteMessage(messageId: string): boolean {
-		const conv = this.getCurrentConversation();
+	/** Remove and return a message by id from the given conversation (default: current). */
+	deleteMessage(messageId: string, conversationId?: string): boolean {
+		const conv = conversationId ? this.conversations.get(conversationId) : this.getCurrentConversation();
 		if (!conv) return false;
 		const idx = conv.messages.findIndex((m) => m.id === messageId);
 		if (idx === -1) return false;
 		conv.messages.splice(idx, 1);
 		conv.updatedAt = Date.now();
 		this.markDirty(conv.id);
+		this.notifyChanged(conv.id, 'messages');
 		return true;
 	}
 
@@ -371,8 +418,8 @@ export class ConversationStore {
 	 * stays). Used by edit-resend (truncate after the edited user msg before
 	 * re-streaming). Returns the number of messages removed.
 	 */
-	truncateAfterMessage(messageId: string): number {
-		const conv = this.getCurrentConversation();
+	truncateAfterMessage(messageId: string, conversationId?: string): number {
+		const conv = conversationId ? this.conversations.get(conversationId) : this.getCurrentConversation();
 		if (!conv) return 0;
 		const idx = conv.messages.findIndex((m) => m.id === messageId);
 		if (idx === -1) return 0;
@@ -381,6 +428,7 @@ export class ConversationStore {
 		conv.messages = conv.messages.slice(0, idx + 1);
 		conv.updatedAt = Date.now();
 		this.markDirty(conv.id);
+		this.notifyChanged(conv.id, 'messages');
 		return removed;
 	}
 
@@ -389,8 +437,8 @@ export class ConversationStore {
 	 * regenerate (the dropped assistant message is re-streamed fresh).
 	 * Returns the number of messages removed.
 	 */
-	truncateFromMessage(messageId: string): number {
-		const conv = this.getCurrentConversation();
+	truncateFromMessage(messageId: string, conversationId?: string): number {
+		const conv = conversationId ? this.conversations.get(conversationId) : this.getCurrentConversation();
 		if (!conv) return 0;
 		const idx = conv.messages.findIndex((m) => m.id === messageId);
 		if (idx === -1) return 0;
@@ -398,28 +446,37 @@ export class ConversationStore {
 		conv.messages = conv.messages.slice(0, idx);
 		conv.updatedAt = Date.now();
 		this.markDirty(conv.id);
+		this.notifyChanged(conv.id, 'messages');
 		return removed;
 	}
 
-	/** Update a message in place (by id) in the current conversation. */
-	updateMessage(messageId: string, updates: Partial<ConversationMessage>): boolean {
-		const conv = this.getCurrentConversation();
+	/** Update a message in place (by id) in the given conversation (default: current). */
+	updateMessage(messageId: string, updates: Partial<ConversationMessage>, conversationId?: string): boolean {
+		const conv = conversationId ? this.conversations.get(conversationId) : this.getCurrentConversation();
 		if (!conv) return false;
 		const msg = conv.messages.find((m) => m.id === messageId);
 		if (!msg) return false;
 		Object.assign(msg, updates);
 		conv.updatedAt = Date.now();
 		this.markDirty(conv.id);
+		this.notifyChanged(conv.id, 'messages');
 		return true;
 	}
 
-	/** Rename the current conversation. The file is retitled to match. */
-	renameCurrentConversation(title: string): void {
-		const conv = this.getCurrentConversation();
+	/** Rename the current (or given) conversation. The file is retitled to match. */
+	renameCurrentConversation(title: string, conversationId?: string): void {
+		const conv = conversationId ? this.conversations.get(conversationId) : this.getCurrentConversation();
 		if (!conv) return;
 		conv.title = title;
 		conv.updatedAt = Date.now();
 		this.markDirty(conv.id);
+		this.notifyChanged(conv.id, 'meta');
+	}
+
+	/** Broadcast a conversation mutation so every open chat pane bound to it
+	 *  can re-render (or rebind, on delete). No-op before load() wired the plugin. */
+	private notifyChanged(id: string, kind: ConversationChangeKind): void {
+		this.plugin?.eventBus.emit('conversation:changed', { id, kind });
 	}
 
 	/** Schedule a debounced vault write for the given conversation. */
@@ -608,6 +665,7 @@ export class ConversationStore {
 			if (msg.tool_calls && msg.tool_calls.length > 0) meta.tool_calls = msg.tool_calls;
 			if (msg.tool_call_id) meta.tool_call_id = msg.tool_call_id;
 			if (msg.tool_error) meta.tool_error = true;
+			if (msg.memoriesUsedIds && msg.memoriesUsedIds.length > 0) meta.mem = msg.memoriesUsedIds;
 			// Escape the comment terminator so metadata containing "-->"
 			// (e.g. tool arguments editing markdown with HTML comments) can't
 			// break out of the marker.
@@ -733,6 +791,7 @@ export function parseConversationMarkdown(raw: string, fallbackMtime: number): C
 			tool_calls: Array.isArray(meta.tool_calls) ? (meta.tool_calls as ConversationMessage['tool_calls']) : undefined,
 			tool_call_id: typeof meta.tool_call_id === 'string' ? meta.tool_call_id : undefined,
 			tool_error: meta.tool_error === true || undefined,
+			memoriesUsedIds: readStringArray(meta.mem),
 		});
 	}
 
