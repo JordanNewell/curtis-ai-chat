@@ -1,0 +1,17 @@
+{
+	"compilerOptions": {
+		"rootDir": "src",
+		"baseUrl": ".",
+		"module": "ESNext",
+		"target": "ES2022",
+		"moduleResolution": "node",
+		"noImplicitAny": true,
+		"strictNullChecks": true,
+		"useUnknownInCatchVariables": true,
+		"isolatedModules": true,
+		"noEmit": true,
+		"skipLibCheck": true,
+		"lib": ["ES2022", "DOM"]
+	},
+	"include": ["src/**/*.ts"]
+}
