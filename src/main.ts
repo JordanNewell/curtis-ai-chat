@@ -16,6 +16,7 @@ import type { SettingsData } from './core/migration';
 import { migrateSecretsToKeychain, resolveApiKey } from './core/secrets';
 import { MemoryStore } from './memory';
 import { ConversationStore } from './chat/conversation-store';
+import { McpServer } from './mcp/server';
 import { ChatSearchModal } from './ui/modals/chat-search-modal';
 import { DiffRewriteModal } from './ui/modals/diff-rewrite-modal';
 import { CHAT_VIEW_TYPE, ChatView } from './chat/view';
@@ -33,6 +34,7 @@ export default class CurtisPlugin extends Plugin {
 	providerRegistry!: ProviderRegistry;
 	conversationStore!: ConversationStore;
 	ragIndex!: RagIndexManager;
+	mcpServer!: McpServer;
 
 	async onload(): Promise<void> {
 		// 1. Load settings with migration
@@ -85,6 +87,12 @@ export default class CurtisPlugin extends Plugin {
 		// Loads vault-file conversations, watches for hand edits, and imports
 		// any history still stored in localStorage (pre-1.3 format).
 		await this.conversationStore.load(this);
+
+		// 3b. MCP server (off by default — loopback-only Streamable HTTP).
+		this.mcpServer = new McpServer(this);
+		if (this.settings.enableMcpServer) {
+			void this.mcpServer.start().catch((e) => console.error('[Curtis MCP] startup failed:', e));
+		}
 
 		// 4. Initialize provider registry (with keychain-aware key resolver)
 		const resolveKey = (providerId: string, config?: import('./types').ProviderConfig): string => {

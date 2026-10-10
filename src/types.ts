@@ -281,6 +281,16 @@ export interface CurtisSettings {
 	/** Render "Today / Yesterday / date" dividers between messages that
 	 *  cross a calendar-date boundary. Matches iMessage/Telegram feel. */
 	showDaySeparators: boolean;
+
+	// MCP Server — expose vault/memory/chat over Model Context Protocol
+	/** Master switch. Off by default — binds loopback only when on. */
+	enableMcpServer: boolean;
+	/** Loopback port for the MCP Streamable HTTP endpoint. */
+	mcpPort: number;
+	/** Bearer token required on every MCP request (auto-generated). */
+	mcpAuthToken: string;
+
+	// Hotkeys
 }
 
 // ============================================================================

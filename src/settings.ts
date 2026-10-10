@@ -71,6 +71,9 @@ export const DEFAULT_SETTINGS: CurtisSettings = {
 	enableWebSearch: false,
 	enableMcp: false,
 	mcpServers: [],
+	enableMcpServer: false,
+	mcpPort: 3127,
+	mcpAuthToken: '',
 	showDaySeparators: true,
 };
 
@@ -98,6 +101,7 @@ export class CurtisSettingTab extends PluginSettingTab {
 			this.generationGroup(),
 			this.agentGroup(),
 			this.mcpGroup(),
+			this.mcpServerGroup(),
 			this.chatUIGroup(),
 			this.notesGroup(),
 			this.backgroundGroup(),
@@ -835,6 +839,85 @@ export class CurtisSettingTab extends PluginSettingTab {
 	}
 
 	// ---- Chat UI ----
+
+
+	// ---- MCP server (host mode) ----
+
+	/** Settings group for the built-in MCP *server*: expose this vault (notes,
+	 *  long-term memory, chat history) as an MCP server over loopback
+	 *  Streamable HTTP so Claude Desktop, Cursor, Windsurf, etc. can connect
+	 *  and read/write the vault. Off by default; bearer-token auth. */
+	private mcpServerGroup(): SettingDefinitionItem {
+		const s = this.plugin.settings;
+		const items: SettingDefinitionRender[] = [
+			this.row('Enable MCP server', 'Expose this vault (notes, long-term memory, chat history) as a Model Context Protocol server on http://127.0.0.1:<port>/mcp. Any MCP client — Claude Desktop, Cursor, Windsurf — can then connect. Loopback only, bearer-token authenticated. Off by default.', (el) => {
+				new Setting(el)
+					.setName('Enable MCP server')
+					.addToggle((toggle) => {
+						toggle.setValue(s.enableMcpServer);
+						toggle.onChange(async (val) => {
+							s.enableMcpServer = val;
+							await this.plugin.saveSettings();
+							if (val) {
+								await this.plugin.mcpServer.start();
+								const st = this.plugin.mcpServer.getStatus();
+								if (st.running) new Notice(`Curtis MCP server running on port ${st.port}`);
+							} else {
+								this.plugin.mcpServer.stop();
+								new Notice('Curtis MCP server stopped');
+							}
+							this.update();
+						});
+					});
+			}),
+			this.row('MCP port', 'Loopback port for the MCP endpoint. Restart the server after changing.', (el) => {
+				new Setting(el)
+					.setName('MCP port')
+					.addText((text) => {
+						text.setValue(String(s.mcpPort || 3127));
+						text.onChange(async (val) => {
+							const p = parseInt(val, 10);
+							if (Number.isFinite(p) && p > 0 && p < 65536) {
+								s.mcpPort = p;
+								await this.plugin.saveSettings();
+							}
+						});
+					});
+			}),
+		];
+
+		if (s.enableMcpServer) {
+			const st = this.plugin.mcpServer.getStatus();
+			const token = this.plugin.mcpServer.getToken();
+			const snippet = JSON.stringify(
+				{
+					mcpServers: {
+						'curtis-obsidian': {
+							url: `http://127.0.0.1:${st.port || s.mcpPort}/mcp`,
+							headers: { Authorization: `Bearer ${token || '<token>'}` },
+						},
+					},
+				},
+				null,
+				2,
+			);
+			items.push(this.row('MCP server status', undefined, (el) => {
+				const statusEl = el.createEl('div');
+				statusEl.createEl('p', {
+					text: st.running
+						? `Running on port ${st.port} — ${st.requestCount} request(s) handled.`
+						: `Not running${st.lastError ? `: ${st.lastError}` : ''}.`,
+				});
+				statusEl.createEl('p', { text: 'Client config snippet (paste into Claude Desktop / Cursor / Windsurf):' });
+				const pre = statusEl.createEl('pre');
+				pre.setText(snippet);
+				pre.style.fontSize = '11px';
+				pre.style.userSelect = 'all';
+			}));
+		}
+
+		return { type: 'group', name: 'MCP server', heading: 'MCP server', items };
+	}
 
 	private chatUIGroup(): SettingDefinitionItem {
 		const s = this.plugin.settings;
