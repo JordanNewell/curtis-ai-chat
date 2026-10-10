@@ -4,6 +4,12 @@
    soft rounded bubbles, generous radius, subtle depth, theme-adaptive.
    ============================================================================ */
 
+/* Shared motion token — one duration + easing for every interactive
+   transition across chat, terminal, and modals. */
+:root {
+	--curtis-motion: 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
 /* ============================================================================
    CHAT VIEW LAYOUT
    ============================================================================ */
@@ -15,66 +21,112 @@
 	overflow: hidden;
 	background: var(--background-primary);
 	position: relative;
-	/* Container query anchor — lets the header stack based on the PANE width
-	 * (not the viewport), so a narrow desktop sidebar gets the same double-deck
-	 * header as a phone. */
+	/* Container query anchor — lets the composer adapt based on the PANE
+	 * width (not the viewport), so a narrow sidebar scales like a phone. */
 	container-type: inline-size;
+	/* Live color — follows the user's Obsidian accent (Settings → Appearance).
+	 * The send button and the streaming/thinking carets all hang off these
+	 * three tokens, so retheming is a one-line change. */
+	--curtis-neon: var(--interactive-accent);
+	--curtis-neon-bright: var(--interactive-accent-hover);
+	--curtis-neon-ink: var(--text-on-accent);
+	/* Crisper text on the glass surfaces. */
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+
+/* Accent-tinted selection inside the chat — small, but it reads. */
+.ai-chat-view ::selection {
+	background: color-mix(in srgb, var(--interactive-accent) 28%, transparent);
 }
 
 /* ============================================================================
-   HEADER — compact, subtle, brand-present
+   TOP BAR — slim row of conversation-level tools: new chat, active-note
+   pill (left) and auto-speak / history / export / search (right). Everything
+   about composing the next message lives in the composer box at the bottom.
+   The inner wrapper caps to the composer column, so the whole view reads as
+   ONE aligned chat column on wide panes (the big-web-UI pattern).
    ============================================================================ */
 
-.ai-chat-header {
-	display: flex;
-	align-items: center;
-	gap: var(--size-4-3);
-	height: 48px;
-	padding: 0 var(--size-4-3);
-	background: var(--background-primary);
+.ai-chat-topbar {
 	flex-shrink: 0;
+	padding: 8px 16px 10px;
+	/* Fades out downward so messages scroll under it without a hard edge. */
+	background: linear-gradient(to bottom, var(--background-primary) 40%, transparent);
 	/* Foreground element — sits above the .ai-chat-background watermark. */
 	position: relative;
-	z-index: 3;
+	z-index: 4;
 }
 
-/* Primary row — new chat, active-note pill, model picker (picker stretches). */
-.ai-chat-header-main {
+.ai-chat-topbar-inner {
 	display: flex;
 	align-items: center;
-	gap: var(--size-4-3);
-	flex: 1 1 auto;
+	gap: var(--size-4-1);
+	max-width: 760px;
+	margin-inline: auto;
+	width: 100%;
 	min-width: 0;
 }
 
-/* Tools row — arena/auto-speak/history/export/search. Inline at wide widths;
- * stacks under the primary row on narrow panes (see the container + phone
- * media queries below). */
-.ai-chat-header-tools {
+/* Three-zone bar: title zone and tools zone flex equally around the model
+ * picker, so the pill sits at the bar's optical midpoint. Each zone yields
+ * (ellipsis / overflow-hidden) before the picker ever gets squeezed. */
+.ai-chat-topbar-tools {
 	display: flex;
 	align-items: center;
-	gap: var(--size-4-2);
-	flex-shrink: 0;
+	gap: var(--size-4-1);
+	flex: 1 1 auto;
+	justify-content: flex-end;
+	min-width: 0;
+	overflow: hidden;
 }
 
-/* Double-deck header on narrow panes: primary row up top, tools row beneath.
- * Pane-width based so narrow desktop sidebars stack like phones. The tools
- * cluster CENTERS in the stacked layout — left-packed it reads as shifted
- * against the full-width picker row above (visible in wide-but-stacked center
- * panes, e.g. a half-screen split). */
-@container (max-width: 560px) {
-	.ai-chat-header {
-		flex-direction: column;
-		align-items: stretch;
-		gap: var(--size-4-1);
-		height: auto;
-		min-height: 48px;
-		padding: var(--size-4-2) var(--size-4-3);
-	}
+/* Conversation title — quiet label left of the model picker; click renames.
+ * Yields space first (ellipsis). Stays in layout even when empty so the
+ * picker keeps its centered slot on a fresh chat; the pointer affordance
+ * only applies when there is something to rename. */
+.ai-chat-topbar-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	user-select: none;
+	/* Hover pill — quiet surface so the title reads interactive when there's
+	 * something to rename; negative start margin keeps the text aligned with
+	 * its neighbors despite the padding. */
+	padding: 2px var(--size-2-2);
+	margin-inline-start: calc(var(--size-2-2) * -1);
+	border-radius: var(--radius-s);
+	transition:
+		background var(--curtis-motion),
+		color var(--curtis-motion);
+}
 
-	.ai-chat-header-tools {
-		justify-content: center;
-	}
+.ai-chat-topbar-title:not(:empty) {
+	cursor: pointer;
+}
+
+.ai-chat-topbar-title:hover:not(:empty) {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+/* Leader badge — the quiet crown before a leader chat's title. Inline-flex
+ * keeps it on the title's baseline; gap separates it from the text span. */
+.ai-chat-leader-badge {
+	display: inline-flex;
+	align-items: center;
+	vertical-align: -2px;
+	margin-right: 4px;
+	color: var(--color-yellow, #e0ac00);
+}
+
+.ai-chat-leader-badge .svg-icon {
+	width: 13px;
+	height: 13px;
 }
 
 .ai-chat-icon-btn {
@@ -86,10 +138,16 @@
 	padding: 0;
 	background: transparent;
 	border: none;
+	/* Kill theme bleed — Obsidian themes that restyle bare `button` elements
+	 * would otherwise chip-ify these ghosts. */
+	box-shadow: none;
 	border-radius: var(--radius-m);
 	color: var(--text-muted);
 	cursor: pointer;
-	transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+	transition:
+		background var(--curtis-motion),
+		color var(--curtis-motion),
+		box-shadow var(--curtis-motion);
 	flex-shrink: 0;
 }
 
@@ -98,33 +156,222 @@
 	color: var(--text-normal);
 }
 
-.ai-chat-icon-btn:active {
-	transform: scale(0.94);
-}
-
 .ai-chat-icon-btn svg {
 	width: 18px;
 	height: 18px;
 }
 
-/* Model picker button — borderless, depth from hover only */
+/* Obsidian ≥1.13 gives every `button:not(.clickable-icon)` form-button
+ * chrome — interactive-normal fill, input shadow, text-color ink — at
+ * (0,1,1), one specificity notch above the plugin's single-class button
+ * rules. Without this reset the composer's flat controls render as boxed
+ * chips and the send arrow loses its dark ink. (0,2,0) under the view scope
+ * wins it back. Core never touches background-image, so the send disc's
+ * gradient survives untouched; placed BEFORE the :hover rules below so the
+ * equal-specificity state rules still win their ties. */
+.ai-chat-view .ai-chat-icon-btn,
+.ai-chat-view .ai-model-picker-btn,
+.ai-chat-view .ai-agent-pill,
+.ai-chat-view .ai-chat-abort-btn {
+	background-color: transparent;
+	box-shadow: none;
+}
+
+.ai-chat-view .ai-chat-icon-btn {
+	color: var(--text-muted);
+}
+
+.ai-chat-view .ai-model-picker-btn {
+	color: var(--text-normal);
+}
+
+.ai-chat-view .ai-chat-abort-btn {
+	color: var(--text-error);
+}
+
+.ai-chat-view .ai-chat-send-btn {
+	background-color: transparent;
+	color: var(--curtis-neon-ink);
+	box-shadow:
+		0 0 0 1px color-mix(in srgb, var(--curtis-neon) 40%, transparent),
+		0 2px 10px color-mix(in srgb, var(--curtis-neon) 38%, transparent),
+		0 0 22px color-mix(in srgb, var(--curtis-neon) 22%, transparent);
+}
+
+/* Keyboard parity with hover — every ghost control shows the theme's focus
+ * ring when tabbed to. Scoped + (0,3,0) so it beats the chrome reset above
+ * and the single-class state rules below. */
+.ai-chat-view .ai-chat-icon-btn:focus-visible,
+.ai-chat-view .ai-model-picker-btn:focus-visible,
+.ai-chat-view .ai-chat-send-btn:focus-visible,
+.ai-chat-view .ai-chat-abort-btn:focus-visible,
+.ai-chat-view .ai-message-action-btn:focus-visible {
+	outline: none;
+	box-shadow:
+		0 0 0 2px var(--background-primary),
+		0 0 0 4px var(--background-modifier-border-focus);
+}
+
+/* Model picker button — a chip that promises a menu: bordered, quiet, with a
+ * chevron that rotates while the dropdown is open. Sits inside the composer
+ * control row. min-width guarantees dot + ~6 characters of name + chevron —
+ * the row may get tight, but the picker never collapses to a bare dot. */
 .ai-model-picker-btn {
-	flex: 1;
-	min-width: 0;
+	flex: 0 1 auto;
+	min-width: 92px;
+	max-width: 45%;
 	display: flex;
 	align-items: center;
 	gap: var(--size-4-2);
-	/* Extra trailing margin so the picker doesn't crowd the history/mode
-	 * buttons that follow it in the header. */
-	margin-inline-end: var(--size-4-2);
-	padding: 6px var(--size-4-3);
+	padding: 3px var(--size-4-2) 3px var(--size-4-3);
 	background: transparent;
-	border: none;
+	border: 1px solid var(--background-modifier-border);
 	border-radius: 999px;
 	color: var(--text-normal);
 	font-size: var(--font-ui-small);
 	cursor: pointer;
-	transition: background 0.15s ease, transform 0.12s ease;
+	transition: background var(--curtis-motion), border-color var(--curtis-motion), transform var(--curtis-motion);
+}
+
+.ai-model-picker-btn:hover {
+	background: var(--background-modifier-hover);
+	border-color: var(--background-modifier-border-hover);
+}
+
+.ai-model-picker-btn:active {
+	transform: scale(0.98);
+}
+
+.ai-model-picker-btn.is-open {
+	border-color: var(--interactive-accent);
+	background: var(--background-modifier-hover);
+}
+
+/* Named-agent pill — the model picker chip's sibling in the top bar. Only
+ * rendered while the bound conversation runs a named agent; emoji + name,
+ * so the lane reads as a distinct mode rather than another model. Hidden
+ * via inline display (updateAgentPill), so the stylesheet default stays on. */
+.ai-chat-view .ai-agent-pill {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	padding: 3px var(--size-4-3);
+	background: transparent;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.ai-chat-view .ai-agent-pill:hover {
+	background: var(--background-modifier-hover);
+	border-color: var(--background-modifier-border-hover);
+}
+
+.ai-chat-view .ai-agent-pill:active {
+	transform: scale(0.98);
+}
+
+.ai-chat-view .ai-agent-pill.is-hidden {
+	display: none;
+}
+
+.ai-agent-pill-emoji {
+	font-size: var(--font-ui-small);
+	line-height: 1;
+}
+
+.ai-agent-pill-name {
+	max-width: 160px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Agent editor modal — persona textarea spans the modal column. */
+.ai-agent-editor .ai-agent-editor-persona {
+	width: 100%;
+	resize: vertical;
+}
+
+/* Narrow panes — the provider sub-label drops so the model name keeps room,
+ * and the composer tightens its padding/radius to fit a sidebar. */
+@container (max-width: 480px) {
+	.ai-model-picker-btn-provider {
+		display: none;
+	}
+
+	.ai-model-picker-btn {
+		max-width: 55%;
+	}
+
+	/* In the top bar the pill shares space with title + three tools — cap it
+	 * tighter than the composer-row allowance above. */
+	.ai-chat-topbar .ai-model-picker-btn {
+		max-width: 42%;
+	}
+
+	.ai-chat-input-area {
+		padding-inline: 10px;
+	}
+
+	.ai-chat-topbar {
+		padding-inline: 10px;
+	}
+}
+
+/* Very narrow panes — the composer CONTROLS yield space before the picker
+ * does: tighter gaps, smaller icon targets, so the model name always keeps
+ * readable room (no dot-and-chevron stubs). */
+@container (max-width: 440px) {
+	.ai-chat-btn-row {
+		gap: 4px;
+	}
+
+	.ai-composer .ai-chat-icon-btn {
+		width: 28px;
+		height: 28px;
+	}
+
+	.ai-composer .ai-chat-icon-btn svg {
+		width: 16px;
+		height: 16px;
+	}
+
+	.ai-chat-send-btn {
+		width: 30px;
+		height: 30px;
+	}
+
+	.ai-chat-send-btn svg {
+		width: 15px;
+		height: 15px;
+	}
+}
+
+@container (max-width: 380px) {
+	.ai-model-picker-btn {
+		min-width: 72px;
+		padding-inline: 8px;
+	}
+
+	.ai-model-picker-btn-model {
+		font-size: var(--font-ui-smaller);
+	}
+}
+
+/* Ultra-narrow panes — the row may WRAP to two tidy lines. Wrapping degrades
+ * gracefully; clipping a control out of the composer does not. Send stays
+ * right-aligned on its line via its margin-left: auto, so overflow is
+ * impossible at any width. */
+@container (max-width: 400px) {
+	.ai-chat-btn-row {
+		flex-wrap: wrap;
+		row-gap: 6px;
+	}
 }
 
 .ai-model-picker-btn:hover {
@@ -181,6 +428,142 @@
 	height: 14px;
 }
 
+/* Chevron flips while the dropdown is open — state you can see. */
+.ai-model-picker-btn.is-open .ai-model-picker-btn-chevron {
+	transform: rotate(180deg);
+	color: var(--text-normal);
+}
+
+/* ============================================================================
+   MODEL DROPDOWN — anchored menu under the picker pill: the active
+   provider's models for one-click switching, "All models…" handing off to
+   the full modal. Floats over the message list from the top bar's stacking
+   context (containerEl).
+   ============================================================================ */
+
+.ai-model-dropdown {
+	position: absolute;
+	z-index: 100;
+	min-width: 240px;
+	/* Never wider than the pane that anchors it. */
+	max-width: calc(100% - 24px);
+	max-height: 320px;
+	overflow-y: auto;
+	padding: 5px;
+	background: color-mix(in srgb, var(--background-primary) 88%, transparent);
+	backdrop-filter: blur(20px) saturate(1.4);
+	-webkit-backdrop-filter: blur(20px) saturate(1.4);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-l);
+	animation: ai-dropdown-in var(--curtis-motion);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+	.ai-model-dropdown {
+		background: var(--background-primary);
+	}
+}
+
+@keyframes ai-dropdown-in {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.ai-model-dropdown-item {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: 7px var(--size-4-3);
+	border-radius: 9px;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	cursor: pointer;
+	transition: background 0.12s cubic-bezier(0.22, 0.61, 0.36, 1);
+	/* Staggered entrance — the menu assembles instead of appearing. */
+	opacity: 0;
+	animation: ai-item-in 0.18s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+.ai-model-dropdown-item:nth-child(1) { animation-delay: 0.02s; }
+.ai-model-dropdown-item:nth-child(2) { animation-delay: 0.045s; }
+.ai-model-dropdown-item:nth-child(3) { animation-delay: 0.07s; }
+.ai-model-dropdown-item:nth-child(4) { animation-delay: 0.095s; }
+.ai-model-dropdown-item:nth-child(5) { animation-delay: 0.12s; }
+.ai-model-dropdown-item:nth-child(n + 6) { animation-delay: 0.14s; }
+
+@keyframes ai-item-in {
+	from {
+		opacity: 0;
+		transform: translateY(-3px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.ai-model-dropdown-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.ai-model-dropdown-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--provider-color, var(--interactive-accent));
+	flex-shrink: 0;
+}
+
+.ai-model-dropdown-name {
+	flex: 1;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ai-model-dropdown-check {
+	color: var(--interactive-accent);
+	display: flex;
+	flex-shrink: 0;
+}
+
+.ai-model-dropdown-check svg {
+	width: 15px;
+	height: 15px;
+}
+
+.ai-model-dropdown-more {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	margin-top: 2px;
+	padding: 8px var(--size-4-3) 6px;
+	border-top: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+	transition: color 0.12s ease;
+	border-radius: 0 0 10px 10px;
+}
+
+.ai-model-dropdown-more:hover {
+	color: var(--text-normal);
+}
+
+.ai-model-dropdown-more svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+
 /* ============================================================================
    MESSAGES — messenger-style bubbles
    ============================================================================ */
@@ -223,17 +606,44 @@
  * an in-flow element, so it appears on new chat and disappears once messages
  * arrive. See .ai-chat-empty-icon below.) */
 
+.ai-chat-messages:hover {
+	scrollbar-color: var(--background-modifier-border-hover) transparent;
+}
+
+.ai-chat-messages::-webkit-scrollbar {
+	width: 10px;
+}
+
+.ai-chat-messages::-webkit-scrollbar-thumb {
+	background: transparent;
+	border-radius: 8px;
+	border: 3px solid transparent;
+	background-clip: padding-box;
+}
+
+.ai-chat-messages:hover::-webkit-scrollbar-thumb {
+	background: var(--background-modifier-border-hover);
+	background-clip: padding-box;
+}
+
 .ai-chat-messages {
-	flex: 1;
+	/* Full-bleed scroll layer — messages glide UNDER the frosted top bar and
+	 * composer (the premium chat pattern). The top bar and input area float
+	 * above with gradient/glass surfaces. Sits above the wallpaper layer
+	 * (z-index 0), below the floating chrome (z-index 3+). */
+	position: absolute;
+	inset: 0;
+	z-index: 1;
 	overflow-y: auto;
+	padding: 56px var(--size-4-2) 120px;
 	scroll-behavior: smooth;
-	padding: var(--size-4-3) var(--size-4-4);
 	display: flex;
 	flex-direction: column;
 	gap: var(--size-4-5);
-	position: relative;
-	z-index: 3;
 	background: transparent;
+	/* Scrollbar hides until the pane is hovered — quiet at rest. */
+	scrollbar-width: thin;
+	scrollbar-color: transparent transparent;
 }
 
 /* Empty state — hero brand orb + welcome copy. Rendered inside the messages
@@ -268,6 +678,25 @@
  * disc doesn't read as a heavy black block on bright UI. Both masters must
  * share identical geometry — see LOGO-SPEC.md. */
 .theme-light .ai-chat-empty-icon {
+	background: #F5F5F3 url('data:image/jpeg;base64,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') center / cover no-repeat;
+}
+
+/* Per-message brand mark — the hero disc shrunk to a 20px stamp at the
+ * start of every assistant reply's meta row. Both masters are copied
+ * verbatim from .ai-chat-empty-icon and must stay geometrically identical
+ * (LOGO-SPEC.md); no ring or glow at this size per DESIGN.md — flat and
+ * quiet inside the message list. */
+.ai-message-avatar {
+	flex: 0 0 auto;
+	width: 20px;
+	height: 20px;
+	background: #0A0A0A url('data:image/jpeg;base64,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') center / cover no-repeat;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 50%;
+}
+
+/* Light themes swap to the light master, same as the hero orb. */
+.theme-light .ai-message-avatar {
 	background: #F5F5F3 url('data:image/jpeg;base64,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') center / cover no-repeat;
 }
 
@@ -411,8 +840,12 @@
 }
 
 .ai-message-user {
-	align-self: flex-end;
-	align-items: flex-end;
+	align-self: stretch;
+	align-items: flex-start;
+	max-width: 100%;
+	/* A terminal echo doesn't animate in — the line you typed simply
+	 * commits. (The shared slide stays for assistant messages.) */
+	animation: none;
 }
 
 .ai-message-assistant {
@@ -425,10 +858,10 @@
 .ai-message-meta {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--size-2-3);
 	font-size: var(--font-ui-smallest);
 	color: var(--text-faint);
-	padding: 0 var(--size-4-2);
+	padding: 0;
 	margin-bottom: var(--size-4-1);
 }
 
@@ -443,6 +876,67 @@
 	border-radius: 50%;
 	background: var(--provider-color, var(--text-muted));
 	box-shadow: 0 0 6px 0 var(--provider-color, transparent);
+}
+
+.ai-message-time {
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+/* External links — small site favicon leads the link text (Settings → Chat
+ * UI → Link favicons; the image removes itself on load failure). */
+.ai-message-content .ai-link-external .ai-link-favicon {
+	width: 13px;
+	height: 13px;
+	margin-right: 3px;
+	vertical-align: -1.5px;
+	border-radius: 3px;
+	object-fit: cover;
+	background: var(--background-primary);
+}
+
+/* Plain vault paths the assistant mentions ("Projects/Ideas.md") become
+ * tappable links with the native page-preview popover on hover — styled
+ * like Obsidian's own internal links so the affordance reads as familiar. */
+.ai-vault-link {
+	color: var(--link-color, var(--text-accent));
+	text-decoration-line: underline;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 2px;
+	cursor: pointer;
+	border-radius: 2px;
+}
+
+.ai-vault-link:hover {
+	color: var(--link-color-hover, var(--text-accent-hover));
+	background: var(--background-modifier-hover);
+}
+
+/* Floating jump-to-latest — shows when the transcript is scrolled up while
+ * content (usually a stream) is growing; smart autoscroll leaves the user's
+ * reading position alone and this is the way back down. */
+.ai-chat-scroll-btn {
+	position: absolute;
+	right: var(--size-4-3);
+	bottom: calc(132px + env(safe-area-inset-bottom));
+	z-index: 4;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-s);
+	color: var(--text-muted);
+	cursor: pointer;
+	opacity: 0.92;
+}
+
+.ai-chat-scroll-btn:hover {
+	opacity: 1;
+	color: var(--text-normal);
 }
 
 .ai-message-info {
@@ -480,7 +974,7 @@
 .ai-mem-popover {
 	align-self: flex-start;
 	max-width: 88%;
-	margin: -2px 0 10px var(--size-4-2);
+	margin: -2px 0 10px;
 	padding: var(--size-4-2) var(--size-4-3);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
@@ -529,38 +1023,46 @@
 	padding-top: var(--size-4-2);
 }
 
-/* === USER BUBBLE — accent gradient, inline-end-aligned, asymmetric tail === */
+/* === USER PROMPT ECHO — a terminal line, not a bubble. The caret you were
+ * typing with becomes the `❯` prompt glyph the moment you send: your line
+ * commits where it is, nothing pops in, nothing is re-typed. === */
 .ai-message-user .ai-message-content {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-	padding: 10px 14px;
-	/* Logical radii so the tail corner follows the inline axis — the small
-	 * corner sits at the sender's trailing edge in both LTR and RTL. */
-	border-start-start-radius: 18px;
-	border-start-end-radius: 18px;
-	border-end-start-radius: 18px;
-	border-end-end-radius: 4px;
+	background: transparent;
+	color: var(--text-normal);
+	padding: 2px 0;
 	font-size: var(--font-ui-small);
 	line-height: 1.5;
 	overflow-wrap: break-word;
 	word-break: break-word;
 	white-space: pre-wrap;
-	box-shadow: 0 1px 2px var(--background-modifier-border);
 }
 
-/* === ASSISTANT BUBBLE — subtle bg, inline-start-aligned, asymmetric tail === */
+.ai-message-user .ai-message-content::before {
+	content: '❯ ';
+	color: var(--curtis-neon, var(--interactive-accent));
+	font-weight: 600;
+}
+
+/* === ASSISTANT — document text, not a bubble: plain markdown on the pane,
+ * delivered under the streaming neon caret, terminal-style. === */
 .ai-message-assistant .ai-message-content {
-	background: var(--background-secondary);
+	background: transparent;
 	color: var(--text-normal);
-	padding: 10px 14px;
-	border-start-start-radius: 18px;
-	border-start-end-radius: 18px;
-	border-end-start-radius: 4px;
-	border-end-end-radius: 18px;
+	padding: 2px 0 4px;
 	font-size: var(--font-ui-small);
-	line-height: 1.5;
+	line-height: 1.55;
 	overflow-wrap: break-word;
 	word-break: break-word;
+}
+
+/* A wallpaper behind the pane would make plain document text unreadable —
+ * bring back a quiet card for assistant text only while one is active. */
+.ai-chat-view.has-wallpaper .ai-message-assistant .ai-message-content {
+	background: color-mix(in srgb, var(--background-primary) 92%, transparent);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	padding: 10px 14px;
+	border-radius: 14px;
 }
 
 /* Markdown rendering inside assistant bubbles */
@@ -646,12 +1148,13 @@
 	border-bottom-color: var(--text-accent);
 }
 
-/* Streaming cursor — animated accent block */
+/* Streaming cursor — the same terminal caret, in brand neon. */
 .ai-message-streaming .ai-message-content::after {
 	content: '▍';
 	display: inline-block;
-	animation: ai-blink 1s infinite step-end;
-	color: var(--interactive-accent);
+	animation: ai-blink 1.1s infinite step-end;
+	color: var(--curtis-neon, var(--interactive-accent));
+	text-shadow: 0 0 8px color-mix(in srgb, var(--curtis-neon, var(--interactive-accent)) 55%, transparent);
 	margin-inline-start: 2px;
 	vertical-align: baseline;
 }
@@ -661,29 +1164,24 @@
 	50%      { opacity: 0; }
 }
 
-/* "Thinking…" indicator before first chunk */
+/* Thinking state — no bubble, no dots, no label: just the terminal caret,
+ * blinking in brand neon, waiting for the first chunk. When streaming starts
+ * the same caret remains and text flows in behind it — one continuous
+ * gesture, not two different indicators. */
 .ai-message-thinking .ai-message-content {
+	background: transparent;
+	padding: 2px 0;
+	box-shadow: none;
 	display: inline-flex;
 	align-items: center;
-	gap: var(--size-4-1);
+	min-height: 1.3em;
 }
 
 .ai-message-thinking .ai-message-content::before {
-	content: '';
-	display: inline-block;
-	width: 14px;
-	height: 14px;
-	border: 2px solid var(--interactive-accent);
-	border-top-color: transparent;
-	border-radius: 50%;
-	animation: ai-spin 0.8s linear infinite;
-}
-
-.ai-message-thinking .ai-message-content::after {
-	content: 'Thinking...';
-	color: var(--text-muted);
-	font-style: italic;
-	animation: ai-dots 1.4s infinite;
+	content: '▍';
+	color: var(--curtis-neon, var(--interactive-accent));
+	text-shadow: 0 0 8px color-mix(in srgb, var(--curtis-neon, var(--interactive-accent)) 55%, transparent);
+	animation: ai-blink 1.1s infinite step-end;
 }
 
 @keyframes ai-spin {
@@ -728,47 +1226,47 @@ pre:hover .ai-code-copy-btn {
 .ai-chat-input-area {
 	display: flex;
 	flex-direction: column;
-	padding: var(--size-4-2) var(--size-4-4) var(--size-4-3);
-	background: var(--background-primary);
+	/* Transparent — the composer is borderless and sits directly on the pane,
+	 * so the scroll layer stays visible behind the padding. */
+	padding: 6px 16px 14px;
 	flex-shrink: 0;
 	position: relative;
-	z-index: 3;
+	z-index: 4;
+	/* The scroll layer is absolute, so nothing else fills the column —
+	 * without this the composer would sit right under the top bar. */
+	margin-top: auto;
+}
+
+/* Everything in the area aligns to one capped column so wide panes read as
+ * a centered chat, not a stretched form. */
+.ai-chat-attachments,
+.ai-chat-image-strip,
+.ai-chat-input-wrap {
+	max-width: 760px;
+	width: 100%;
+	margin-inline: auto;
 }
 
 /*
- * Input row — holds ONLY the textarea card so the box gets its own
- * full-width line. Attach/mic/hint/send live on the action row beneath.
- */
-.ai-chat-input-row {
-	display: flex;
-}
-
-/*
- * Input card — opaque background with a real border so the focus halo
- * doesn't bleed through (the previous transparent-border + box-shadow
- * combo produced a "triangle" silhouette artifact).
+ * THE composer — borderless. No card, no border, no glass: the textarea and
+ * its control row sit directly on the pane surface. The field is located by
+ * its placeholder and caret, the controls by alignment — the maturity comes
+ * from what's absent.
  */
 .ai-chat-input-wrap {
 	position: relative;
 	flex: 1;
 	min-width: 0;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 16px;
-	background: var(--background-secondary);
-	padding: 10px var(--size-4-3);
-	transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.ai-chat-input-wrap:focus-within {
-	border-color: var(--interactive-accent);
-	box-shadow: 0 0 0 3px var(--background-modifier-hover);
+	display: flex;
+	flex-direction: column;
+	padding: 6px 8px;
 }
 
 .ai-chat-input {
 	width: 100%;
-	min-height: 56px;
+	min-height: 30px;
 	max-height: 320px;
-	padding: 8px 0;
+	padding: 9px var(--size-4-2);
 	border: none;
 	background: transparent;
 	color: var(--text-normal);
@@ -788,14 +1286,16 @@ pre:hover .ai-code-copy-btn {
 	color: var(--text-faint);
 }
 
-/* Send button group — right end of the action row under the box. */
+/* Delivery group — right end of the composer control row; margin-left: auto
+ * anchors it there while attach, mic, arena, and auto-speak hold the left. */
 .ai-chat-send-col {
 	display: flex;
 	align-items: center;
 	flex-shrink: 0;
+	margin-left: auto;
 }
 
-/* Attach group — left end of the action row under the box. */
+/* Attach group — left end of the composer control row. */
 .ai-chat-attach-col {
 	display: flex;
 	align-items: center;
@@ -890,30 +1390,43 @@ pre:hover .ai-code-copy-btn {
 	border: 1px solid var(--background-modifier-border);
 }
 
-/* Circular FAB send button inside input */
+/* Send button — the brand's neon green disc: logo-green gradient, dark arrow
+ * (neon-sign contrast), and a real green glow. Lifts on hover, presses on
+ * click. The one saturated element in the composer. */
 .ai-chat-send-btn {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 36px;
-	height: 36px;
+	width: 32px;
+	height: 32px;
 	padding: 0;
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
+	background: radial-gradient(120% 120% at 32% 24%, var(--curtis-neon-bright), var(--curtis-neon) 62%);
+	color: var(--curtis-neon-ink);
 	border: none;
 	border-radius: 50%;
 	cursor: pointer;
-	transition: background 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+	box-shadow:
+		0 0 0 1px color-mix(in srgb, var(--curtis-neon) 40%, transparent),
+		0 2px 10px color-mix(in srgb, var(--curtis-neon) 38%, transparent),
+		0 0 22px color-mix(in srgb, var(--curtis-neon) 22%, transparent);
+	transition: background var(--curtis-motion), transform var(--curtis-motion), box-shadow var(--curtis-motion), opacity var(--curtis-motion);
 	flex-shrink: 0;
 }
 
 .ai-chat-send-btn:hover:not(:disabled) {
-	background: var(--interactive-accent-hover);
-	transform: scale(1.05);
+	background: radial-gradient(120% 120% at 32% 24%, var(--curtis-neon-bright), var(--curtis-neon) 40%);
+	transform: translateY(-1px);
+	box-shadow:
+		0 0 0 1px color-mix(in srgb, var(--curtis-neon) 55%, transparent),
+		0 4px 16px color-mix(in srgb, var(--curtis-neon) 50%, transparent),
+		0 0 32px color-mix(in srgb, var(--curtis-neon) 32%, transparent);
 }
 
 .ai-chat-send-btn:active:not(:disabled) {
-	transform: scale(0.95);
+	transform: translateY(0) scale(0.94);
+	box-shadow:
+		0 0 0 1px color-mix(in srgb, var(--curtis-neon) 40%, transparent),
+		0 1px 6px color-mix(in srgb, var(--curtis-neon) 30%, transparent);
 }
 
 .ai-chat-send-btn:disabled {
@@ -924,20 +1437,21 @@ pre:hover .ai-code-copy-btn {
 .ai-chat-send-btn svg {
 	width: 16px;
 	height: 16px;
+	/* Slightly heavier arrow so the dark mark holds its own on the neon. */
+	stroke-width: 2.6px;
+	filter: drop-shadow(0 0 1px color-mix(in srgb, var(--curtis-neon-bright) 60%, transparent));
 }
 
-.ai-chat-send-btn-text {
-	display: none;
-}
-
-/* Abort button — pill, outlined in error red, sits next to input */
+/* Abort button — pill, outlined in error red, sits next to input. A slow
+ * breathing ring while visible — "live", without shouting. */
 .ai-chat-abort-btn {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	width: 36px;
-	height: 36px;
+	/* Same 32px footprint as the Send disc it replaces in-place. */
+	width: 32px;
+	height: 32px;
 	padding: 0;
 	background: transparent;
 	color: var(--text-error);
@@ -946,7 +1460,18 @@ pre:hover .ai-code-copy-btn {
 	font-size: var(--font-ui-small);
 	font-weight: 500;
 	cursor: pointer;
-	transition: background 0.15s ease, transform 0.15s ease;
+	animation: ai-breathe 2.2s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+	transition: background var(--curtis-motion), transform var(--curtis-motion), box-shadow var(--curtis-motion);
+}
+
+@keyframes ai-breathe {
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 color-mix(in srgb, var(--text-error) 30%, transparent);
+	}
+	55% {
+		box-shadow: 0 0 0 7px transparent;
+	}
 }
 
 .ai-chat-abort-btn:hover {
@@ -962,41 +1487,36 @@ pre:hover .ai-code-copy-btn {
 	height: 14px;
 }
 
-.ai-chat-abort-btn-text {
-	display: none;
-}
-
-/* Action row under the box — attach + mic left, hint centered between the
- * groups, send right. The hint's flex:1 does the centering, so no
- * space-between needed. */
+/* Composer control row — under the typing area: attach + mic + arena +
+ * auto-speak hold the left edge; send anchors right via .ai-chat-send-col's
+ * margin-left: auto. */
 .ai-chat-btn-row {
 	display: flex;
 	align-items: center;
 	gap: var(--size-4-2);
-	margin-top: var(--size-4-2);
+	padding: 4px 2px 2px 0;
 }
 
-.ai-chat-input-hint {
-	/* Soak up the space between the attach group and the send button. */
-	flex: 1;
-	min-width: 0;
-	font-size: var(--font-ui-smallest);
-	color: var(--text-faint);
-	text-align: center;
-	line-height: 1.6;
-	/* Inline hint reads as one continuous line; kbd styling is minimal so the
-	 * row doesn't look like a row of separate boxes. */
-}
+/* Motion off — users who ask the OS for reduced motion get a still UI. */
+@media (prefers-reduced-motion: reduce) {
+	.ai-chat-send-btn,
+	.ai-model-picker-btn,
+	.ai-chat-icon-btn,
+	.ai-model-dropdown,
+	.ai-model-dropdown-item,
+	.ai-chat-abort-btn,
+	.ai-message-thinking .ai-message-content::before,
+	.ai-message-streaming .ai-message-content::after,
+	.ai-chat-scroll-btn,
+	.ai-arena-column-response.ai-message-thinking::after {
+		transition: none !important;
+		animation: none !important;
+		opacity: 1 !important;
+	}
 
-.ai-chat-input-hint kbd {
-	font-family: var(--font-monospace);
-	font-size: 0.95em;
-	color: var(--text-muted);
-	background: transparent;
-	border: none;
-	padding: 0;
-	/* Subtle weight change is the only key indicator — no box, no border. */
-	font-weight: 600;
+	.ai-chat-messages {
+		scroll-behavior: auto;
+	}
 }
 
 /* ============================================================================
@@ -1006,8 +1526,8 @@ pre:hover .ai-code-copy-btn {
 .ai-history-dropdown {
 	background: var(--background-secondary);
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 14px;
-	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-l);
 	z-index: 100;
 	padding: var(--size-4-1);
 	min-width: 280px;
@@ -1052,15 +1572,62 @@ pre:hover .ai-code-copy-btn {
 }
 
 /* ============================================================================
-   MODEL PICKER — suggestion rows with capability pills
+   MODEL PICKER — full modal (the "All models…" route) + suggestion rows
+   The modal is the anchored dropdown's big sibling: same design language —
+   soft radius, hairline border, deep shadow, provider dots, real chips —
+   at browsing scale.
    ============================================================================ */
+
+/* Modal chrome — tighter than a stock fuzzy modal, softer corners. */
+/* Shared modal surface — every branded modal sits on the same radius and
+ * shadow tokens. Scoped to the branded classes: plugin CSS loads globally,
+ * so bare `.modal` would restyle every modal in the app. */
+.ai-model-picker-modal,
+.ai-arena-picker-modal,
+.ai-run-command-modal {
+	border-radius: var(--radius-xl);
+	box-shadow: var(--shadow-l);
+}
+
+.ai-model-picker-modal {
+	max-width: 560px;
+	border: 1px solid var(--background-modifier-border);
+}
+
+.ai-model-picker-modal .search-input-container input {
+	font-size: var(--font-ui-medium);
+	padding: var(--size-4-2) var(--size-4-1);
+	border: none;
+	background: transparent;
+}
+
+/* Rows sit inset inside the modal, so the selection reads as a rounded
+ * highlight, not an edge-to-edge stripe. */
+.ai-model-suggestion-row {
+	padding: 1px 6px;
+}
 
 .ai-model-suggestion {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
 	gap: var(--size-4-3);
-	padding: var(--size-4-1) 0;
+	padding: var(--size-4-2) var(--size-4-3);
+	border-radius: var(--radius-m);
+	transition: background var(--curtis-motion);
+}
+
+.ai-model-suggestion-row.is-selected .ai-model-suggestion {
+	background: var(--background-modifier-hover);
+}
+
+.ai-model-suggestion-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--provider-color, var(--interactive-accent));
+	flex-shrink: 0;
+	/* A hair of glow so the dot reads as the provider's brand mark. */
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--provider-color, var(--interactive-accent)) 18%, transparent);
 }
 
 .ai-model-suggestion-text {
@@ -1086,32 +1653,31 @@ pre:hover .ai-code-copy-btn {
 	text-overflow: ellipsis;
 }
 
+/* Capability chips — small bordered pills; vision green, tools blue, context
+ * neutral, active filled with the accent. */
 .ai-model-pills {
 	display: flex;
 	align-items: center;
 	gap: var(--size-4-1);
 	flex-shrink: 0;
+	max-width: 45%;
+	justify-content: flex-end;
+	flex-wrap: wrap;
 }
 
 .ai-model-pill {
 	display: inline-flex;
 	align-items: center;
-	gap: 3px;
-	padding: 0;
-	background: transparent;
-	color: var(--text-faint);
-	border: none;
-	border-radius: 0;
+	gap: var(--size-2-2);
+	padding: var(--size-2-1) var(--size-4-2);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	color: var(--text-muted);
 	font-size: var(--font-ui-smallest);
 	font-weight: 500;
-	line-height: 1.4;
+	line-height: 1.5;
 	white-space: nowrap;
-}
-
-.ai-model-pill + .ai-model-pill::before {
-	content: '·';
-	margin-inline-end: 3px;
-	color: var(--text-faint);
 }
 
 .ai-model-pill svg {
@@ -1121,38 +1687,35 @@ pre:hover .ai-code-copy-btn {
 
 .ai-model-pill.is-active {
 	background: var(--interactive-accent);
+	border-color: transparent;
 	color: var(--text-on-accent);
 }
 
 .ai-model-pill-vision {
 	color: var(--color-green);
+	background: color-mix(in srgb, var(--color-green) 8%, transparent);
+	border-color: color-mix(in srgb, var(--color-green) 24%, transparent);
 }
 
 .ai-model-pill-tools {
 	color: var(--color-blue);
+	background: color-mix(in srgb, var(--color-blue) 8%, transparent);
+	border-color: color-mix(in srgb, var(--color-blue) 24%, transparent);
+}
+
+/* Highlight the active model name in the picker. */
+.ai-model-suggestion-name.is-active {
+	color: var(--interactive-accent);
 }
 
 /* ============================================================================
    PROVIDER SETTINGS SECTIONS
    ============================================================================ */
 
-.ai-provider-settings {
-	margin-bottom: var(--size-4-4);
-	padding: var(--size-4-2) var(--size-4-3);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-}
-
-.ai-provider-settings h4 {
-	margin: 0 0 var(--size-4-2) 0;
-	color: var(--text-normal);
-	font-size: var(--font-ui-medium);
-}
-
-.ai-provider-settings .setting-item {
-	border-top: none;
-	padding: var(--size-4-1) 0;
-}
+/* Provider cards are .setting-item rows (el.addClass on settingEl), so the
+ * settings pane system (S1/S9, bottom of this file) flattens their box and
+ * styles their rows + titles — no box/title rules here. The class remains
+ * as a scope hook for the advanced-params rules below. */
 
 .ai-provider-settings .setting-item-control input[type='text'] {
 	width: 100%;
@@ -1170,6 +1733,37 @@ pre:hover .ai-code-copy-btn {
 	border-radius: var(--radius-s);
 	color: var(--text-normal);
 	font-size: var(--font-ui-small);
+}
+
+/* Per-provider "Advanced request parameters" — collapsed by default so the
+   provider cards stay scannable; opens to the sampling overrides, the
+   Ollama-only local-server options, and the extra-body passthrough. */
+.ai-provider-settings details.ai-advanced-params {
+	margin-top: var(--size-4-2);
+	padding: var(--size-4-2);
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: var(--radius-s);
+}
+
+.ai-provider-settings details.ai-advanced-params > summary {
+	cursor: pointer;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-medium);
+	user-select: none;
+}
+
+.ai-provider-settings details.ai-advanced-params[open] > summary {
+	margin-bottom: var(--size-4-1);
+	color: var(--text-normal);
+}
+
+.ai-provider-settings details.ai-advanced-params > p.ai-setting-hint {
+	margin: 0 0 var(--size-4-2) 0;
+}
+
+.ai-provider-settings details.ai-advanced-params .setting-item-control textarea {
+	min-width: 240px;
 }
 
 /* ============================================================================
@@ -1431,6 +2025,91 @@ pre:hover .ai-code-copy-btn {
 	.ai-message-assistant {
 		max-width: 92%;
 	}
+
+	/* M1 — touch wins over container shrink. The (max-width: 440px) pane
+	 * query out-specifies the single-class bump above, shrinking composer
+	 * buttons to 28/30px on exactly the devices that need 44px targets.
+	 * Re-assert at higher specificity: phones get 40px icon buttons (send /
+	 * abort stay 44), plus a 3px ::after hit-slop pushing the effective
+	 * target past the 44px minimum. */
+	.ai-chat-view .ai-composer .ai-chat-icon-btn {
+		width: 40px;
+		height: 40px;
+		position: relative;
+	}
+
+	.ai-chat-view .ai-composer .ai-chat-icon-btn::after {
+		content: '';
+		position: absolute;
+		inset: -3px;
+	}
+
+	.ai-chat-view .ai-composer .ai-chat-icon-btn svg {
+		width: 20px;
+		height: 20px;
+	}
+
+	.ai-chat-view .ai-chat-send-btn,
+	.ai-chat-view .ai-chat-abort-btn {
+		width: 44px;
+		height: 44px;
+	}
+
+	.ai-chat-view .ai-chat-send-btn svg {
+		width: 18px;
+		height: 18px;
+	}
+
+	/* M2 — real gaps between adjacent actions so a thumb can't mis-tap two
+	 * buttons at once (the desktop cluster is a tight 2px hover toolbar). */
+	.ai-message-actions {
+		gap: 4px;
+		padding: 3px;
+	}
+
+	/* User-message actions sit at (0,2,0) later in the file — same bump at
+	 * higher specificity so both sides match. */
+	.ai-chat-view .ai-user-actions .ai-message-action-btn {
+		width: 32px;
+		height: 32px;
+	}
+
+	.ai-chat-view .ai-user-actions {
+		gap: 4px;
+	}
+
+	/* M3 — composer and scrollback respect the home-indicator / gesture bar:
+	 * safe-area inset added to the bottom padding of both layers. */
+	.ai-chat-input-area {
+		padding-bottom: calc(var(--size-4-3) + env(safe-area-inset-bottom));
+	}
+
+	.ai-chat-messages {
+		padding-bottom: calc(120px + env(safe-area-inset-bottom));
+	}
+
+	/* M6 — picker rows become real touch rows: min-height 44, a pressed
+	 * state (hover never fires on touch), and the focus ring the click-div
+	 * rows owe the keyboard. Arena rows already carry the ring at rest. */
+	.ai-model-suggestion {
+		min-height: 44px;
+	}
+
+	.ai-model-suggestion:active,
+	.ai-arena-picker-row:active {
+		background: var(--background-modifier-hover);
+	}
+
+	.ai-model-suggestion:focus-visible {
+		outline: none;
+		box-shadow:
+			0 0 0 2px var(--background-primary),
+			0 0 0 4px var(--background-modifier-border-focus);
+	}
+
+	.ai-arena-picker-row {
+		min-height: 44px;
+	}
 }
 
 /* Narrow viewports (phones in portrait, narrow sidebar). */
@@ -1445,24 +2124,7 @@ pre:hover .ai-code-copy-btn {
 		font-size: var(--font-ui-medium);
 	}
 
-	/* Double-deck header on phones — mirrors the container query so devices
-	 * without container-query support still stack the two rows (on phones
-	 * the pane spans the viewport, so a media query lands the same layout). */
-	.ai-chat-header {
-		flex-direction: column;
-		align-items: stretch;
-		gap: var(--size-4-1);
-		height: auto;
-		min-height: 48px;
-		padding: var(--size-4-2) var(--size-4-2);
-	}
-
-	/* Centered tools cluster — mirrors the container-query stacked layout. */
-	.ai-chat-header-tools {
-		justify-content: center;
-	}
-
-	/* The model picker should not push history button off-screen on phones. */
+	/* The model picker should not push the send button off-screen on phones. */
 	.ai-model-picker-btn-text {
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -1497,12 +2159,6 @@ pre:hover .ai-code-copy-btn {
 	.ai-history-item {
 		padding: var(--size-4-3) var(--size-4-2);
 		min-height: 48px;
-	}
-
-	/* Hint text wraps more gracefully. */
-	.ai-chat-input-hint {
-		font-size: var(--font-ui-smallest);
-		line-height: 1.5;
 	}
 }
 
@@ -1558,11 +2214,6 @@ pre:hover .ai-code-copy-btn {
 .ai-history-dropdown {
 	position: absolute;
 	inset-inline-end: 8px;
-}
-
-/* Highlight the active model name in the picker. */
-.ai-model-suggestion-name.is-active {
-	color: var(--interactive-accent);
 }
 
 /* ============================================================================
@@ -1689,8 +2340,9 @@ pre:hover .ai-code-copy-btn {
 
 /* Arena toggle button — highlighted when active. */
 .ai-chat-arena-btn.is-active {
-	background: var(--interactive-accent);
+	background: linear-gradient(145deg, var(--interactive-accent), var(--interactive-accent-hover));
 	color: var(--text-on-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 18%, transparent);
 }
 
 .ai-chat-arena-btn.is-active:hover {
@@ -1707,6 +2359,14 @@ pre:hover .ai-code-copy-btn {
 	margin: var(--size-4-2) 0;
 	width: 100%;
 	align-self: stretch;
+}
+
+/* 3-4 way rounds need the width fullscreen gives them; on narrower windows
+ * wrap to two columns so verdicts stay readable. */
+@media (max-width: 1100px) {
+	.ai-arena-layout.ai-arena-wide {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
 }
 
 .ai-arena-column {
@@ -1761,6 +2421,15 @@ pre:hover .ai-code-copy-btn {
 	text-overflow: ellipsis;
 }
 
+.ai-arena-param-summary {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	margin-top: 2px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 .ai-arena-column-response {
 	padding: 8px 10px;
 	font-size: var(--font-ui-small);
@@ -1785,18 +2454,15 @@ pre:hover .ai-code-copy-btn {
 	position: relative;
 }
 
+/* Same terminal caret as the main chat — consistent gesture everywhere. */
 .ai-arena-column-response.ai-message-thinking::after {
-	content: '…';
+	content: '▍';
 	position: absolute;
-	top: 8px;
+	top: 6px;
 	inset-inline-start: 10px;
-	color: var(--text-faint);
-	animation: ai-arena-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes ai-arena-pulse {
-	0%, 100% { opacity: 0.3; }
-	50% { opacity: 1; }
+	color: var(--curtis-neon, var(--interactive-accent));
+	text-shadow: 0 0 8px color-mix(in srgb, var(--curtis-neon, var(--interactive-accent)) 55%, transparent);
+	animation: ai-blink 1.1s infinite step-end;
 }
 
 .ai-arena-column-error {
@@ -1887,6 +2553,9 @@ pre:hover .ai-code-copy-btn {
 	color: var(--text-normal);
 	font-weight: 600;
 	margin-bottom: var(--size-4-2);
+	/* "Selected: n / 4" is live numeric state — tabular figures don't twitch
+	 * as the count ticks. */
+	font-variant-numeric: tabular-nums;
 }
 
 .ai-arena-picker-list {
@@ -1903,13 +2572,23 @@ pre:hover .ai-code-copy-btn {
 	align-items: center;
 	gap: var(--size-4-2);
 	padding: var(--size-4-2) var(--size-4-3);
-	border-radius: var(--radius-s);
+	/* Same highlight radius as the model-picker rows — one row language. */
+	border-radius: var(--radius-m);
 	cursor: pointer;
-	transition: background 0.12s ease;
+	transition: background var(--curtis-motion);
 }
 
 .ai-arena-picker-row:hover {
 	background: var(--background-modifier-hover);
+}
+
+/* Rows are click-divs, so focusability is opt-in (tabindex in TS). Once
+ * focusable they owe the keyboard the same ring every other control gets. */
+.ai-arena-picker-row:focus-visible {
+	outline: none;
+	box-shadow:
+		0 0 0 2px var(--background-primary),
+		0 0 0 4px var(--background-modifier-border-focus);
 }
 
 .ai-arena-picker-row.is-selected {
@@ -1972,6 +2651,7 @@ pre:hover .ai-code-copy-btn {
 	gap: var(--size-4-2);
 	padding-top: var(--size-4-2);
 	border-top: 1px solid var(--background-modifier-border);
+	font-variant-numeric: tabular-nums;
 }
 
 .ai-arena-picker-start:disabled {
@@ -2052,8 +2732,9 @@ pre:hover .ai-code-copy-btn {
 
 /* Auto-speak toggle in the header — highlighted when active. */
 .ai-chat-autospeak-btn.is-active {
-	background: var(--interactive-accent);
+	background: linear-gradient(145deg, var(--interactive-accent), var(--interactive-accent-hover));
 	color: var(--text-on-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 18%, transparent);
 }
 
 .ai-chat-autospeak-btn.is-active:hover {
@@ -2077,7 +2758,10 @@ pre:hover .ai-code-copy-btn {
 	gap: 4px;
 	padding: 2px 8px;
 	background: var(--background-modifier-hover);
-	border-radius: 4px;
+	/* Joins the chip family — same radius + hairline as the model chip and
+	 * agent pill, so the three read as one system. */
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
 	font-size: var(--font-ui-smaller);
 	cursor: pointer;
 	max-width: 150px;
@@ -2086,7 +2770,7 @@ pre:hover .ai-code-copy-btn {
 	white-space: nowrap;
 	color: var(--text-muted);
 	flex-shrink: 0;
-	transition: background 0.15s ease, color 0.15s ease;
+	transition: background var(--curtis-motion), color var(--curtis-motion), border-color var(--curtis-motion);
 }
 
 .ai-chat-active-note:hover {
@@ -2260,6 +2944,20 @@ textarea.ai-system-prompt-core.ai-system-prompt-core {
    TTS PLAYER BAR — inline under assistant message during playback.
    Pause/resume, skip ±1 sentence, position (n/N), rate cycle, close.
    ============================================================================ */
+
+/* Karaoke highlight — marks around the sentence being read. The spans are
+   transparent when idle so inline layout never shifts; wrapping is live-DOM
+   and unwrapped when playback ends. */
+.ai-tts-sent {
+	background: transparent;
+	border-radius: 2px;
+	transition: background-color 0.15s ease;
+}
+
+.ai-tts-sent.is-active {
+	background: var(--text-highlight-bg, rgba(255, 208, 0, 0.4));
+	color: inherit;
+}
 
 .ai-tts-player {
 	display: flex;
@@ -2553,4 +3251,956 @@ textarea.ai-system-prompt-core.ai-system-prompt-core {
 	display: flex;
 	justify-content: flex-end;
 	margin-top: var(--size-4-2);
+}
+
+/* ====== TERMINAL PANE ====== */
+/* Desktop-only shell pane. Own window or tab; monospace, theme variables
+   only. The run-command confirm modal (agent-initiated shell) lives here
+   too — same family, same settings section. */
+
+.ai-term-view {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	padding: 0;
+	background: var(--background-primary);
+}
+
+.ai-term-view .is-hidden {
+	display: none;
+}
+
+.ai-term-topbar {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	padding: var(--size-2-1) var(--size-4-3);
+	border-bottom: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	min-height: var(--size-4-4);
+}
+
+.ai-term-cwd {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-1);
+	min-width: 0;
+	flex: 1;
+	padding: var(--size-2-1) var(--size-2-2);
+	border: none;
+	border-radius: var(--radius-s);
+	background: transparent;
+	color: var(--text-muted);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+	text-align: left;
+}
+
+.ai-term-cwd:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.ai-term-cwd-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	direction: rtl;
+	/* Keep the tail of the path visible — the deepest folder is the
+	   informative end, so truncate the head. */
+}
+
+.ai-term-cwd .svg-icon {
+	flex-shrink: 0;
+}
+
+.ai-term-shell {
+	flex-shrink: 0;
+	padding: 1px var(--size-2-1);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	color: var(--text-muted);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+}
+
+.ai-term-iconbtn {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--size-2-1);
+	background: transparent;
+	border: none;
+	border-radius: var(--radius-s);
+	color: var(--text-muted);
+	cursor: pointer;
+	transition:
+		background var(--curtis-motion),
+		color var(--curtis-motion),
+		box-shadow var(--curtis-motion);
+}
+
+.ai-term-iconbtn:focus-visible {
+	outline: none;
+	box-shadow:
+		0 0 0 2px var(--background-primary),
+		0 0 0 4px var(--background-modifier-border-focus);
+}
+
+.ai-term-iconbtn:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.ai-term-iconbtn.is-hidden {
+	display: none;
+}
+
+/* Stop while running speaks — error color + the same breathing ring as the
+ * chat abort button, so "stop" reads as "stop" in every pane. */
+.ai-term-iconbtn.is-running {
+	color: var(--text-error);
+	animation: ai-breathe 2.2s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+.ai-term-scroll {
+	flex: 1;
+	overflow-y: auto;
+	padding: var(--size-4-3);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.5;
+	/* Obsidian's custom views don't opt into text selection by default —
+	   enforce it explicitly (same as .ai-message-content): terminal output
+	   exists to be selected and copied. */
+	user-select: text;
+	-webkit-user-select: text;
+}
+
+.ai-term-note {
+	color: var(--text-faint);
+	margin-bottom: var(--size-2-2);
+}
+
+.ai-term-banner {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--size-2-2);
+	margin-bottom: var(--size-2-2);
+	padding-bottom: var(--size-2-2);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ai-term-banner-mark {
+	flex-shrink: 0;
+	display: flex;
+	padding-top: 2px;
+	color: var(--interactive-accent);
+}
+
+.ai-term-banner-mark .svg-icon {
+	width: 16px;
+	height: 16px;
+}
+
+.ai-term-banner-title {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.ai-term-banner-hint {
+	color: var(--text-faint);
+	margin-top: 2px;
+}
+
+.ai-term-block {
+	margin-bottom: var(--size-2-2);
+}
+
+.ai-term-block pre {
+	margin: 0;
+	padding: 0;
+	background: transparent;
+	border: none;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-family: inherit;
+	font-size: inherit;
+}
+
+.ai-term-cmdline {
+	color: var(--text-normal);
+}
+
+.ai-term-cmdline .ai-term-prompt {
+	color: var(--interactive-accent);
+	margin-right: var(--size-2-1);
+	user-select: none;
+}
+
+.ai-term-stdout {
+	color: var(--text-normal);
+}
+
+.ai-term-stderr {
+	color: var(--text-error);
+}
+
+.ai-term-exit {
+	margin-top: var(--size-2-1);
+	font-size: var(--font-ui-smaller);
+	/* Exit codes are numeric state — tabular figures keep the column steady. */
+	font-variant-numeric: tabular-nums;
+}
+
+.ai-term-exit-ok {
+	color: var(--text-faint);
+}
+
+.ai-term-exit-fail {
+	color: var(--text-error);
+}
+
+.ai-term-inputbar {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-1);
+	padding: var(--size-2-2) var(--size-4-2);
+	border-top: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+}
+
+.ai-term-inputbar .ai-term-prompt {
+	flex-shrink: 0;
+	color: var(--interactive-accent);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-small);
+}
+
+.ai-term-input {
+	flex: 1;
+	padding: var(--size-2-1) 0;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-normal);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-small);
+}
+
+.ai-term-input:disabled {
+	color: var(--text-faint);
+	background: transparent;
+	cursor: not-allowed;
+}
+
+/* Prompt dims while a command runs — the disabled input state extends to
+ * the line's prefix, not just the field. */
+.ai-term-inputbar .ai-term-prompt.dim {
+	color: var(--text-faint);
+}
+
+.ai-term-input:focus {
+	border: none;
+	box-shadow: none;
+}
+
+/* Ctrl+R reverse history search — the "(r-search)" badge beside the prompt,
+ * turned in the theme's error color while the query matches nothing. */
+.ai-term-search-hint {
+	flex-shrink: 0;
+	color: var(--interactive-accent);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-small);
+	white-space: nowrap;
+}
+
+.ai-term-search-hint.is-failed {
+	color: var(--text-error);
+}
+
+/* A stream that hit the capture cap says so, quietly. */
+.ai-term-truncated {
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+/* Bare URLs in command output are clickable. */
+.ai-term-scroll a {
+	color: var(--interactive-accent);
+	text-decoration: none;
+}
+
+.ai-term-scroll a:hover {
+	text-decoration: underline;
+}
+
+/* ---- ANSI colors (terminal/ansi.ts span tokens) ----
+ * Fixed palette slots, theme-adapted: dark follows the GitHub Dark set,
+ * light the GitHub Light set, both chosen so every slot stays legible on
+ * its background (ANSI "black"/"white" are mid-grays here — a literal
+ * black on a dark background would be invisible). Extended 256/24-bit
+ * colors arrive as direct rgb() styles on the span, not classes. */
+.ai-ansi-bold { font-weight: 700; }
+.ai-ansi-dim { opacity: 0.6; }
+.ai-ansi-italic { font-style: italic; }
+.ai-ansi-underline { text-decoration: underline; }
+
+.theme-dark .ai-ansi-fg-black { color: #8b949e; }
+.theme-dark .ai-ansi-fg-red { color: #ff7b72; }
+.theme-dark .ai-ansi-fg-green { color: #7ee787; }
+.theme-dark .ai-ansi-fg-yellow { color: #ffa657; }
+.theme-dark .ai-ansi-fg-blue { color: #79c0ff; }
+.theme-dark .ai-ansi-fg-magenta { color: #d2a8ff; }
+.theme-dark .ai-ansi-fg-cyan { color: #56d4dd; }
+.theme-dark .ai-ansi-fg-white { color: #e6edf3; }
+.theme-dark .ai-ansi-fg-bright-black { color: #6e7681; }
+.theme-dark .ai-ansi-fg-bright-red { color: #ffa198; }
+.theme-dark .ai-ansi-fg-bright-green { color: #aff5b4; }
+.theme-dark .ai-ansi-fg-bright-yellow { color: #fdd678; }
+.theme-dark .ai-ansi-fg-bright-blue { color: #a5d6ff; }
+.theme-dark .ai-ansi-fg-bright-magenta { color: #e2c5ff; }
+.theme-dark .ai-ansi-fg-bright-cyan { color: #9decf1; }
+.theme-dark .ai-ansi-fg-bright-white { color: #ffffff; }
+.theme-dark .ai-ansi-bg-black { background-color: #6e7681; }
+.theme-dark .ai-ansi-bg-red { background-color: #ff7b72; }
+.theme-dark .ai-ansi-bg-green { background-color: #7ee787; }
+.theme-dark .ai-ansi-bg-yellow { background-color: #ffa657; }
+.theme-dark .ai-ansi-bg-blue { background-color: #79c0ff; }
+.theme-dark .ai-ansi-bg-magenta { background-color: #d2a8ff; }
+.theme-dark .ai-ansi-bg-cyan { background-color: #56d4dd; }
+.theme-dark .ai-ansi-bg-white { background-color: #e6edf3; }
+.theme-dark .ai-ansi-bg-bright-black { background-color: #8b949e; }
+.theme-dark .ai-ansi-bg-bright-red { background-color: #ffa198; }
+.theme-dark .ai-ansi-bg-bright-green { background-color: #aff5b4; }
+.theme-dark .ai-ansi-bg-bright-yellow { background-color: #fdd678; }
+.theme-dark .ai-ansi-bg-bright-blue { background-color: #a5d6ff; }
+.theme-dark .ai-ansi-bg-bright-magenta { background-color: #e2c5ff; }
+.theme-dark .ai-ansi-bg-bright-cyan { background-color: #9decf1; }
+.theme-dark .ai-ansi-bg-bright-white { background-color: #ffffff; }
+
+.theme-light .ai-ansi-fg-black { color: #1f2328; }
+.theme-light .ai-ansi-fg-red { color: #cf222e; }
+.theme-light .ai-ansi-fg-green { color: #116329; }
+.theme-light .ai-ansi-fg-yellow { color: #9a6700; }
+.theme-light .ai-ansi-fg-blue { color: #0550ae; }
+.theme-light .ai-ansi-fg-magenta { color: #8250df; }
+.theme-light .ai-ansi-fg-cyan { color: #1b7c83; }
+.theme-light .ai-ansi-fg-white { color: #57606a; }
+.theme-light .ai-ansi-fg-bright-black { color: #57606a; }
+.theme-light .ai-ansi-fg-bright-red { color: #a40e26; }
+.theme-light .ai-ansi-fg-bright-green { color: #1a7f37; }
+.theme-light .ai-ansi-fg-bright-yellow { color: #bf8700; }
+.theme-light .ai-ansi-fg-bright-blue { color: #0969da; }
+.theme-light .ai-ansi-fg-bright-magenta { color: #6639ba; }
+.theme-light .ai-ansi-fg-bright-cyan { color: #3192aa; }
+.theme-light .ai-ansi-fg-bright-white { color: #1f2328; }
+.theme-light .ai-ansi-bg-black { background-color: #57606a; }
+.theme-light .ai-ansi-bg-red { background-color: #cf222e; }
+.theme-light .ai-ansi-bg-green { background-color: #116329; }
+.theme-light .ai-ansi-bg-yellow { background-color: #9a6700; }
+.theme-light .ai-ansi-bg-blue { background-color: #0550ae; }
+.theme-light .ai-ansi-bg-magenta { background-color: #8250df; }
+.theme-light .ai-ansi-bg-cyan { background-color: #1b7c83; }
+.theme-light .ai-ansi-bg-white { background-color: #d1d9e0; }
+.theme-light .ai-ansi-bg-bright-black { background-color: #8c959f; }
+.theme-light .ai-ansi-bg-bright-red { background-color: #a40e26; }
+.theme-light .ai-ansi-bg-bright-green { background-color: #1a7f37; }
+.theme-light .ai-ansi-bg-bright-yellow { background-color: #bf8700; }
+.theme-light .ai-ansi-bg-bright-blue { background-color: #0969da; }
+.theme-light .ai-ansi-bg-bright-magenta { background-color: #6639ba; }
+.theme-light .ai-ansi-bg-bright-cyan { background-color: #3192aa; }
+.theme-light .ai-ansi-bg-bright-white { background-color: #ffffff; }
+
+/* Agent-initiated command confirmation */
+.ai-run-command-modal .ai-run-command-hint {
+	margin-bottom: var(--size-2-2);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.ai-run-command-modal .ai-run-command-cwd {
+	display: flex;
+	gap: var(--size-2-2);
+	margin-bottom: var(--size-2-1);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	word-break: break-all;
+}
+
+.ai-run-command-modal .ai-run-command-cwd-label {
+	flex-shrink: 0;
+	font-family: var(--font-interface);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-faint);
+}
+
+.ai-run-command-modal .ai-run-command-cmd {
+	max-height: 200px;
+	overflow: auto;
+	margin: 0 0 var(--size-4-2);
+	padding: var(--size-2-2) var(--size-2-3);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+/* ============================================================================
+   Inline autocomplete — editor ghost text
+   Dimmed continuation rendered after the cursor. color-only (no italic —
+   italic shifts glyph widths and the ghost visibly jitters as it renders).
+   ============================================================================ */
+
+.cm-ghost-suggestion {
+	color: var(--text-faint);
+	opacity: 0.8;
+	white-space: pre-wrap;
+	pointer-events: none;
+}
+
+/* ============================================================================
+   Curtis mark lockup — modal titles and the settings About row
+   Flex row with a fixed-size mark; the svg inherits currentColor like any
+   Lucide icon.
+   ============================================================================ */
+
+.curtis-mark-title {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-2);
+	/* One lockup — mark + title at the same size in every branded modal. */
+	font-size: var(--font-ui-medium);
+}
+
+.curtis-mark-title .curtis-modal-title-icon {
+	flex-shrink: 0;
+}
+
+.curtis-mark-title .curtis-modal-title-icon .svg-icon {
+	width: 16px;
+	height: 16px;
+}
+
+/* The arena modal's lockup is an in-flow h2 (plain Modal, no titleEl) — pin
+ * its margin so both modals rhythm-match the search input's padding. */
+h2.curtis-mark-title {
+	margin: 0 0 var(--size-4-2);
+}
+
+/* ============================================================================
+   SETTINGS PANE — the Curtis settings design system (round 2).
+   Scoped to .curtis-settings (added to the tab container in settings.ts) so
+   core panes and other plugins' settings are untouched. Theme variables only.
+   ============================================================================ */
+
+/* S1 — flat editorial rhythm. Obsidian 1.13 renders rows as cards (border +
+ * background-secondary + radius + margin); inside this tab the chrome is
+ * neutralized and rows read as hairline-separated editorial lines instead.
+ * Group headings carry the inter-section gap (S4). */
+.curtis-settings .setting-item {
+	background: transparent;
+	border: none;
+	border-radius: 0;
+	margin: 0;
+	padding: var(--size-4-4) 0;
+}
+
+.curtis-settings .setting-group .setting-item:not(:last-child) {
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/* S2 — text hierarchy: name carries, description recedes, 4px gap. */
+.curtis-settings .setting-item-name {
+	color: var(--text-normal);
+	font-weight: var(--font-medium);
+}
+
+.curtis-settings .setting-item-description {
+	color: var(--text-muted);
+	margin-top: var(--size-2-1);
+}
+
+/* S5 — descriptions measure like reading matter: 58ch max, pretty wrap
+ * kills the orphaned last line. */
+.curtis-settings .setting-item-description {
+	max-width: 58ch;
+	text-wrap: pretty;
+}
+
+/* S3 — one control rail: dropdowns, text fields and sliders share a 264px
+ * right-aligned edge, so the column reads as engineered, not accumulated.
+ * `min()` lets the rail shrink with the pane so it never fights Obsidian's
+ * own container-query row stacking; right alignment holds only on wide
+ * panes (see the @container rule below). */
+.curtis-settings .setting-item-control {
+	min-width: min(264px, 100%);
+	justify-content: flex-end;
+	gap: var(--size-4-2);
+	/* Rows whose rail holds a control + button (e.g. the provider Scope
+	 * dropdown + reset) measured 30px+ past the rail — wrap instead of
+	 * overflow; no effect on single-control rows. */
+	flex-wrap: wrap;
+	row-gap: var(--size-2-1);
+}
+
+.curtis-settings .setting-item-control select,
+.curtis-settings .setting-item-control input[type='text'],
+.curtis-settings .setting-item-control input[type='password'] {
+	width: 264px;
+	max-width: 100%;
+}
+
+.curtis-settings .setting-item-control input[type='range'] {
+	width: 264px;
+	max-width: 100%;
+}
+
+/* S3 — narrow pane: when the tab content stacks rows (Obsidian's own
+ * container query), controls drop to the left edge with the description
+ * instead of floating right. Touch devices get the same via the
+ * (hover: none) block below. */
+@container (max-width: 700px) {
+	.curtis-settings .setting-item-control {
+		justify-content: flex-start;
+	}
+}
+
+/* S3 — slider readout: the value visible without scrubbing. */
+.ai-slider-readout {
+	flex-shrink: 0;
+	min-width: 5ch;
+	text-align: end;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+}
+
+/* S4 — section headers on the 2.0 system: uppercase letterspaced micro-label
+ * with a hairline, not a 20px bold. Obsidian 1.13.7 renders declarative
+ * group headings as `.setting-group > .setting-item-heading` (there is no
+ * `.setting-group-heading` class — round 2 targeted a ghost). The text
+ * lives in `.setting-item-name`, which S2 restyles, so the treatment is
+ * re-asserted on the name itself rather than left to inheritance. The About
+ * group's mark lockup lives inside the row body, so it stays untouched. */
+.curtis-settings .setting-group > .setting-item-heading {
+	margin: var(--size-4-6) 0 var(--size-4-2);
+	padding: 0 0 var(--size-4-2);
+	border-bottom: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smallest);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+.curtis-settings .setting-group > .setting-item-heading .setting-item-name {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smallest);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+/* S8 — icon-only extras join the ghost-button family: 28px target, md
+ * radius, the shared motion token, quiet → normal on hover. Destructive
+ * actions stay mod-destructive / var(--text-error) — untouched here. */
+.curtis-settings .setting-item-control .extra-setting-button {
+	width: 28px;
+	height: 28px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--radius-m);
+	color: var(--text-muted);
+	transition:
+		background var(--curtis-motion),
+		color var(--curtis-motion);
+}
+
+.curtis-settings .setting-item-control .extra-setting-button:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+/* S6 — focus-visible parity: the round-1 double ring on every control in
+ * the pane — inputs, selects, textareas, toggles, extra buttons, CTA
+ * buttons, and the advanced-params disclosure. (Checkbox containers are a
+ * label and stock 1.13 already rings them — no rule here.) */
+.curtis-settings .setting-item-control input:focus-visible,
+.curtis-settings .setting-item-control select:focus-visible,
+.curtis-settings .setting-item-control textarea:focus-visible,
+.curtis-settings .setting-item-control .extra-setting-button:focus-visible,
+.curtis-settings .setting-item-control button:focus-visible,
+.curtis-settings details.ai-advanced-params > summary:focus-visible {
+	outline: none;
+	box-shadow:
+		0 0 0 2px var(--background-primary),
+		0 0 0 4px var(--background-modifier-border-focus);
+}
+
+/* S7 — the advanced-params disclosure earns its affordance: a chevron that
+ * rotates open, a hover surface, the shared motion, and the "(N set)" count
+ * as a tabular pill. Nested rows read inside the card via a quiet inset
+ * surface when open. */
+.ai-provider-settings details.ai-advanced-params > summary {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-4-1) var(--size-4-2);
+	margin: calc(var(--size-4-1) * -1) calc(var(--size-4-2) * -1);
+	border-radius: var(--radius-m);
+	transition: background var(--curtis-motion), color var(--curtis-motion);
+	list-style: none;
+	cursor: pointer;
+	color: var(--text-muted);
+	font-weight: 500;
+}
+
+.ai-provider-settings details.ai-advanced-params > summary::-webkit-details-marker {
+	display: none;
+}
+
+/* Chevron affordance — a disclosure you can't miss. */
+.ai-provider-settings details.ai-advanced-params > summary::before {
+	content: '';
+	width: 0; height: 0;
+	flex-shrink: 0;
+	border-right: 4px solid transparent;
+	border-left: 4px solid transparent;
+	border-top: 5px solid var(--text-faint);
+	transition: transform var(--curtis-motion);
+	transform: rotate(-90deg);
+	margin-left: 2px;
+}
+
+.ai-provider-settings details.ai-advanced-params[open] > summary::before {
+	transform: rotate(0deg);
+	border-top-color: var(--text-muted);
+}
+
+.ai-provider-settings details.ai-advanced-params > summary:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.ai-provider-settings details.ai-advanced-params > summary:hover::before {
+	border-top-color: var(--text-normal);
+}
+
+.ai-advanced-count {
+	flex-shrink: 0;
+	padding: 0 var(--size-2-2);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smallest);
+	font-variant-numeric: tabular-nums;
+}
+
+.ai-provider-settings details.ai-advanced-params[open] {
+	background: color-mix(in srgb, var(--background-modifier-hover) 35%, transparent);
+}
+
+/* S9 — MCP connection status colors on the server-card Status row (the
+ * classes land on .setting-item-description, so they out-rank S2's muted). */
+.curtis-settings .ai-mcp-status-connected {
+	color: var(--color-green);
+	font-size: var(--font-ui-smallest);
+}
+
+.curtis-settings .ai-mcp-status-error {
+	color: var(--text-error);
+	font-size: var(--font-ui-smallest);
+}
+
+/* S9 — GCP connector status row: same contract as the MCP ones. */
+.curtis-settings .ai-gcp-status-connected {
+	color: var(--color-green);
+	font-size: var(--font-ui-smallest);
+}
+
+.curtis-settings .ai-gcp-status-error {
+	color: var(--text-error);
+	font-size: var(--font-ui-smallest);
+}
+
+/* S9 — pasted JSON blobs read as code: monospace in the stock form-field
+ * textarea (GCP service-account key). */
+.curtis-settings textarea.ai-json-paste {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-small);
+	border-radius: var(--radius-s);
+}
+
+/* S9 — extra-body passthrough reads as code: monospace in the stock
+ * form-field textarea, matching the manual-model input's radius. */
+.curtis-settings textarea.ai-extra-body-json {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-small);
+	border-radius: var(--radius-s);
+}
+
+/* S9 — general hint paragraphs created imperatively (the details variant
+ * above keeps its own spacing); the privacy callout keeps its boxed
+ * treatment, so it is excluded here. */
+/* Unscoped on purpose: modals (agent editor, MCP, custom provider) use the
+ * same hint class outside the settings tab. */
+.ai-setting-hint:not(.ai-privacy-note) {
+	margin-top: var(--size-2-2);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smallest);
+}
+
+/* Form errors in modals (custom-provider, MCP server) — were unstyled
+ * paragraphs; now they read as errors. */
+.ai-form-error,
+.ai-modal-error {
+	margin-top: var(--size-2-2);
+	color: var(--text-error);
+	font-size: var(--font-ui-smallest);
+}
+
+/* row() builds its Setting INSIDE the framework's own .setting-item, whose
+ * stock display is a flex row — the nested row becomes a flex item that can
+ * shrink below its content, and its label column (min-width 0) collapses to
+ * zero whenever name + description + the 264px control rail exceed the row
+ * width (long-text rows rendered as bare toggles). Nested rows fill their
+ * host row instead; the label wraps rather than vanishing. */
+.curtis-settings .setting-item > .setting-item {
+	flex: 1 1 auto;
+	width: 100%;
+}
+
+/* S9 — provider cards are flattened by the pane system above; keep their
+ * internal compact rhythm and the card title as a plain label (the old
+ * `h4` rule was dead — setHeading never creates an h4).
+ *
+ * The card container IS Obsidian's .setting-item (the render callback
+ * empties settingEl and rebuilds inside it), whose stock layout is a
+ * horizontal flex row — without this override the card's rows smear
+ * side-by-side (same trap noted at settings.ts ~2205). */
+.curtis-settings .ai-provider-settings {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.curtis-settings .ai-provider-settings .setting-item {
+	padding: var(--size-4-1) 0;
+}
+
+.curtis-settings .ai-provider-settings .setting-item + .setting-item {
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.curtis-settings .ai-provider-settings .setting-item-heading {
+	padding: 0 0 var(--size-4-1);
+}
+
+.curtis-settings .ai-provider-settings .setting-item-heading .setting-item-name {
+	margin: 0;
+	color: var(--text-normal);
+	font-size: var(--font-ui-medium);
+	font-weight: 600;
+	text-transform: none;
+	letter-spacing: normal;
+}
+
+/* ============================================================================
+   MOBILE ROUND 2 — touch-only layout changes. Desktop rendering is
+   unchanged: everything below is @media (hover: none) or .is-mobile scoped.
+   ============================================================================ */
+
+/* M7 — run-command footer for thumbs: Run once (primary) spans the top,
+ * Deny | Always this session share the second row. Desktop keeps the
+ * single inline row. */
+@media (hover: none) {
+	.ai-run-command-modal .setting-item {
+		display: block;
+		border-top: none;
+	}
+
+	.ai-run-command-modal .setting-item-control {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--size-4-2);
+		width: 100%;
+	}
+
+	.ai-run-command-modal .setting-item-control button {
+		min-height: 44px;
+		border-radius: var(--radius-m);
+	}
+
+	.ai-run-command-modal .setting-item-control .mod-cta {
+		grid-column: 1 / -1;
+		order: -1;
+	}
+}
+
+/* M4 — topbar re-composed for 390: the model picker now lives in the
+ * composer row (moved in view.ts), styled as a quiet chip; the active-note
+ * pill collapses to an icon-only 40px hit target. Desktop topbar: untouched
+ * (the picker never leaves the title row there). */
+.is-mobile .ai-chat-btn-row .ai-model-picker-btn {
+	min-height: 44px;
+	min-width: 0;
+	max-width: 55%;
+	padding: var(--size-4-1) var(--size-4-2);
+	background: transparent;
+	font-size: var(--font-ui-smaller);
+}
+
+.is-mobile .ai-chat-btn-row .ai-model-picker-btn-provider {
+	display: none;
+}
+
+.is-mobile .ai-chat-btn-row .ai-model-picker-btn-text {
+	gap: var(--size-2-2);
+}
+
+.is-mobile .ai-chat-active-note.is-compact {
+	width: 40px;
+	height: 40px;
+	max-width: none;
+	padding: 0;
+	justify-content: center;
+	gap: 0;
+	border-radius: var(--radius-m);
+}
+
+.is-mobile .ai-chat-active-note.is-compact span {
+	display: none;
+}
+
+.is-mobile .ai-chat-active-note.is-compact .svg-icon {
+	width: 18px;
+	height: 18px;
+	opacity: 1;
+}
+
+/* M8 — settings rows stack clean at 390: the control drops full-width
+ * (Obsidian's mobile stacking is kept), toggles grow to a 44px hit, icon
+ * extras grow with them, sliders run the row with their readout at the
+ * rail's end. */
+@media (hover: none) {
+	.curtis-settings .setting-item {
+		flex-wrap: wrap;
+	}
+
+	.curtis-settings .setting-item-control {
+		min-width: 0;
+		width: 100%;
+		justify-content: flex-start;
+	}
+
+	.curtis-settings .setting-item-control select,
+	.curtis-settings .setting-item-control input[type='text'],
+	.curtis-settings .setting-item-control input[type='password'],
+	.curtis-settings .setting-item-control input[type='range'] {
+		flex: 1;
+		width: auto;
+		min-width: 0;
+	}
+
+	.curtis-settings .checkbox-container {
+		min-width: 44px;
+		height: 26px;
+	}
+
+	.curtis-settings .checkbox-container:after {
+		left: 3px;
+		top: 3px;
+		width: 20px;
+		height: 20px;
+	}
+
+	.curtis-settings .checkbox-container.is-enabled:after {
+		left: 21px;
+	}
+
+	.curtis-settings .setting-item-control .extra-setting-button {
+		width: 44px;
+		height: 44px;
+	}
+}
+
+/* Slash help modal — filter input + empty state */
+.ai-slash-help-filter {
+	width: 100%;
+	margin-bottom: var(--size-4-3);
+	padding: var(--size-4-1) var(--size-4-2);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: var(--background-primary);
+	color: var(--text-normal);
+}
+
+.ai-slash-help-filter:focus {
+	border-color: var(--interactive-accent);
+	outline: none;
+	box-shadow: none;
+}
+
+.ai-slash-help-empty {
+	padding: var(--size-4-4) 0;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+	text-align: center;
+}
+
+/* Extended thinking (Anthropic) — collapsible reasoning block above the answer */
+.ai-thinking-host {
+	margin-bottom: var(--size-4-2);
+}
+
+.ai-thinking-block {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: var(--background-secondary);
+	overflow: hidden;
+}
+
+.ai-thinking-block > summary.ai-thinking-summary {
+	cursor: pointer;
+	user-select: none;
+	padding: var(--size-4-1) var(--size-4-2);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: 500;
+}
+
+.ai-thinking-block.is-streaming > summary.ai-thinking-summary::after {
+	content: '…';
+	margin-left: var(--size-4-1);
+	animation: ai-thinking-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ai-thinking-pulse {
+	0%, 100% { opacity: 0.25; }
+	50% { opacity: 1; }
+}
+
+.ai-thinking-block > .ai-thinking-content {
+	padding: 0 var(--size-4-2) var(--size-4-2);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 260px;
+	overflow-y: auto;
+}
+
+/* Arena columns: tighter fit inside the narrow response area */
+.ai-arena-column > .ai-thinking-host {
+	margin-bottom: var(--size-4-1);
 }

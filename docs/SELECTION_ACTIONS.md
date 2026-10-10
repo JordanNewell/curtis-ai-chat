@@ -1,6 +1,6 @@
 # Selection actions
 
-Right-click any text selection in a note for AI-powered transformations. Each action runs the selection through your active model and writes the result back into the note — either replacing the selection or inserting below.
+Right-click any text selection in a note for AI-powered transformations. Each action runs the selection through your active model — replace-mode actions open a diff review before anything is written, insert-below actions append directly.
 
 ## Access
 
@@ -8,7 +8,7 @@ Right-click any text selection in a note for AI-powered transformations. Each ac
 2. Highlight some text
 3. Right-click → **AI** menu items appear at the top of the context menu
 
-Or use the command palette (`Ctrl+P`) — every action is registered as a command with the prefix *"Curtis AI Chat"*.
+Or use the command palette (`Ctrl+P`) — every action is registered as a command with the prefix *"Curtis AI"*.
 
 ## Writing actions
 
@@ -21,7 +21,7 @@ Or use the command palette (`Ctrl+P`) — every action is registered as a comman
 | **Improve writing** | Fix grammar, enhance clarity and flow, preserve meaning |
 | **Fix grammar** | Spelling, punctuation, grammar only — no rewrite |
 | **Shorten** | Cut to roughly half the length, keep key info |
-| **Translate** | Translate to English (configurable per-action) |
+| **Translate** | Translate to any language — Curtis asks for the target and remembers the last one |
 | **Extract key points** | Structured list of main ideas |
 | **Extract wikilinks** | Comma-separated `[[wikilinks]]` for entities worth linking |
 | **Make a table** | Convert free-form text into a clean markdown table |
@@ -41,27 +41,26 @@ Or use the command palette (`Ctrl+P`) — every action is registered as a comman
 
 Each action has an **insert mode**:
 
-- **`replace`** — the selection is replaced with the result (most actions)
+- **`replace`** — the result is shown as a line-by-line diff first ([review modal](DIFF_REWRITE.md)); nothing is written until you accept (most actions)
 - **`insert-below`** — the original text stays, the result is appended below (used by `Add tests`, `Extract wikilinks`)
 
-The insert mode is fixed per action — you can't change it from the UI. If you want to keep the original AND get the rewrite, use `insert-below` actions, or undo (`Ctrl+Z`) after a `replace`.
+The insert mode is fixed for built-in actions; custom actions choose it in their editor.
 
-## Adding custom actions
+## Custom actions
 
-The selection actions are defined in `src/commands/selection.ts` as a `Record<string, SelectionAction>`:
+Define your own actions under **Settings → Curtis AI → Custom selection actions**. Each has:
 
-```ts
-'my-action': {
-  systemPrompt: 'You are a pirate. Rewrite everything in pirate speak.',
-  userPrompt: (text) => `Rewrite this:\n\n${text}`,
-  insertMode: 'replace',
-}
-```
+- **Name** — shown in the context menu, command palette and hotkeys list
+- **System prompt** — how the model should behave
+- **User prompt template** — `{{selection}}` marks where the selected text goes; without it the selection is not sent
+- **Insert mode** — replace (diff review first) or insert-below
 
-Then register a command in `src/commands/index.ts` and optionally add it to the context menu in `src/commands/context-menu.ts`.
+Custom actions appear alongside the built-ins everywhere selection actions are surfaced. Palette commands are registered at startup — reload after adding one; the context menu picks up changes immediately.
+
+Developers: the built-in prompts live in `src/commands/selection.ts` (`SELECTION_ACTIONS`).
 
 ## Tips
 
-- **Hotkeys** — bind any action via Obsidian's Hotkeys settings. Look for commands starting with *"Curtis AI Chat: "*.
+- **Hotkeys** — bind any action, custom included, via Obsidian's Hotkeys settings. Look for commands starting with *"Curtis AI: "*.
 - **Multiple selections** — Obsidian supports multiple cursors; each selection gets its own AI call when you trigger an action.
 - **Long selections** — there's no hard cap, but extremely long selections may exceed your model's context window. Chunk them.

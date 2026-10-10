@@ -7,6 +7,7 @@ import { Notice } from 'obsidian';
 import type CurtisPlugin from '../main';
 import type { AIMessage, ConversationMessage } from '../types';
 import { appendJournalEntry } from '../memory/journal';
+import { ThinkingStreamSplitter } from '../providers/anthropic';
 
 const RECAP_SYSTEM_PROMPT =
 	'You are Curtis, an AI assistant integrated into Obsidian. Summarize the conversation below in 2-3 terse bullet points: what was worked on, what was decided, and what was left open. No preamble, no headings, no emoji — just the bullets, written as durable notes a future session could pick up from.';
@@ -46,6 +47,9 @@ export async function runRecap(
 
 	const notice = new Notice('Recapping…', 0);
 	let buffer = '';
+	// Extended-thinking providers tag reasoning chunks with <think> sentinels —
+	// the recap must store the answer only.
+	const thinking = new ThinkingStreamSplitter();
 	try {
 		const messages: AIMessage[] = [
 			{ role: 'system', content: RECAP_SYSTEM_PROMPT },
@@ -55,7 +59,7 @@ export async function runRecap(
 			},
 		];
 		await plugin.callAI(messages, plugin.settings.activeModel, {
-			onChunk: (c) => (buffer += c),
+			onChunk: (c) => (buffer += thinking.push(c).answer),
 		});
 	} catch (e) {
 		console.error('[Curtis] recap failed:', e);

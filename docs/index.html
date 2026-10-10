@@ -11,34 +11,34 @@
   <meta name="theme-color" content="#0A0A0A">
   <meta name="description" content="Polyglot AI chat for Obsidian. Thirty-plus providers, one sidebar. Your vault stays yours.">
   <meta name="author" content="Jordan Newell">
-  <meta property="og:title" content="Curtis AI Chat — polyglot AI chat for Obsidian">
+  <meta property="og:title" content="Curtis AI — polyglot AI chat for Obsidian">
   <meta property="og:description" content="Thirty-plus providers, one sidebar. Your vault stays yours.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://jordannewell.github.io/curtis-ai-chat/">
+  <meta property="og:url" content="https://curtisai.jordannewell.com/">
   <meta property="og:image" content="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/og.png?v=20261007c">
   <meta property="og:site_name" content="Curtis AI">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Curtis AI Chat — polyglot AI chat for Obsidian">
+  <meta name="twitter:title" content="Curtis AI — polyglot AI chat for Obsidian">
   <meta name="twitter:description" content="Thirty-plus providers, one sidebar. Your vault stays yours.">
   <meta name="twitter:image" content="https://raw.githubusercontent.com/JordanNewell/curtis-ai-chat/master/assets/og.png?v=20261007c">
-  <title>Curtis AI Chat — polyglot AI chat for Obsidian</title>
-  <link rel="canonical" href="https://jordannewell.github.io/curtis-ai-chat/">
+  <title>Curtis AI — polyglot AI chat for Obsidian</title>
+  <link rel="canonical" href="https://curtisai.jordannewell.com/">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "Organization",
     "name": "Curtis AI",
-    "url": "https://jordannewell.github.io/curtis-ai-chat/",
+    "url": "https://curtisai.jordannewell.com/",
     "founder": "Jordan Newell",
-    "logo": "https://jordannewell.github.io/curtis-ai-chat/apple-touch-icon.png",
-    "description": "Applied AI company. First product: Curtis AI Chat for Obsidian."
+    "logo": "https://curtisai.jordannewell.com/apple-touch-icon.png",
+    "description": "Applied AI company. First product: Curtis AI for Obsidian."
   }
   </script>
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    "name": "Curtis AI Chat",
+    "name": "Curtis AI",
     "applicationCategory": "UtilitiesApplication",
     "operatingSystem": "Obsidian 1.13+",
     "softwareVersion": "2.0.0",
@@ -766,13 +766,13 @@
         </div>
         <div class="signals">
           <span>v<span data-sync="version">2.0.0</span></span>
-          <span><b>30+</b> providers</span>
+          <span><b>50+</b> providers</span>
           <span><b>11</b> agent tools</span>
           <span><b>MIT</b></span>
         </div>
       </div>
       <figure class="hero-shot">
-        <img src="assets/screenshots/hero-chat.png" alt="Curtis AI Chat in Obsidian, agent mode, reading a daily note on a local model" width="783" height="1080">
+        <img src="assets/screenshots/hero-chat.png" alt="Curtis AI in Obsidian, agent mode, reading a daily note on a local model" width="783" height="1080">
       </figure>
     </div>
   </header>
@@ -792,7 +792,7 @@
       <span class="meta">Applied AI · Products + Research</span>
     </div>
     <p class="about-lede">Curtis AI is an applied AI company. We ship <span class="accent">products</span> that earn their place in your workflow, and run a <span class="accent">research arm</span> that studies the problems those products surface.</p>
-    <p class="about-body">The company exists to build AI tools that respect your machine, your data, and your attention: local-first where possible, bring-your-own-keys by default, open source when we can be. <strong>Curtis AI Chat</strong> — the Obsidian plugin below — is the first shipped product. The lab is in setup. More products are on the way.</p>
+    <p class="about-body">The company exists to build AI tools that respect your machine, your data, and your attention: local-first where possible, bring-your-own-keys by default, open source when we can be. <strong>Curtis AI</strong> — the Obsidian plugin below — is the first shipped product. The lab is in setup. More products are on the way.</p>
     <p class="about-body stance"><strong>Your vault stays yours.</strong> The alternative is chat that requires shipping your notes to someone else's server. Curtis runs at the vault boundary: local providers work fully offline, and cloud providers are used only when you pick them.</p>
   </section>
 
@@ -806,7 +806,7 @@
     <div class="product">
       <div>
         <div class="label">Product 01</div>
-        <h3>Curtis AI Chat</h3>
+        <h3>Curtis AI</h3>
         <p class="desc">Polyglot AI chat for Obsidian. Thirty-plus providers in one sidebar, agent tooling that reads and writes your vault plus any MCP server you run, semantic vault retrieval, voice I/O, and an editable memory system. Conversations persist as markdown notes in your vault. Keys stay in your OS keychain. Nothing leaves your machine unless you point a provider at the cloud.</p>
         <div class="links">
           <a href="https://community.obsidian.md/plugins/curtis-ai-chat">Obsidian ↗</a>
@@ -879,6 +879,51 @@
         <h3>Chats as vault notes</h3>
         <p>Every conversation lives as a markdown file in your vault — indexed by native Obsidian search.</p>
       </div>
+      <div class="feat">
+        <span class="id">PANE·12</span>
+        <h3>Multi-pane chat</h3>
+        <p>Another chat as a tab or its own OS window — per-pane conversation, provider, and model, titled so you can tell them apart.</p>
+      </div>
+      <div class="feat">
+        <span class="id">ROLES·13</span>
+        <h3>Named agents</h3>
+        <p>Reusable workers: persona + model routing + tool ceilings. Bind one to any chat with <code>/agent</code>.</p>
+      </div>
+      <div class="feat">
+        <span class="id">SWARM·14</span>
+        <h3>Swarm mode</h3>
+        <p>Mark a chat as leader and it spawns follower agents that work subtasks in their own panes and report back.</p>
+      </div>
+      <div class="feat">
+        <span class="id">TERM·15</span>
+        <h3>Terminal pane</h3>
+        <p>A desktop shell in its own window, plus an opt-in <code>run_command</code> agent tool with per-command approval.</p>
+      </div>
+      <div class="feat">
+        <span class="id">SCHED·16</span>
+        <h3>Scheduled runs</h3>
+        <p>Put a prompt or a named agent on a cadence — daily or every N minutes — and each headless run lands as a note.</p>
+      </div>
+      <div class="feat">
+        <span class="id">MCPS·17</span>
+        <h3>MCP server</h3>
+        <p>Flip it around: Curtis serves your vault (and your agents) to Claude Desktop and any MCP client on localhost.</p>
+      </div>
+      <div class="feat">
+        <span class="id">AUTO·18</span>
+        <h3>Inline autocomplete</h3>
+        <p>Ghost-text suggestions while you type in any note. Tab to accept. Off by default; small local models work.</p>
+      </div>
+      <div class="feat">
+        <span class="id">GCP·19</span>
+        <h3>GCP connector</h3>
+        <p>Read-only Cloud Storage on your Google Cloud project as agent tools — service-account key, scope-locked.</p>
+      </div>
+      <div class="feat">
+        <span class="id">IMPORT·20</span>
+        <h3>Chat import</h3>
+        <p>Bring history over from ChatGPT or Claude, or move chats between vaults with the portable <code>.curt</code> format.</p>
+      </div>
     </div>
 
     <div class="subhead">
@@ -913,6 +958,11 @@
         <img src="assets/screenshots/arena-streaming-dark.png" alt="Arena — one prompt streaming to two models side by side, per-column Stop while streaming" loading="lazy">
         <figcaption>Arena — two models streaming side by side, per-column stop</figcaption>
       </figure>
+      <figure class="shot wide win">
+        <div class="shot-bar"><span class="t">CURTIS·MULTIPANE</span><span class="r">TITLED TABS · RENAME</span></div>
+        <img src="assets/screenshots/multipane-tabs-dark.png" alt="Multi-pane chat — two titled chat tabs in the center tab strip, each its own conversation and model" loading="lazy">
+        <figcaption>Multi-pane — two titled chats, each its own model</figcaption>
+      </figure>
       <figure class="shot">
         <img src="assets/screenshots/phone-arena-framed-dark.png" alt="Arena on a phone — columns stack vertically" loading="lazy">
         <figcaption>Phone — arena columns stack</figcaption>
@@ -924,11 +974,11 @@
       </figure>
       <figure class="shot wide win">
         <div class="shot-bar"><span class="t">CURTIS·CHAT — OBSIDIAN</span><span class="r">AGENT MODE · OLLAMA</span></div>
-        <img src="assets/screenshots/desktop-chat.png" alt="Curtis AI Chat on desktop — vault open, agent conversation running against a local Ollama model with a tool call and result" loading="lazy">
+        <img src="assets/screenshots/desktop-chat.png" alt="Curtis AI on desktop — vault open, agent conversation running against a local Ollama model with a tool call and result" loading="lazy">
         <figcaption>Desktop — agent mode on Ollama, tool call + result</figcaption>
       </figure>
       <figure class="shot">
-        <img src="assets/screenshots/phone-chat-framed.png" alt="Curtis AI Chat on a phone — the agent conversation at phone width" loading="lazy">
+        <img src="assets/screenshots/phone-chat-framed.png" alt="Curtis AI on a phone — the agent conversation at phone width" loading="lazy">
         <figcaption>Phone — same agent chat, local model</figcaption>
       </figure>
     </div>
@@ -938,7 +988,7 @@
     <div class="block-head">
       <span class="num">03</span>
       <h2>Providers</h2>
-      <span class="meta">30+ · BYOK</span>
+      <span class="meta">53 · BYOK</span>
     </div>
     <div class="provider-grid">
       <span>Anthropic</span>
@@ -953,13 +1003,19 @@
       <span>Fireworks</span>
       <span>Cohere</span>
       <span>xAI</span>
+      <span>Meta Muse</span>
       <span>Perplexity</span>
       <span>Cerebras</span>
+      <span>Poe</span>
+      <span>SiliconFlow</span>
+      <span>ModelArk</span>
+      <span>Scaleway</span>
+      <span>Crusoe</span>
       <span>OpenAI-Compatible</span>
       <span class="local">LM Studio</span>
     </div>
     <div class="provider-meta">
-      <div><b>30+</b>providers, one sidebar</div>
+      <div><b>53</b>providers, one sidebar</div>
       <div><b>BYOK</b>keys in OS keychain (Obsidian <span data-sync="platform-floor">1.13+</span>)</div>
       <div><b>Local</b>Ollama · LM Studio · fully offline</div>
     </div>
@@ -973,7 +1029,7 @@
     </div>
     <div class="research">
       <h3>Curtis AI <span class="dim">·</span> Research</h3>
-      <p>The lab arm studies problems the products surface. First subject: the <strong>memory system</strong> already shipping inside Curtis AI Chat — how a long-running assistant should extract, consolidate, and deliberately forget facts about someone's work.</p>
+      <p>The lab arm studies problems the products surface. First subject: the <strong>memory system</strong> already shipping inside Curtis AI — how a long-running assistant should extract, consolidate, and deliberately forget facts about someone's work.</p>
       <p>The plugin carries our current answer. First result: <a href="research/memory-system-design-memo.html">Memory system design memo</a> — what ships, what it costs, what we're measuring next (v0 draft · Oct 2026).</p>
     </div>
   </section>
@@ -989,12 +1045,12 @@
         <div class="n">STEP 01</div>
         <h4>Install</h4>
         <a class="btn primary" href="obsidian://show-plugin?id=curtis-ai-chat">Install in Obsidian</a>
-        <p>Opens Obsidian on the Curtis AI Chat plugin page — click Install, then Enable. Fallbacks: the <a href="https://community.obsidian.md/plugins/curtis-ai-chat">community listing</a>, or drop <code>main.js</code>, <code>manifest.json</code>, <code>styles.css</code> from the latest <a href="https://github.com/JordanNewell/curtis-ai-chat/releases">release</a> into <code>.obsidian/plugins/curtis-ai-chat/</code>.</p>
+        <p>Opens Obsidian on the Curtis AI plugin page — click Install, then Enable. Fallbacks: the <a href="https://community.obsidian.md/plugins/curtis-ai-chat">community listing</a>, or drop <code>main.js</code>, <code>manifest.json</code>, <code>styles.css</code> from the latest <a href="https://github.com/JordanNewell/curtis-ai-chat/releases">release</a> into <code>.obsidian/plugins/curtis-ai-chat/</code>.</p>
       </div>
       <div class="step">
         <div class="n">STEP 02</div>
         <h4>Configure</h4>
-        <p>Open Settings → Curtis AI Chat → Providers. Enable one, paste a key. Keys live in your OS keychain (Obsidian <span data-sync="platform-floor">1.13+</span>).</p>
+        <p>Open Settings → Curtis AI → Providers. Enable one, paste a key. Keys live in your OS keychain (Obsidian <span data-sync="platform-floor">1.13+</span>).</p>
       </div>
       <div class="step">
         <div class="n">STEP 03</div>
@@ -1048,7 +1104,7 @@
     <div class="nsf-row nsf-family" aria-label="NEWELL product family">
       <span class="nsf-family-label">more from newell</span>
       <span class="nsf-sep">/</span>
-      <a class="nfs-item" href="https://jordannewell.github.io/curtis-ai-chat/">CURTIS·AI</a>
+      <a class="nfs-item" href="https://curtisai.jordannewell.com/">CURTIS·AI</a>
       <span class="nsf-sep">·</span>
       <a class="nfs-item" href="https://jordannewell.github.io/pat-scanner/">PAT SCANNER</a>
       <span class="nsf-sep">·</span>

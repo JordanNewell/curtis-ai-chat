@@ -7,14 +7,12 @@ import type { MemoryFact } from '../../types';
 const FACT_CATEGORIES = ['preference', 'identity', 'project', 'instruction', 'other'] as const;
 
 export class EditFactModal extends Modal {
-	private fact: MemoryFact;
 	private onSave: (content: string, category: string) => void;
 	private content: string;
 	private category: string;
 
 	constructor(app: App, fact: MemoryFact, onSave: (content: string, category: string) => void) {
 		super(app);
-		this.fact = fact;
 		this.onSave = onSave;
 		this.content = fact.content;
 		this.category = fact.category || '';

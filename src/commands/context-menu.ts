@@ -41,10 +41,19 @@ export function registerContextMenu(plugin: CurtisPlugin): void {
 
 			menu.addSeparator();
 
+			// User-defined actions ride at the end of the middle group, after
+			// the built-ins; their ids resolve inside processSelection.
+			const customActions: ContextAction[] = plugin.settings.customSelectionActions.map((a) => ({
+				id: `ai-custom-${a.id}`,
+				label: a.name,
+				action: a.id,
+				section: 'ai-mid',
+			}));
+
 			// Group actions
 			const groups: Record<string, ContextAction[]> = {
 				'top': CONTEXT_ACTIONS.filter(a => a.section === 'ai-top'),
-				'mid': CONTEXT_ACTIONS.filter(a => a.section === 'ai-mid'),
+				'mid': [...CONTEXT_ACTIONS.filter(a => a.section === 'ai-mid'), ...customActions],
 				'bottom': CONTEXT_ACTIONS.filter(a => a.section === 'ai-bottom'),
 			};
 

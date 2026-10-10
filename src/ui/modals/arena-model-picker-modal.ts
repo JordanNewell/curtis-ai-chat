@@ -1,12 +1,13 @@
 // Arena Model Picker Modal — multi-select for the Multi-Model Arena.
 //
-// FuzzySuggestModal is single-select only; arena needs 2 simultaneous
-// selections (head-to-head), so we use a plain Modal with toggleable rows. Rows
+// FuzzySuggestModal is single-select only; arena needs several simultaneous
+// selections (2-4), so we use a plain Modal with toggleable rows. Rows
 // mirror the visual language of ModelPickerModal (name + provider + capability
 // pills) but add a checkbox-style selected state.
 
-import { App, Modal, setIcon } from 'obsidian';
+import { App, Modal, Notice, setIcon } from 'obsidian';
 import type { AIModel } from '../../types';
+import { CURTIS_ICON_ID } from '../../icons';
 
 export interface ArenaModelEntry {
 	providerId: string;
@@ -22,7 +23,9 @@ export interface ArenaSelection {
 }
 
 const MIN_SELECTIONS = 2;
-const MAX_SELECTIONS = 2;
+// Ceiling, not a UI flourish: beyond 4 the side-by-side columns get too
+// narrow to read verdicts, and every extra model multiplies token cost.
+const MAX_SELECTIONS = 4;
 
 /** Format a context length (in tokens) as a compact pill label. */
 function formatContext(length: number): string {
@@ -61,10 +64,15 @@ export class ArenaModelPickerModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass('ai-arena-picker-modal');
 
-		contentEl.createEl('h2', { text: 'Arena — pick 2 models' });
+		// Curtis mark — registered by main.ts (addIcon) at startup, before any
+		// modal can open.
+		const heading = contentEl.createEl('h2', { cls: 'curtis-mark-title' });
+		const mark = heading.createSpan({ cls: 'curtis-modal-title-icon', attr: { 'aria-hidden': 'true' } });
+		setIcon(mark, CURTIS_ICON_ID);
+		heading.appendText(`Arena — pick ${MIN_SELECTIONS} to ${MAX_SELECTIONS} models`);
 		contentEl.createEl('p', {
 			cls: 'ai-arena-picker-desc',
-			text: 'Your next prompt streams in parallel to every selected model, side-by-side.',
+			text: 'Your next prompt streams in parallel to every selected model, side-by-side. Each model runs the full prompt, so every extra column multiplies token cost.',
 		});
 
 		this.counterEl = contentEl.createDiv({ cls: 'ai-arena-picker-counter' });
@@ -98,6 +106,15 @@ export class ArenaModelPickerModal extends Modal {
 			}
 
 			row.addEventListener('click', () => this.toggle(key));
+			// Rows are divs, so keyboard access is opt-in: focusable + Enter/Space
+			// mirror the click, and CSS supplies the :focus-visible ring.
+			row.setAttribute('tabindex', '0');
+			row.addEventListener('keydown', (e: KeyboardEvent) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					this.toggle(key);
+				}
+			});
 			this.rowEls.set(key, row);
 		}
 
@@ -127,6 +144,7 @@ export class ArenaModelPickerModal extends Modal {
 			this.selected.delete(key);
 		} else {
 			if (this.selected.size >= MAX_SELECTIONS) {
+				new Notice(`Arena supports up to ${MAX_SELECTIONS} models per round.`);
 				return;
 			}
 			this.selected.add(key);

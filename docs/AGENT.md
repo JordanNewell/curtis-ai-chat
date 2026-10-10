@@ -1,6 +1,6 @@
-# Curtis Agent
+# Agent tools
 
-> AI tools that read, create, and edit your vault notes.
+> AI tools that read, create, and edit your vault notes. This is the tool **loop** — the harness every chat runs on. For named workers (persona + model + permissions), see [AGENTS.md](AGENTS.md).
 
 The Curtis Agent lets the AI call **tools** during a conversation. Instead of only answering from its training data, the model can search your vault, read specific notes, create new ones, and edit existing ones — all in service of your prompt.
 
@@ -14,11 +14,21 @@ Think of it as giving the AI a small set of hands inside your vault.
 
 Opt-in — the agent is **off by default**.
 
-1. **Settings → Curtis AI Chat → Agent**
+1. **Settings → Curtis AI → Agent**
 2. Toggle **Enable agent**
 3. (Optional) Adjust **Max turns per response** — the cap on tool-call iterations per message (default 5)
 
 Once enabled, the model picker will show a 🔧 **Tools** pill next to function-calling-capable models on supported providers.
+
+## A different model for agent turns
+
+Chat and agent turns don't have to run on the same model. **Settings → Curtis AI → Agent → Agent model** picks a dedicated provider/model for tool-calling turns — agent mode, leader chats, and the terminal `run_command` tool — while plain chat stays on the chat model. Chat on something light and fast; run the tool loop on something heavier.
+
+- Empty (default) follows the chat model — exactly the old behavior.
+- Message bubbles attribute the model that actually answered, so a transcript mixing both reads truthfully.
+- A [named agent](AGENTS.md) bound to a chat keeps **its** model — the override only routes the default assistant.
+- Swarm followers inherit the leader's effective model (the override) unless they were spawned as a named agent.
+- If the override model doesn't support tool calling, Curtis notices and runs the tools on the chat model instead of silently losing them.
 
 ## Provider compatibility
 
@@ -43,12 +53,13 @@ The agent works with every major provider. OpenAI-compatible endpoints use OpenA
 
 ## Built-in tools
 
-Ten tools ship with the plugin, all read/write against your vault. Two additional **web tools** (`web_search`, `read_url`) are available but opt-in — see [Web tools](#web-tools) below.
+Eleven tools ship with the plugin — ten work out of the box, and `semantic_search` joins the set when the vault retrieval index is on (**Settings → Vault retrieval**). Two additional **web tools** (`web_search`, `read_url`) are available but opt-in — see [Web tools](#web-tools) below.
 
 | Tool | Description | Parameters |
 |---|---|---|
 | `read_note` | Read the content of a specific note | `path` (string, required) |
 | `search_notes` | Search notes by filename or content | `query` (string, required), `max_results` (number, default 10) |
+| `semantic_search` | Meaning-based search over the vault's embedding index — prefer for conceptual queries | `query` (string, required), `max_results` (number, default 5). Requires the vault retrieval index. |
 | `create_note` | Create a new note with title and content | `title` (required), `content`, `folder` (default `/`) |
 | `edit_note` | Append, prepend, or replace content in a note | `path` (required), `action` (`append`/`prepend`/`replace`, required), `content` (required), `old_content` (for replace) |
 | `list_notes` | List notes in a folder or the whole vault | `folder` (default `/`), `max_results` (default 20) |
@@ -60,7 +71,7 @@ Ten tools ship with the plugin, all read/write against your vault. Two additiona
 
 ## Web tools
 
-Two network tools let the AI look things up outside your vault. **Off by default** — Curtis is vault-first. Opt in at **Settings → Curtis AI Chat → Agent → Enable web tools**. The toggle hot-reloads; no Obsidian restart needed.
+Two network tools let the AI look things up outside your vault. **Off by default** — Curtis is vault-first. Opt in at **Settings → Curtis AI → Agent → Enable web tools**. The toggle hot-reloads; no Obsidian restart needed.
 
 | Tool | Description | Parameters |
 |---|---|---|
@@ -73,12 +84,24 @@ Two network tools let the AI look things up outside your vault. **Off by default
 
 The agent's toolset isn't limited to what ships with Curtis. Through the [Model Context Protocol](https://modelcontextprotocol.io) (MCP), Curtis connects to MCP servers you already run — a browser controller, a database client, a GitHub integration — and offers every tool they expose to the model alongside the built-ins.
 
-- **Enable:** Settings → Curtis AI Chat → MCP servers → toggle **Enable MCP**, then **Add server** with a name and its Streamable HTTP URL. Static headers (e.g. `Authorization: Bearer …`) are configurable per server.
+- **Enable:** Settings → Curtis AI → MCP servers → toggle **Enable MCP**, then **Add server** with a name and its Streamable HTTP URL. Static headers (e.g. `Authorization: Bearer …`) are configurable per server.
 - **Requires agent mode** — MCP tools ride the same loop and `agentMaxTurns` cap as the built-ins.
 - **Transport:** Streamable HTTP only, on desktop and mobile. Local stdio servers (the `npx some-mcp-server` kind) have no child process to attach to — bridge them with [`mcp-proxy`](https://github.com/sparfenyuk/mcp-proxy) or [`supergateway`](https://github.com/supercorp/supergateway) and point Curtis at the HTTP URL.
 - **Naming:** server tools are namespaced `mcp__<server>__<tool>` (e.g. `mcp__github__create_issue`), so they can never collide with the built-in vault tools.
 
 **Privacy:** MCP tool calls go to the server URLs you configure, with the headers you configure. Tool results travel through your AI provider like any other tool result. Curtis performs no MCP OAuth — use static headers against servers you trust.
+
+The direction reverses too: Curtis's MCP server can serve your named agents as tools for outside clients — see [MCP_SERVER.md](MCP_SERVER.md#agents-as-tools).
+
+## GCP connector
+
+Curtis can browse a Google Cloud project's Cloud Storage as agent tools — list buckets, list objects, read files. **Read-only**: the requested OAuth scope is `devstorage.read_only`, and binaries are never inlined (the model sees content type, size, and URI only).
+
+- **Enable:** Settings → Curtis AI → GCP → toggle **Enable GCP connector**, then **Add key** with a service-account JSON key (grant it `roles/storage.objectViewer`, plus bucket-listing permission such as `roles/storage.viewer`). The key is stored in the OS keychain when available.
+- **Requires agent mode** — GCP tools ride the same loop and `agentMaxTurns` cap as the built-ins.
+- **Naming:** `gcp__storage__list_buckets`, `gcp__storage__list_objects`, `gcp__storage__read_object` — the `gcp__` prefix keeps them clear of vault and MCP tools, and per-agent tool ceilings can exclude them.
+
+See [GCP.md](GCP.md) for setup details.
 
 ## Example use cases
 
@@ -155,8 +178,12 @@ There's no conflict resolution — the model just sees more context. If attachme
 ## Roadmap
 
 - ~~Anthropic, Gemini, Ollama provider support~~ — shipped in v1.1
-- Web search tool
-- URL fetch tool
+- ~~Web search tool~~ / ~~URL fetch tool~~ — shipped (opt-in)
 - Per-call confirmation mode (opt-in human-in-the-loop)
 - Task management tool
 - Semantic memory query tool
+
+## See also
+
+→ [AGENTS.md](AGENTS.md) — named agents: personas, model routing, and tool ceilings on top of this loop
+→ [SWARM.md](SWARM.md) — leader chats that spawn this loop as follower agents

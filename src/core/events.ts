@@ -3,13 +3,11 @@
 // ============================================================================
 //
 // Usage:
-//   emitter.on('provider:response', (data) => { ... });
-//   emitter.emit('provider:response', { usage, provider, model });
-//   emitter.off('provider:response', handler);
+//   const off = emitter.on('conversation:changed', (evt) => { ... });
+//   emitter.emit('conversation:changed', { id, kind });
+//   off(); // or emitter.off('conversation:changed', handler)
 //
 // Emitted events (extend the map when a new emitter lands):
-//   provider:response    — AI response completed (usage reported here)
-//   provider:chunk       — streaming chunk received
 //   conversation:changed — a conversation was mutated (message added/updated/
 //                          deleted, renamed, or the whole conversation removed);
 //                          lets every open chat pane stay in sync with the
@@ -17,12 +15,6 @@
 // ============================================================================
 
 type EventHandler<T = unknown> = (data: T) => void;
-
-export interface TokenUsagePayload {
-	promptTokens?: number;
-	completionTokens?: number;
-	totalTokens: number;
-}
 
 /** What happened to a conversation. 'messages' = message list changed,
  *  'meta' = title/creation changed, 'delete' = the conversation is gone. */
@@ -34,8 +26,6 @@ export interface ConversationChangedPayload {
 }
 
 export interface EventBusEvents {
-	'provider:response': { content?: string; usage?: TokenUsagePayload; provider: string; model: string };
-	'provider:chunk': { delta: string; provider: string };
 	'conversation:changed': ConversationChangedPayload;
 }
 

@@ -1,6 +1,7 @@
 // Conversation export — format as markdown + trigger a browser download.
 
 import type { Conversation } from '../types';
+import { downloadBlob, sanitizeFilename } from '../utils/download';
 
 /** Optional resolver: provider id → human-readable display name.
  *  When omitted, the raw provider id is used. */
@@ -66,12 +67,6 @@ export function formatConversationAsMarkdown(
 	return lines.join('\n');
 }
 
-/** Sanitize a string for use as a filename.
- *  Strips Windows-forbidden chars + Unicode control characters (Cc category). */
-function sanitizeFilename(name: string): string {
-	return name.replace(/[<>:"/\\|?*\p{Cc}]/gu, '_').trim() || 'conversation';
-}
-
 /** Trigger a browser download of the conversation as a .md file.
  *  Filename: sanitized title + .md extension. */
 export function downloadConversationMarkdown(
@@ -79,11 +74,5 @@ export function downloadConversationMarkdown(
 	opts: { providerName?: ProviderNameResolver } = {}
 ): void {
 	const md = formatConversationAsMarkdown(conv, opts);
-	const filename = `${sanitizeFilename(conv.title || 'conversation')}.md`;
-	const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-	const url = URL.createObjectURL(blob);
-	const a = activeDocument.body.createEl('a', { attr: { href: url, download: filename } });
-	a.click();
-	a.remove();
-	URL.revokeObjectURL(url);
+	downloadBlob(md, `${sanitizeFilename(conv.title || 'conversation')}.md`, 'text/markdown;charset=utf-8');
 }

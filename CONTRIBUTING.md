@@ -14,46 +14,66 @@ Contributions are welcome — bug reports, feature requests, and (once v1 stabil
 ├── styles.css                     # (built) styles
 ├── esbuild.config.mjs             # esbuild config — bundler + watch mode
 ├── tsconfig.json                  # TS strict mode
+├── vitest.config.ts               # Unit tests (Obsidian-free modules run under node)
 ├── version-bump.mjs               # release helper (bumps manifest + versions.json)
 ├── docs/                          # user-facing documentation
 └── src/
-    ├── main.ts                    # Plugin entry — onload/onunload, callAI, agent loop
-    ├── settings.ts                # DEFAULT_SETTINGS + CurtisSettingTab
+    ├── main.ts                    # Plugin entry — onload/onunload, agent loop, wiring
+    ├── settings.ts                # Declarative settings (getSettingDefinitions) + tab
     ├── types.ts                   # Shared TypeScript interfaces
+    ├── icons.ts                   # Custom Curtis mark + icon registry
+    ├── agents/                    # Named agents — store, resolution, PCP claims parser
+    ├── api/                       # public-api.ts — the surface other plugins call
+    ├── autocomplete/              # Inline ghost-text completion (editor extension + controller)
     ├── chat/
-    │   ├── view.ts                # ChatView (the sidebar ItemView)
+    │   ├── view.ts                # ChatView (the sidebar ItemView) + multi-pane panes
     │   ├── message-renderer.ts    # Markdown rendering + streaming
     │   ├── message-actions.ts     # Hover toolbar on assistant messages
-    │   ├── conversation-store.ts  # Conversation/message persistence
-    │   ├── slash-commands.ts      # /clear, /regen, /model, /memory, etc.
-    │   ├── voice.ts               # Whisper STT + speechSynthesis TTS
+    │   ├── conversation-store.ts  # Conversation/message persistence (queues, debounce)
+    │   ├── conversation-files.ts  # Storage port + vault adapter for conversation notes
+    │   ├── conversation-format.ts # Markdown conversation file format (Obsidian-free)
+    │   ├── linkify.ts             # Link favicons + tappable vault paths (Obsidian-free)
+    │   ├── slash-commands.ts      # Slash command registry
+    │   ├── voice.ts               # Whisper STT + speechSynthesis helpers
+    │   ├── tts-controller.ts      # Sentence player state machine (Obsidian-free)
+    │   ├── tts-backends.ts        # Pluggable speech backends
+    │   ├── recap.ts               # /recap end-of-session summary
+    │   ├── notifications.ts       # Desktop notifications for finished responses
     │   └── export.ts              # Markdown export
+    ├── commands/                  # Palette commands, selection actions, context menu
+    ├── core/
+    │   ├── tools.ts               # ToolRegistry + built-in vault tools
+    │   ├── tool-schema.ts         # Tool JSON-schema builder (Obsidian-free)
+    │   ├── command-tools.ts       # run_command agent tool
+    │   ├── web-tools.ts           # web_search / read_url agent tools
+    │   ├── system-prompt.ts       # Prompt layering: CORE → global extension → persona
+    │   ├── secrets.ts             # OS keychain storage
+    │   ├── migration.ts           # legacy Curtis Chat → v1 migrations
+    │   ├── events.ts              # EventBus
+    │   └── types/json-helpers.ts  # Type-guard utilities for JSON boundaries
+    ├── gcp/                       # GCP connector — service-account JWT + Cloud Storage tools
+    ├── import/                    # ChatGPT / Claude / .curt / JSON / markdown importers
+    ├── mcp/
+    │   ├── client.ts, manager.ts, transport.ts   # MCP client — user-connected servers
+    │   └── server/                # MCP server mode — serves the vault on localhost
+    ├── memory/                    # MemoryStore (markdown-file-backed) + session journal
     ├── providers/
     │   ├── registry.ts            # PROVIDER_DEFINITIONS + ProviderRegistry
-    │   ├── base.ts                # OpenAICompatibleProvider
-    │   ├── anthropic.ts           # AnthropicProvider (different message shape)
+    │   ├── base.ts                # OpenAICompatibleProvider + request-parameter gating
+    │   ├── anthropic.ts           # AnthropicProvider (own message/tool dialect)
+    │   ├── ollama.ts              # Ollama native /api/chat dialect
+    │   ├── chatgpt.ts             # Responses API provider (ChatGPT sign-in)
+    │   ├── chatgpt-signin.ts      # Sign in with ChatGPT — OAuth + token refresh
+    │   ├── colors.ts              # Brand color dot per provider id
     │   ├── transport.ts           # HTTP transport (fetch + requestUrl)
     │   ├── stream-shim.ts         # Adapter between Response shapes
     │   └── types/                 # Per-provider response schemas
-    ├── memory/
-    │   └── memory.ts              # MemoryStore (markdown-file-backed)
-    ├── vault/
-    │   ├── notes.ts               # createNote, saveMessageAsNote, saveImageToVault
-    │   └── active-note.ts         # Resolver for "the note the user means"
-    ├── commands/
-    │   ├── index.ts               # registerCommands — palette entries
-    │   ├── selection.ts           # SELECTION_ACTIONS map
-    │   └── context-menu.ts        # Right-click menu wiring
-    ├── core/
-    │   ├── tools.ts               # Curtis Agent tool registry + built-ins
-    │   ├── secrets.ts             # OS keychain storage
-    │   ├── migration.ts           # legacy Curtis Chat → v1 system prompt migration
-    │   ├── events.ts              # EventBus
-    │   ├── hooks.ts               # lifecycle hooks
-    │   └── types/json-helpers.ts  # Type-guard utilities for JSON boundaries
+    ├── rag/                       # Semantic vault retrieval (chunk → embed → retrieve)
+    ├── swarm/                     # Leader/follower swarm mode
+    ├── terminal/                  # Terminal pane, desktop runner, mobile vault shell (vshell)
     ├── ui/modals/                 # All modal components
-    ├── utils/diff.ts              # LCS line diff for inline rewrite
-    └── templates/                 # Built-in prompt templates
+    ├── utils/                     # diff (inline rewrite), base64, download helpers
+    └── vault/                     # notes.ts, active-note.ts — vault write paths
 ```
 
 ## Dev setup
@@ -117,7 +137,7 @@ Common fixes:
 
 ## How to add a new provider
 
-Built-in providers live in `src/providers/registry.ts`.
+Built-in providers live in `src/providers/registry.ts` (`PROVIDER_DEFINITIONS`); the interface is `ProviderDefinition` in `src/types.ts`.
 
 1. **Add a definition** to `PROVIDER_DEFINITIONS`:
 
@@ -126,26 +146,29 @@ Built-in providers live in `src/providers/registry.ts`.
      id: 'my-provider',
      name: 'My Provider',
      endpoint: 'https://api.myprovider.com/v1/chat/completions',
-     authType: 'bearer',
-     modelsEndpoint: 'https://api.myprovider.com/v1/models',
-     docsUrl: 'https://docs.myprovider.com',
+     authType: 'bearer', // 'bearer' | 'anthropic' | 'oauth' | 'key' | 'none'
+     autoDiscoverModels: true, // fetch /v1/models at runtime; `models` is the offline fallback
      models: [
-       { id: 'my-model', name: 'My Model', contextLength: 128_000 },
+       { id: 'my-model', name: 'My Model', contextLength: 128_000, inputPrice: 1.0, outputPrice: 2.0, visionSupported: true, functionCallingSupported: true },
      ],
    }
    ```
 
-2. **If the provider uses a non-OpenAI message shape** (like Anthropic), add a dedicated provider class in `src/providers/<name>.ts` extending `OpenAICompatibleProvider` and overriding `transformMessages` / `parseStreamChunk`.
+   Verify endpoints, key schemes, seed models, and prices against current vendor docs, and say so in a comment (see the existing entries).
 
-3. **Add type schemas** if needed in `src/providers/types/` — every response shape must be strictly typed.
+2. **If the provider uses a non-OpenAI dialect** (message shape, streaming, tool calling, or reasoning-effort mapping), add a dedicated provider class in `src/providers/<name>.ts` extending `OpenAICompatibleProvider` and overriding the request/response methods. `anthropic.ts`, `ollama.ts`, and `chatgpt.ts` are the references.
 
-4. **Test** by enabling the provider in settings, pasting a key, and sending a message.
+3. **Strict APIs** — providers that return 400 on unknown request fields are handled by the capability gating in `base.ts`/`registry.ts`; check how a comparable strict provider (OpenAI, Perplexity Router, Fireworks) is configured and follow it.
 
-5. **Document** in `docs/PROVIDERS.md` — add a row to the providers table with auth, discovery, and agent-compat info.
+4. **Add type schemas** if needed in `src/providers/types/` — every response shape must be strictly typed.
+
+5. **Test** by enabling the provider in settings, pasting a key, and sending a message (and a tool-call turn, if the provider supports agent mode).
+
+6. **Document** in `docs/PROVIDERS.md` — add a row to the providers table with auth, discovery, and agent-compat info.
 
 ## How to add a new tool
 
-Tools live in `src/core/tools.ts` and are registered on the `ToolRegistry`.
+Tools live in `src/core/tools.ts` and are registered on the `ToolRegistry` (the JSON-schema builder it uses lives in `src/core/tool-schema.ts`, deliberately Obsidian-free). Optional tool groups are defined as `ToolDefinition` constants and registered conditionally: web tools in `core/web-tools.ts`, the command tool in `core/command-tools.ts`, MCP tools via `setMcpTools()`, GCP tools via `setGcpTools()`.
 
 1. **Add a `register()` call** inside `registerBuiltinTools()`:
 
@@ -156,8 +179,8 @@ Tools live in `src/core/tools.ts` and are registered on the `ToolRegistry`.
      parameters: {
        input: { type: 'string', description: 'The input', required: true },
      },
-     execute: async (params, context) => {
-       const value = String(params.input ?? '');
+     execute: async (params) => {
+       const value = str(params.input);
        return `Result: ${value}`;
      },
    });
@@ -176,25 +199,29 @@ Tools live in `src/core/tools.ts` and are registered on the `ToolRegistry`.
 
 ## How to add a slash command
 
-Slash commands live in `src/chat/slash-commands.ts` as a map of `{ [command: string]: SlashCommandHandler }`.
+Slash commands live in `src/chat/slash-commands.ts` as entries in the `SLASH_COMMANDS` array of `SlashCommand` objects.
 
-1. **Add a handler** to the `SLASH_COMMANDS` map:
+1. **Add an entry** to `SLASH_COMMANDS`:
 
    ```ts
-   '/my-command': {
-     description: 'What /my-command does',
+   {
+     name: 'my-command', // invoked as /my-command — lowercase, no leading slash
      usage: '/my-command <arg>',
-     handle: async (args, ctx) => {
-       const value = args.trim();
-       if (!value) {
+     description: 'What /my-command does',
+     run: (ctx) => {
+       if (!ctx.args.trim()) {
          new Notice('Usage: /my-command <arg>');
-         return;
+         return true;
        }
-       // do something
-       new Notice(`Done: ${value}`);
+       // ctx.conversationId is the invoking pane's chat — act on it, not on
+       // a global current pointer (multi-pane support)
+       new Notice(`Done: ${ctx.args.trim()}`);
+       return true;
      },
    },
    ```
+
+   `run` returns `true` when the input was consumed (the send is suppressed) and `false` to fall through to a normal send.
 
 2. **Document** in `docs/SLASH_COMMANDS.md` — add a row to the reference table and a section with examples.
 
@@ -204,7 +231,9 @@ The slash autocomplete dropdown picks up new commands automatically.
 
 ## Testing
 
-There's **no test suite** yet. For now, manual smoke-test the affected feature:
+`npm test` runs the Vitest suite over `src/**/*.test.ts`. Several modules are deliberately **Obsidian-free** so they run under plain node — the parser/seam code in `src/autocomplete/` (except the editor extension), `conversation-format.ts`, `linkify.ts`, `tts-controller.ts`, `tool-schema.ts`, the terminal `vshell`, and the agents `pcp` parser all carry this boundary in their header comments. Keep it: pure logic goes in an Obsidian-free module with a test next to it; anything importing `obsidian` can't run under node.
+
+Obsidian-bound code paths can't be unit-tested — smoke-test the affected feature by hand:
 
 1. Reload the plugin after build (toggle off/on in Community plugins)
 2. Exercise the new code path with realistic input
@@ -213,7 +242,7 @@ There's **no test suite** yet. For now, manual smoke-test the affected feature:
 5. If it touches storage, verify data **persists across reload**
 6. If it touches mobile, verify on a phone or narrow viewport
 
-A proper Vitest setup is on the roadmap. Until then, treat the audit checklist below as the test gate.
+Treat the audit checklist below as the merge gate for everything else.
 
 ## The audit checklist
 
@@ -221,6 +250,7 @@ Every change goes through a line-by-line audit before merge. Run through this li
 
 - [ ] `tsc -noEmit -skipLibCheck` passes with no errors
 - [ ] `npm run lint` reports zero warnings
+- [ ] `npm test` passes
 - [ ] `npm run build` produces a working `main.js`
 - [ ] No `eval`, `new Function`, or `innerHTML` with user input
 - [ ] No new plaintext-secret storage (use `setApiKeyForProvider`)

@@ -16,7 +16,7 @@
 //   demo-memory.mp4/.gif                — ask-before-saving proposal bar
 //
 // Usage:  node scripts/record-arena-demo.mjs
-// Env:    OBSIDIAN_EXE (default: %LOCALAPPDATA%\Programs\Obsidian\Obsidian.exe)
+// Env:    OBSIDIAN_EXE (default: scoop obsidian current)
 //         DEMOS="cloud" — comma list to record a subset (cloud, memory)
 //
 // The user's running Obsidian is closed for the duration and relaunched at
@@ -40,7 +40,7 @@ const OUT_DIR = resolve(ROOT, 'assets');
 
 const OBSIDIAN_EXE =
 	process.env.OBSIDIAN_EXE ||
-	resolve(process.env.LOCALAPPDATA, 'Programs/Obsidian/Obsidian.exe');
+	resolve(process.env.USERPROFILE ?? process.env.HOME, 'scoop/apps/obsidian/current/Obsidian.exe');
 
 // Screen-record pacing: the prompt is typed character by character so the
 // video shows a human driving, not a paste. ~300 words keeps BOTH columns
@@ -425,6 +425,24 @@ const resolveModel = (page, pid, wanted) =>
 		[pid, wanted]
 	);
 
+/** Since the per-pane redesign, each chat PANE owns its provider/model —
+ *  plugin.settings hold only the default for NEWLY opened panes. Swapping
+ *  settings alone leaves an open pane streaming with its old model (the
+ *  memory take shipped a DeepSeek-400 on camera that way). Bind the pane
+ *  fields + refresh its picker pill directly. */
+const bindPaneModel = (page, providerId, modelId) =>
+	page.evaluate(
+		([p, m]) => {
+			const view = window.app.workspace.getLeavesOfType('curtis-chat')[0]?.view;
+			if (!view) throw new Error('no chat view open to bind');
+			view.activeProviderId = p;
+			view.activeModelId = m;
+			const btn = view.contentEl.querySelector('.ai-model-picker-btn');
+			if (btn && typeof view.updateModelPickerButton === 'function') view.updateModelPickerButton(btn);
+		},
+		[providerId, modelId]
+	);
+
 /** DeepSeek V4.1 defaults to thinking mode server-side: temperature is
  *  ignored, first content token lands 10-30s late, and the arena column
  *  sits on a dead spinner through all of it — fatal for a paced recording.
@@ -481,8 +499,13 @@ async function recordDuel(page, ctx, pair, outBase) {
 		plugin.saveSettings();
 		const conv = plugin.conversationStore.createConversation(p, m);
 		plugin.conversationStore.setCurrentConversation(conv.id);
-		plugin.refreshChatViews?.();
+		// Per-pane redesign: an open pane keeps its own conversation binding —
+		// switchConversation points the CAMERA pane at the fresh conversation
+		// (setCurrentConversation alone only moves the default for new panes).
+		const view = window.app.workspace.getLeavesOfType('curtis-chat')[0]?.view;
+		if (view && typeof view.switchConversation === 'function') view.switchConversation(conv.id);
 	}, [providerA, modelA.id]);
+	await bindPaneModel(page, providerA, modelA.id);
 
 	const rec = await startRecording(page);
 	try {
@@ -589,8 +612,12 @@ async function recordMemoryDemo(page, ctx, providerId, modelId, outBase) {
 		plugin.saveSettings();
 		const conv = plugin.conversationStore.createConversation(p, m);
 		plugin.conversationStore.setCurrentConversation(conv.id);
-		plugin.refreshChatViews?.();
+		// Same per-pane binding fix as the duel — point the camera pane at
+		// the fresh conversation.
+		const view = window.app.workspace.getLeavesOfType('curtis-chat')[0]?.view;
+		if (view && typeof view.switchConversation === 'function') view.switchConversation(conv.id);
 	}, [providerId, model.id]);
+	await bindPaneModel(page, providerId, model.id);
 
 	const rec = await startRecording(page);
 	try {

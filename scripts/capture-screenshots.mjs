@@ -11,7 +11,7 @@
 // is the only reliable way to get a phone-width layout).
 //
 // Usage:  npm run shots
-// Env:    OBSIDIAN_EXE (default: %LOCALAPPDATA%\Programs\Obsidian\Obsidian.exe)
+// Env:    OBSIDIAN_EXE (default: scoop obsidian current)
 //
 // The user's running Obsidian is closed for the duration (nothing is lost —
 // Obsidian autosaves) and relaunched at the end.
@@ -33,7 +33,7 @@ const OUT_DIR = resolve(ROOT, 'assets/screenshots');
 
 const OBSIDIAN_EXE =
 	process.env.OBSIDIAN_EXE ||
-	resolve(process.env.LOCALAPPDATA, 'Programs/Obsidian/Obsidian.exe');
+	resolve(process.env.USERPROFILE ?? process.env.HOME, 'scoop/apps/obsidian/current/Obsidian.exe');
 
 // ---------------------------------------------------------------------------
 // Vault bootstrap
@@ -238,6 +238,16 @@ const openChatAndRender = async () => {
 	while (Date.now() < deadline) {
 		if (document.querySelector('.workspace-leaf-content[data-type="curtis-chat"]')) break;
 		await new Promise((r) => setTimeout(r, 200));
+	}
+	// Per-pane redesign: a chat pane restored at boot binds conversationId
+	// to whatever was current THEN (often null — nothing sets a current
+	// conversation at boot), and setViewState reuses that view instance.
+	// Rebind the pane to the seeded conversation explicitly.
+	const plugin = window.app.plugins.plugins['curtis-ai-chat'];
+	const view = window.app.workspace.getLeavesOfType('curtis-chat')[0]?.view;
+	const current = plugin.conversationStore.getCurrentConversation();
+	if (view && current && typeof view.switchConversation === 'function') {
+		view.switchConversation(current.id);
 	}
 	window.app.plugins.plugins['curtis-ai-chat'].refreshChatViews?.();
 };

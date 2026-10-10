@@ -18,6 +18,7 @@ export const CORE_SYSTEM_PROMPT = `You are Curtis, an AI agent integrated into O
 - **Curtis Agent tools** (when enabled in Settings): you can call tools — \`create_note\`, \`edit_note\`, \`list_notes\`, \`get_tags\`, \`get_backlinks\`, \`get_current_note\`, \`get_current_date\`, \`calculator\` — to directly read and modify the user's vault. Use them proactively when the user references "this note", "my vault", or asks you to look at or change something. Do not claim helplessness if a tool exists for the task.
 - **Web tools** (when enabled in Settings): \`web_search\` (DuckDuckGo) + \`read_url\` (Jina reader) for looking things up online. Use these when the user asks about anything outside the vault — current events, library docs, definitions, recent releases. If \`web_search\` is not in your tool list, web access is disabled; say so plainly instead of guessing.
 - **MCP tools**: any tool whose name starts with \`mcp__\` comes from an MCP server the user connected in Settings (naming: \`mcp__<server>__<tool>\`). The user enabled these deliberately — use them freely for what they do, and read the tool's description before first use to learn its arguments. If no \`mcp__\` tools are in your tool list, no MCP servers are connected; never invent one.
+- **GCP tools**: any tool whose name starts with \`gcp__\` talks to the Google Cloud project the user connected in Settings — READ-ONLY Cloud Storage (\`gcp__storage__list_buckets\`, \`list_objects\`, \`read_object\`). Use them when the user asks about their buckets or files. Binaries cannot be inlined; report their metadata instead. If no \`gcp__\` tools are in your tool list, the GCP connector is off; never invent one.
 - **Long-term memory**: facts the user has chosen to save are persisted across conversations in \`AI/Curtis Memory.md\` and injected automatically.
 - **Vault retrieval** (when enabled in Settings): relevant excerpts from the user's notes appear as \`[Excerpt: <path>]\` blocks, and the \`semantic_search\` tool queries the vault by meaning. Excerpts are partial — use \`read_note\` with the bracketed path for the full file. When excerpts already answer the question, prefer them over re-searching.
 
@@ -38,10 +39,20 @@ Confident, technical, direct. Not cute, not corporate. You're a tool the user tr
 
 /**
  * Compose the full system prompt: current-date context + CORE (non-negotiable)
- * + user extension. The date block is recomputed on every call so midnight
- * rollover during a long conversation is handled correctly.
+ * + user extension + agent persona. The date block is recomputed on every
+ * call so midnight rollover during a long conversation is handled correctly.
+ *
+ * Layering order — most specific last, so the role wins ties while standing
+ * orders survive it:
+ *   1. date + CORE  — the harness contract; never overridable
+ *   2. user extension (settings) — standing orders for EVERY agent
+ *   3. agent persona — the role ("always answer in Vietnamese" survives a
+ *      switch to the Critic; the Critic's voice wins on conflicts)
  */
-export function composeSystemPrompt(userExtension: string | undefined): string {
+export function composeSystemPrompt(
+	userExtension: string | undefined,
+	agentPersona?: { name: string; prompt: string }
+): string {
 	const now = new Date();
 	const dateStr = now.toLocaleDateString(undefined, {
 		weekday: 'long',
@@ -55,15 +66,15 @@ export function composeSystemPrompt(userExtension: string | undefined): string {
 	});
 	const dateBlock = `[Current date: ${dateStr} · ${timeStr} ${Intl.DateTimeFormat().resolvedOptions().timeZone || 'local'}]`;
 
-	const core = CORE_SYSTEM_PROMPT;
-	const withDate = `${dateBlock}\n\n${core}`;
+	const parts: string[] = [dateBlock, CORE_SYSTEM_PROMPT];
 
-	if (!userExtension || userExtension.trim().length === 0) return withDate;
-	return `${withDate}
+	if (userExtension && userExtension.trim().length > 0) {
+		parts.push(`---\n\n# User-defined extensions\n\n${userExtension.trim()}`);
+	}
 
----
+	if (agentPersona && agentPersona.prompt.trim().length > 0) {
+		parts.push(`---\n\n# Your role: ${agentPersona.name}\n\n${agentPersona.prompt.trim()}`);
+	}
 
-# User-defined extensions
-
-${userExtension.trim()}`;
+	return parts.join('\n\n');
 }

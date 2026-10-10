@@ -1,17 +1,21 @@
 {
 	"name": "curtis-ai-chat",
 	"version": "2.0.0",
-	"description": "Curtis AI Chat — your polyglot AI chat for Obsidian. 30+ providers, image attachments, memory, slash commands.",
+	"description": "Curtis AI — your polyglot AI chat for Obsidian. 50+ providers, image attachments, memory, slash commands.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"lint": "eslint src",
+		"test": "vitest run",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"site:sync": "node scripts/site-sync.mjs",
 		"shots": "node scripts/capture-screenshots.mjs",
 		"smoke:v2": "node scripts/v2-smoke.mjs",
 		"smoke:panes": "node scripts/smoke-panes.mjs",
+		"smoke:terminal": "node scripts/smoke-terminal.mjs",
+		"smoke:providers": "node scripts/smoke-providers.mjs",
+		"shots:themes": "node scripts/theme-audit.mjs",
 		"mockups": "python scripts/phone_mockup.py assets/screenshots/phone-chat.png assets/screenshots/phone-chat-framed.png && python scripts/phone_mockup.py assets/screenshots/ollama-provider-settings.png assets/screenshots/phone-settings-framed.png",
 		"marketplace": "python scripts/marketplace_shots.py"
 	},
@@ -33,17 +37,19 @@
 	"author": "Jordan Newell",
 	"license": "MIT",
 	"devDependencies": {
+		"@codemirror/state": "^6.7.6",
+		"@codemirror/view": "^6.38.6",
 		"@types/node": "^20.11.0",
 		"@typescript-eslint/eslint-plugin": "^8.65.0",
 		"@typescript-eslint/parser": "^8.65.0",
 		"esbuild": "^0.19.11",
 		"eslint": "^9.39.5",
 		"eslint-plugin-obsidianmd": "^0.4.1",
-		"jiti": "^2.7.0",
 		"obsidian": "^1.13.1",
 		"playwright-core": "^1.63.0",
 		"tslib": "^2.6.2",
-		"typescript": "^5.3.3"
+		"typescript": "^5.3.3",
+		"vitest": "^1.6.1"
 	},
 	"dependencies": {
 		"fflate": "^0.8.3"

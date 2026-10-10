@@ -1,7 +1,9 @@
+import type { CustomSelectionAction } from '../types';
+
 export interface SelectionAction {
 	systemPrompt: string;
 	userPrompt: (text: string) => string;
-	insertMode: 'replace' | 'insert-below' | 'none';
+	insertMode: 'replace' | 'insert-below';
 }
 
 export const SELECTION_ACTIONS: Record<string, SelectionAction> = {
@@ -22,7 +24,7 @@ export const SELECTION_ACTIONS: Record<string, SelectionAction> = {
 	},
 	translate: {
 		systemPrompt: 'Translate the text accurately. Preserve markdown formatting. Output only the translation.',
-		userPrompt: (text) => `Translate the following to English:\n\n${text}`,
+		userPrompt: (text) => `Translate the following text:\n\n${text}`,
 		insertMode: 'replace',
 	},
 	'code-review': {
@@ -96,3 +98,46 @@ export const SELECTION_ACTIONS: Record<string, SelectionAction> = {
 		insertMode: 'replace',
 	},
 };
+
+// ---- Custom actions ---------------------------------------------------------
+
+/** Placeholder in a custom action's userPromptTemplate that is replaced with
+ *  the selected text at run time. */
+export const SELECTION_TEMPLATE_TOKEN = '{{selection}}';
+
+/** Substitute the selection into a custom action's user prompt template.
+ *  Every occurrence is replaced; a template without the token is used
+ *  verbatim (the selection is not sent). */
+export function applySelectionTemplate(template: string, selection: string): string {
+	return template.split(SELECTION_TEMPLATE_TOKEN).join(selection);
+}
+
+/** Lift a stored custom action into the runtime SelectionAction shape so it
+ *  flows through the same processSelection / diff-review path as built-ins. */
+export function customToSelectionAction(custom: CustomSelectionAction): SelectionAction {
+	return {
+		systemPrompt: custom.systemPrompt,
+		userPrompt: (text) => applySelectionTemplate(custom.userPromptTemplate, text),
+		insertMode: custom.insertMode,
+	};
+}
+
+/** Derive a url-safe action id from a display name, unique against `taken`
+ *  (built-in ids plus existing custom ids) by suffixing -2, -3, … */
+export function sanitizeCustomActionId(name: string, taken: ReadonlySet<string>): string {
+	const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'action';
+	let id = base;
+	let n = 2;
+	while (taken.has(id)) {
+		id = `${base}-${n}`;
+		n++;
+	}
+	return id;
+}
+
+/** User prompt for translate with an explicit target language. Built by
+ *  processSelection after the language modal; SELECTION_ACTIONS.translate's
+ *  own prompt stays language-neutral. */
+export function translateUserPrompt(text: string, language: string): string {
+	return `Translate the following text to ${language}:\n\n${text}`;
+}

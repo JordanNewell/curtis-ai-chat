@@ -7,7 +7,7 @@
 import { Notice } from 'obsidian';
 import type CurtisPlugin from '../main';
 import type { Conversation } from '../types';
-import type { ImportedFileReport, ImportSummary, ParsedChat } from './types';
+import type { ImportedFileReport, ImportSummary } from './types';
 import { conversationDedupeKey, detectAndParse, parsedChatToConversation } from './detect';
 import { ImportSummaryModal } from './import-summary-modal';
 
@@ -174,9 +174,4 @@ export async function importDroppedFiles(plugin: CurtisPlugin, files: File[]): P
 
 export function formatLabel(format: string): string {
 	return FORMAT_LABELS[format] ?? format;
-}
-
-/** Exposed for tests/inspection: parse one file without importing. */
-export function previewChats(name: string, buffer: ArrayBuffer): ParsedChat[] {
-	return detectAndParse(name, buffer).chats;
 }

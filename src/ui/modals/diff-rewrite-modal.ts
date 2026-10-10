@@ -6,12 +6,12 @@ export class DiffRewriteModal extends Modal {
 	private modified: string;
 	private onAccept: (modified: string) => void;
 
-	constructor(app: App, original: string, modified: string, onAccept: (modified: string) => void) {
+	constructor(app: App, original: string, modified: string, onAccept: (modified: string) => void, title = 'AI rewrite — review changes') {
 		super(app);
 		this.original = original;
 		this.modified = modified;
 		this.onAccept = onAccept;
-		this.setTitle('AI rewrite — review changes');
+		this.setTitle(title);
 		// Size the modal via CSS class (avoids direct style assignment per
 		// Obsidian lint rule obsidianmd/no-static-style-assignment).
 		this.modalEl.addClass('ai-diff-rewrite-modal');

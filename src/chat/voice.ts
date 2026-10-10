@@ -62,16 +62,38 @@ export function cleanTextForSpeech(text: string): string {
 }
 
 /**
- * Text-to-speech using the browser's built-in speechSynthesis.
- * Picks a voice that matches the user's locale if available.
+ * Resolve the speechSynthesis voice for read-aloud. An explicit voiceURI
+ * wins when it exists on this machine; otherwise the en-US default, any
+ * English voice, or the first voice. Returns null when speech is
+ * unsupported or no voices are loaded yet (the list arrives
+ * asynchronously after voiceschanged).
  */
-export function speakText(
-	text: string,
-	opts?: { onStart?: () => void; onEnd?: () => void; onError?: () => void }
-): void {
+export function pickSpeechVoice(voiceUri = ''): SpeechSynthesisVoice | null {
+	if (!isSpeechSupported()) return null;
+	const voices = window.speechSynthesis.getVoices();
+	if (voices.length === 0) return null;
+	const explicit = voiceUri ? voices.find((v) => v.voiceURI === voiceUri) : undefined;
+	return explicit || voices.find((v) => v.lang === 'en-US' && v.default) || voices.find((v) => v.lang.startsWith('en')) || voices[0] || null;
+}
+
+/**
+ * Text-to-speech using the browser's built-in speechSynthesis.
+ * Voice/rate/pitch come from the caller (settings-driven); omit them for
+ * platform defaults.
+ */
+export interface SpeakTextOptions {
+	voiceUri?: string;
+	rate?: number;
+	pitch?: number;
+	onStart?: () => void;
+	onEnd?: () => void;
+	onError?: () => void;
+}
+
+export function speakText(text: string, opts: SpeakTextOptions = {}): void {
 	if (!isSpeechSupported()) {
 		console.warn('[Curtis] speechSynthesis unavailable');
-		opts?.onError?.();
+		opts.onError?.();
 		return;
 	}
 
@@ -85,23 +107,18 @@ export function speakText(
 	}
 
 	const utterance = new SpeechSynthesisUtterance(cleanText);
-	utterance.rate = 1.0;
-	utterance.pitch = 1.0;
+	utterance.rate = opts.rate ?? 1.0;
+	utterance.pitch = opts.pitch ?? 1.0;
 	utterance.volume = 1.0;
 
-	// Pick a voice — prefer en-US default, then any English voice, then first.
-	const voices = window.speechSynthesis.getVoices();
-	const preferredVoice =
-		voices.find((v) => v.lang === 'en-US' && v.default) ||
-		voices.find((v) => v.lang.startsWith('en')) ||
-		voices[0];
+	const preferredVoice = pickSpeechVoice(opts.voiceUri);
 	if (preferredVoice) utterance.voice = preferredVoice;
 
-	if (opts?.onStart) utterance.onstart = opts.onStart;
-	if (opts?.onEnd) {
+	if (opts.onStart) utterance.onstart = opts.onStart;
+	if (opts.onEnd) {
 		utterance.onend = opts.onEnd;
 		utterance.onerror = opts.onEnd;
-	} else if (opts?.onError) {
+	} else if (opts.onError) {
 		utterance.onerror = opts.onError;
 	}
 

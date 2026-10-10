@@ -15,57 +15,76 @@
 //     synchronous (the chat view streams and mutates freely). Writes are
 //     debounced per conversation and serialized through a per-id queue so
 //     rename + modify never interleave.
-//   - Hand edits round-trip: a vault 'modify' on a tracked file re-parses it
-//     (self-writes are guarded, same as the memory store). Deleting a file in
-//     Obsidian deletes the conversation from history.
+//   - Hand edits round-trip: a 'modify' on a tracked file re-parses it
+//     (self-writes are guarded, same as the memory store). Deleting a file
+//     in the host app deletes the conversation from history.
 //   - One-time import: conversations still living in localStorage (the
-//     pre-1.3 store) are written out to vault files on load, matched by id,
+//     pre-1.3 store) are written out to files on load, matched by id,
 //     so no history is lost on upgrade. The localStorage copy is left in
 //     place as a harmless backup and never read again.
+//
+// Obsidian-free: the store orchestrates against two injected ports and runs
+// under plain node (vitest, and the separate Curtis AI Porter repo):
+//   - ConversationFiles — file I/O + change watching (the Obsidian host binds
+//     it to the vault via VaultConversationFiles; a node host binds node:fs).
+//   - YamlPort — frontmatter codec (Obsidian: parseYaml/stringifyYaml).
 
-import { App, Notice, TFile, parseYaml, stringifyYaml } from 'obsidian';
-import type { Conversation, ConversationMessage, ConversationStats, TokenUsage } from '../types';
-import type { ConversationChangeKind } from '../core/events';
-import type CurtisPlugin from '../main';
+import type { Conversation, ConversationMessage, ConversationStats } from '../types';
+import type { ConversationChangeKind, EventBus } from '../core/events';
+import {
+	parseConversationMarkdown,
+	serializeConversationMarkdown,
+	conversationFileName,
+	type YamlPort,
+} from './conversation-format';
+import type { ConversationFiles } from './conversation-files';
 
 const DEFAULT_CONVERSATIONS_FOLDER = 'AI/Conversations';
 const LEGACY_STORAGE_KEY = 'ai-conversations';
-/** Marker opening every message block. Content between markers is the message. */
-const MSG_MARKER_RE = /<!--\s*curtis:msg\s+(\{[\s\S]*?\})\s*-->/g;
-/** Human-facing section labels, fixed set — the parser strips exactly one of
- *  these above each marker; anything else is treated as message content. */
-const ROLE_LABELS: Record<ConversationMessage['role'], string> = {
-	user: 'You',
-	assistant: 'AI',
-	tool: 'Tool',
-	system: 'System',
-};
-const HEADING_LINE_RE = /^## (You|AI|Tool|System)\s*$/;
+/** Fresh chats are "New chat", numbered ("New chat 2", …) once one already
+ *  exists — with several panes open, identical titles are indistinguishable.
+ *  The first user message replaces any match, so the number lives exactly as
+ *  long as the ambiguity does. */
+const UNTITLED_TITLE_RE = /^New chat(?: (\d+))?$/;
+
+/** The slice of the plugin the store needs — structural, so node tests and
+ *  the Porter repo can satisfy it without Obsidian. */
+export interface ConversationStoreHost {
+	settings: { conversationsFolder?: string };
+	eventBus: EventBus;
+}
+
+export interface ConversationStoreLoadOptions {
+	host: ConversationStoreHost;
+	files: ConversationFiles;
+	yaml: YamlPort;
+	notifyError?: (message: string) => void;
+}
 
 export class ConversationStore {
-	private app: App;
-	private plugin: CurtisPlugin | null = null;
+	private host: ConversationStoreHost | null = null;
+	private files!: ConversationFiles;
+	private yaml!: YamlPort;
+	private notifyError?: (message: string) => void;
 	private conversations = new Map<string, Conversation>();
 	private currentConversationId: string | null = null;
 
-	/** conv id → file path in the vault. */
+	/** conv id → file path. */
 	private paths = new Map<string, string>();
 	/** conv ids with unsaved changes. */
 	private dirty = new Set<string>();
-	/** Per-conv debounce timers for persisted writes. */
-	private timers = new Map<string, number>();
+	/** Per-conv debounce timers for persisted writes. ReturnType (not number)
+	 *  — this module also runs under plain node, where setTimeout doesn't
+	 *  return a number, and window timers are unavailable. */
+	private timers = new Map<string, ReturnType<typeof setTimeout>>();
 	/** Per-conv write queue — serializes persist/rename ops for one file. */
 	private queues = new Map<string, Promise<void>>();
 	/** Paths we are writing right now — the modify watcher skips these so we
 	 *  don't re-parse our own output (same guard as the memory store). */
 	private writingPaths = new Set<string>();
 
-	constructor(app: App) {
-		this.app = app;
-	}
-
 	private resolveFolder(): string {
-		const raw = this.plugin?.settings?.conversationsFolder?.trim();
+		const raw = this.host?.settings?.conversationsFolder?.trim();
 		return raw ? raw.replace(/^\/+|\/+$/g, '') : DEFAULT_CONVERSATIONS_FOLDER;
 	}
 
@@ -75,40 +94,90 @@ export class ConversationStore {
 
 	/** Scan the conversations folder, rebuild the in-memory map, watch for
 	 *  hand edits, and import anything still trapped in localStorage. */
-	async load(plugin: CurtisPlugin): Promise<void> {
-		this.plugin = plugin;
-		this.app = plugin.app || this.app;
+	async load(opts: ConversationStoreLoadOptions): Promise<void> {
+		this.host = opts.host;
+		this.files = opts.files;
+		this.yaml = opts.yaml;
+		this.notifyError = opts.notifyError;
 
 		await this.ensureFolder();
 		await this.scanFolder();
 		this.registerFileWatcher();
-		await this.importLegacyLocalStorage();
+		// Background — must not block onload while the vault tree populates.
+		// The legacy import runs INSIDE, after the scan settles: importing
+		// before the tree arrives would re-import conversations the (late)
+		// scan is about to find, and every boot would write another copy.
+		void this.settleScanThenImportLegacy();
 	}
 
-	/** Read every markdown file under the folder; ingest files that carry our
-	 *  frontmatter signature. Unrelated notes in the folder are ignored. */
+	/** Parse every file under the conversations folder into the map.
+	 *  Idempotent (set by id); safe to run again when settleScan retries. */
 	private async scanFolder(): Promise<void> {
 		const folder = this.resolveFolder();
-		const prefix = `${folder}/`;
-		const files = this.app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(prefix));
+		const metas = await this.files.listIndexedMarkdown(folder);
 		// Reads are independent — parse concurrently so a large history
 		// doesn't serialize into a slow boot.
-		const parsed = await Promise.all(files.map((file) => this.parseFile(file)));
-		for (let i = 0; i < files.length; i++) {
+		const parsed = await Promise.all(metas.map((meta) => this.parsePath(meta.path, meta.mtime)));
+		for (let i = 0; i < metas.length; i++) {
 			const conv = parsed[i];
-			if (conv) {
+			// A dirty in-memory copy is AHEAD of disk (pending debounced write) —
+			// a re-scan (boot retry) must not replace it with the older file.
+			if (conv && !this.dirty.has(conv.id)) {
 				this.conversations.set(conv.id, conv);
-				this.paths.set(conv.id, files[i].path);
+				this.paths.set(conv.id, metas[i].path);
 			}
 		}
 	}
 
+	/**
+	 * Boot-race guard for the scan, then the one-time localStorage import.
+	 *
+	 * On some boots the host's file index is not populated yet when the
+	 * plugin loads, so scanFolder sees an empty folder even though
+	 * conversation files exist. Left alone, the legacy localStorage import
+	 * then re-imports conversations the late scan was about to find — and
+	 * every boot writes another numbered copy of each file (the demo-vault
+	 * litter machine). So: poll until the index lists the folder (up to
+	 * ~45s — it has always arrived by then; normal boots pass on the first
+	 * check), re-scanning as it grows, and only then import localStorage
+	 * entries whose ids are still missing.
+	 */
+	private async settleScanThenImportLegacy(): Promise<void> {
+		const folder = this.resolveFolder();
+		let settled = false;
+		for (let attempt = 0; attempt < 45; attempt++) {
+			const vaultCount = (await this.files.listIndexedMarkdown(folder)).length;
+			if (vaultCount > 0) {
+				settled = true;
+				break;
+			}
+			// Keep waiting only when the disk folder actually has files — a
+			// folder that is empty on disk needs no scan, whatever the index says.
+			const diskCount = (await this.files.listDiskMarkdown(folder)).length;
+			if (diskCount === 0) return;
+			if (attempt === 0 || attempt % 10 === 9) {
+				console.warn(
+					`[Curtis] File index not ready — ${vaultCount} under ${folder}/, ` +
+						`${diskCount} on disk. Waiting... (attempt ${attempt + 1})`
+				);
+			}
+			await new Promise((r) => setTimeout(r, 1000));
+			await this.scanFolder();
+		}
+		if (!settled) {
+			console.error(
+				'[Curtis] Conversation files exist on disk but the index never listed them. History will be missing until the next reload.'
+			);
+		}
+		await this.importLegacyLocalStorage();
+	}
+
 	/** One-time migration: localStorage conversations with ids not present in
-	 *  the vault are written out as files. Idempotent across boots. */
+	 *  the store are written out as files. Idempotent across boots. */
 	private async importLegacyLocalStorage(): Promise<void> {
 		let entries: [string, Conversation][] = [];
 		try {
-			const raw: unknown = this.app.loadLocalStorage(LEGACY_STORAGE_KEY);
+			const raw: unknown = this.files.loadLegacyStorage(LEGACY_STORAGE_KEY);
 			if (!raw) return;
 			const parsed = typeof raw === 'string' ? (JSON.parse(raw) as unknown) : raw;
 			if (Array.isArray(parsed)) entries = parsed as [string, Conversation][];
@@ -135,48 +204,35 @@ export class ConversationStore {
 	}
 
 	private registerFileWatcher(): void {
-		try {
-			this.plugin?.registerEvent(
-				this.app.vault.on('modify', (file) => {
-					if (!(file instanceof TFile)) return;
-					if (this.writingPaths.has(file.path)) return;
-					void this.reloadFile(file);
-				})
-			);
-			this.plugin?.registerEvent(
-				this.app.vault.on('rename', (file, oldPath) => {
-					if (!(file instanceof TFile)) return;
-					const id = this.findByPath(oldPath);
-					if (id) this.paths.set(id, file.path);
-				})
-			);
-			this.plugin?.registerEvent(
-				this.app.vault.on('delete', (file) => {
-					if (!(file instanceof TFile)) return;
-					const id = this.findByPath(file.path);
-					if (!id) return;
-					this.paths.delete(id);
-					this.conversations.delete(id);
-					if (this.currentConversationId === id) {
-						this.currentConversationId = null;
-					}
-					this.notifyChanged(id, 'delete');
-				})
-			);
-			// The debounced write can lose the last ≤200ms of messages on a fast
-			// quit; onunload's fire-and-forget flush races teardown. The quit
-			// event is the one hook Obsidian actually awaits.
-			this.plugin?.registerEvent(
-				this.app.workspace.on('quit', (tasks) => {
-					for (const id of Array.from(this.dirty)) {
-						this.clearTimer(id);
-						tasks.add(() => this.flush(id));
-					}
-				})
-			);
-		} catch {
-			// registerEvent only valid during plugin load — ignore if called late.
-		}
+		this.files.watch({
+			onModify: (path, mtime) => {
+				if (this.writingPaths.has(path)) return;
+				void this.reloadPath(path, mtime);
+			},
+			onRename: (path, oldPath) => {
+				const id = this.findByPath(oldPath);
+				if (id) this.paths.set(id, path);
+			},
+			onDelete: (path) => {
+				const id = this.findByPath(path);
+				if (!id) return;
+				this.paths.delete(id);
+				this.conversations.delete(id);
+				if (this.currentConversationId === id) {
+					this.currentConversationId = null;
+				}
+				this.notifyChanged(id, 'delete');
+			},
+		});
+		// The debounced write can lose the last ≤200ms of messages on a fast
+		// quit; onunload's fire-and-forget flush races teardown. The quit
+		// hook is the one the host actually awaits.
+		this.files.onQuit(async () => {
+			for (const id of Array.from(this.dirty)) {
+				this.clearTimer(id);
+				await this.flush(id);
+			}
+		});
 	}
 
 	private findByPath(path: string): string | undefined {
@@ -188,14 +244,14 @@ export class ConversationStore {
 
 	/** Re-read one conversation file after an external modify. Parse failures
 	 *  keep the in-memory copy (a transient read must not wipe live state). */
-	private async reloadFile(file: TFile): Promise<void> {
-		const id = this.findByPath(file.path);
+	private async reloadPath(path: string, mtime: number): Promise<void> {
+		const id = this.findByPath(path);
 		if (!id) return;
 		// A pending debounced write means our in-memory copy is AHEAD of the
 		// disk — replacing it with the on-disk copy (and clearing the dirty
 		// flag) would silently drop just-added messages. Let the flush land.
 		if (this.dirty.has(id)) return;
-		const conv = await this.parseFile(file);
+		const conv = await this.parsePath(path, mtime);
 		if (conv && conv.id === id) {
 			this.conversations.set(id, conv);
 			this.dirty.delete(id);
@@ -204,15 +260,23 @@ export class ConversationStore {
 	}
 
 	// ----------------------------------------------------------------------------
-	// Public API (synchronous — writes are debounced to the vault)
+	// Public API (synchronous — writes are debounced to storage)
 	// ----------------------------------------------------------------------------
 
 	createConversation(provider: string, model: string): Conversation {
 		const id = `conv_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 		const now = Date.now();
+		// Number past the highest untitled chat already in memory so two fresh
+		// panes never share a label. Monotonic within a session — a deleted
+		// "New chat 4" is not immediately reissued.
+		let highest = 0;
+		for (const c of this.conversations.values()) {
+			const m = UNTITLED_TITLE_RE.exec(c.title);
+			if (m) highest = Math.max(highest, Number(m[1] ?? 1));
+		}
 		const conv: Conversation = {
 			id,
-			title: 'New chat',
+			title: highest === 0 ? 'New chat' : `New chat ${highest + 1}`,
 			messages: [],
 			createdAt: now,
 			updatedAt: now,
@@ -243,13 +307,13 @@ export class ConversationStore {
 		return this.conversations.get(id);
 	}
 
-	/** Vault path of a conversation's markdown file. Undefined while the
+	/** Storage path of a conversation's markdown file. Undefined while the
 	 *  conversation is still empty (memory-only, never written). */
 	getConversationPath(id: string): string | undefined {
 		return this.paths.get(id);
 	}
 
-	/** Conversation backed by a given vault file path, if any. */
+	/** Conversation backed by a given file path, if any. */
 	getConversationByPath(path: string): Conversation | undefined {
 		const id = this.findByPath(path);
 		return id ? this.conversations.get(id) : undefined;
@@ -280,8 +344,9 @@ export class ConversationStore {
 		conv.messages.push(fullMessage);
 		conv.updatedAt = Date.now();
 
-		// Auto-title from first user message
-		if (conv.title === 'New chat' && message.role === 'user') {
+		// Auto-title from first user message — replaces the untitled
+		// placeholder in numbered ("New chat 2") or plain form.
+		if (UNTITLED_TITLE_RE.test(conv.title) && message.role === 'user') {
 			conv.title = (typeof message.content === 'string' ? message.content : '').slice(0, 50);
 		}
 
@@ -291,11 +356,11 @@ export class ConversationStore {
 	}
 
 	/**
-	 * Persist an externally-built conversation (chat importer). Assigns a
-	 * fresh conv id on collision, fills in any missing message ids, writes
-	 * the file immediately (no debounce — the summary must reflect reality),
-	 * and returns the final id. Returns null when the conversation has no
-	 * messages (nothing worth a file).
+	 * Persist an externally-built conversation (chat importer / Porter).
+	 * Assigns a fresh conv id on collision, fills in any missing message ids,
+	 * writes the file immediately (no debounce — the summary must reflect
+	 * reality), and returns the final id. Returns null when the conversation
+	 * has no messages (nothing worth a file).
 	 */
 	async importConversation(conv: Conversation): Promise<string | null> {
 		if (!conv || !Array.isArray(conv.messages) || conv.messages.length === 0) return null;
@@ -303,7 +368,7 @@ export class ConversationStore {
 			conv.id = `conv_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 		}
 		for (const msg of conv.messages) {
-			if (!msg.id || conv.messages.some((m, i) => m !== msg && m.id === msg.id)) {
+			if (!msg.id || conv.messages.some((m) => m !== msg && m.id === msg.id)) {
 				msg.id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 			}
 		}
@@ -330,15 +395,10 @@ export class ConversationStore {
 		this.notifyChanged(id, 'delete');
 		if (path) {
 			void this.enqueue(id, async () => {
-				const file = this.app.vault.getAbstractFileByPath(path);
-				if (file instanceof TFile) {
-					try {
-						// FileManager.trashFile honors the user's deletion
-						// preference (system trash vs .trash folder).
-						await this.app.fileManager.trashFile(file);
-					} catch (e) {
-						console.error('[Curtis] Failed to trash conversation file:', e);
-					}
+				try {
+					await this.files.trash(path);
+				} catch (e) {
+					console.error('[Curtis] Failed to trash conversation file:', e);
 				}
 			});
 		}
@@ -473,19 +533,42 @@ export class ConversationStore {
 		this.notifyChanged(conv.id, 'meta');
 	}
 
-	/** Broadcast a conversation mutation so every open chat pane bound to it
-	 *  can re-render (or rebind, on delete). No-op before load() wired the plugin. */
-	private notifyChanged(id: string, kind: ConversationChangeKind): void {
-		this.plugin?.eventBus.emit('conversation:changed', { id, kind });
+	/** Set (or clear) a conversation's swarm role and persist + broadcast it.
+	 *  Clearing a follower's role also clears the leader link. */
+	setConversationRole(id: string, role: 'leader' | 'follower' | undefined): void {
+		const conv = this.conversations.get(id);
+		if (!conv) return;
+		conv.role = role;
+		if (!role || role === 'leader') conv.leaderId = undefined;
+		this.markDirty(id);
+		this.notifyChanged(id, 'meta');
 	}
 
-	/** Schedule a debounced vault write for the given conversation. */
+	/** Bind (or clear) a conversation's named agent and persist + broadcast.
+	 *  The binding is metadata: persona/model/ACL resolve at request time,
+	 *  so editing the agent updates every chat it is bound to. */
+	setConversationAgent(id: string, agentId: string | undefined): void {
+		const conv = this.conversations.get(id);
+		if (!conv) return;
+		conv.agentId = agentId;
+		conv.updatedAt = Date.now();
+		this.markDirty(id);
+		this.notifyChanged(id, 'meta');
+	}
+
+	/** Broadcast a conversation mutation so every open chat pane bound to it
+	 *  can re-render (or rebind, on delete). No-op before load() wired the host. */
+	private notifyChanged(id: string, kind: ConversationChangeKind): void {
+		this.host?.eventBus.emit('conversation:changed', { id, kind });
+	}
+
+	/** Schedule a debounced write for the given conversation. */
 	private markDirty(id: string): void {
 		this.dirty.add(id);
 		this.clearTimer(id);
 		this.timers.set(
 			id,
-			window.setTimeout(() => {
+			setTimeout(() => {
 				this.timers.delete(id);
 				void this.flush(id);
 			}, 200)
@@ -495,13 +578,13 @@ export class ConversationStore {
 	private clearTimer(id: string): void {
 		const t = this.timers.get(id);
 		if (t) {
-			window.clearTimeout(t);
+			clearTimeout(t);
 			this.timers.delete(id);
 		}
 	}
 
-	/** Legacy no-op kept for call sites that treated the store as
-	 *  explicitly-saved; with vault files every mutation persists itself. */
+	/** Kept for call sites that treated the store as explicitly-saved; with
+	 *  file-backed storage every mutation persists itself. */
 	save(): void {
 		for (const id of Array.from(this.dirty)) {
 			this.clearTimer(id);
@@ -510,7 +593,7 @@ export class ConversationStore {
 	}
 
 	// ----------------------------------------------------------------------------
-	// Vault I/O
+	// File I/O (through the ConversationFiles port)
 	// ----------------------------------------------------------------------------
 
 	/** Serialize and write one conversation's file (through its queue). */
@@ -534,9 +617,9 @@ export class ConversationStore {
 	}
 
 	private async writeConversation(conv: Conversation): Promise<void> {
-		await this.ensureFolder();
 		const folder = this.resolveFolder();
-		const desiredPath = `${folder}/${this.fileNameFor(conv)}`;
+		await this.files.ensureFolder(folder);
+		const desiredPath = `${folder}/${conversationFileName(conv)}`;
 		const existingPath = this.paths.get(conv.id);
 
 		let path = existingPath;
@@ -544,16 +627,13 @@ export class ConversationStore {
 			path = await this.uniquePath(desiredPath);
 		} else if (path !== desiredPath && !(await this.pathTaken(desiredPath))) {
 			// Title changed (auto-title or rename) — retitle the file so the
-			// vault explorer stays human-browsable.
-			const file = this.app.vault.getAbstractFileByPath(path);
-			if (file instanceof TFile) {
-				try {
-					await this.app.vault.rename(file, desiredPath);
-					path = desiredPath;
-				} catch (e) {
-					console.error('[Curtis] Conversation retitle failed:', e);
-					// Keep writing to the old path — the H1 carries the new title.
-				}
+			// file list stays human-browsable.
+			try {
+				await this.files.rename(path, desiredPath);
+				path = desiredPath;
+			} catch (e) {
+				console.error('[Curtis] Conversation retitle failed:', e);
+				// Keep writing to the old path — the H1 carries the new title.
 			}
 		}
 
@@ -562,29 +642,22 @@ export class ConversationStore {
 			// Serialize inside the try — a malformed message (e.g. undefined
 			// content from a legacy import) must not reject flush as an
 			// unhandled rejection with the dirty flag stranded.
-			const body = this.serializeMarkdown(conv);
-			const file = this.app.vault.getAbstractFileByPath(path);
-			if (file instanceof TFile) {
-				await this.app.vault.modify(file, body);
-			} else {
-				// A cold-boot index can lag the filesystem; vault.create may
-				// then throw "already exists" — the catch below tolerates it.
-				await this.app.vault.create(path, body);
-			}
+			const body = serializeConversationMarkdown(conv, this.yaml);
+			await this.files.write(path, body);
 			this.paths.set(conv.id, path);
 			this.dirty.delete(conv.id);
 		} catch (e) {
 			// Lost a race with the indexer — fine as long as the file exists.
-			const onDisk = await this.app.vault.adapter.exists(path).catch(() => false);
+			const onDisk = await this.files.exists(path);
 			if (onDisk) {
 				this.paths.set(conv.id, path);
 				this.dirty.delete(conv.id);
 			} else {
 				console.error('[Curtis] Conversation persist failed:', e);
-				new Notice('Curtis could not save a conversation — history may be stale until the next successful write.');
+				this.notifyError?.('Curtis could not save a conversation — history may be stale until the next successful write.');
 			}
 		} finally {
-			window.setTimeout(() => this.writingPaths.delete(path), 0);
+			setTimeout(() => this.writingPaths.delete(path), 0);
 		}
 	}
 
@@ -601,225 +674,25 @@ export class ConversationStore {
 	}
 
 	private async pathTaken(path: string): Promise<boolean> {
-		if (this.app.vault.getAbstractFileByPath(path)) return true;
-		return this.app.vault.adapter.exists(path).catch(() => false);
-	}
-
-	private fileNameFor(conv: Conversation): string {
-		const d = new Date(conv.createdAt);
-		const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-		// Short random tail from the conversation id guarantees uniqueness even
-		// when two chats share a title and a creation date.
-		const short = conv.id.split('_').pop()?.slice(-6) || conv.id.slice(-6);
-		return `${date} ${slugify(conv.title)} ${short}.md`;
+		return this.files.exists(path);
 	}
 
 	private async ensureFolder(): Promise<void> {
-		const folder = this.resolveFolder();
-		if (this.app.vault.getAbstractFileByPath(folder)) return;
-		if (await this.app.vault.adapter.exists(folder)) return;
-		const parts = folder.split('/').filter(Boolean);
-		let acc = '';
-		for (const p of parts) {
-			acc = acc ? `${acc}/${p}` : p;
-			if (!this.app.vault.getAbstractFileByPath(acc)) {
-				try { await this.app.vault.createFolder(acc); } catch { /* already exists */ }
-			}
-		}
+		await this.files.ensureFolder(this.resolveFolder());
 	}
 
 	// ----------------------------------------------------------------------------
-	// Markdown parse / serialize
+	// Parse (through the file port + injected yaml)
 	// ----------------------------------------------------------------------------
 
-	private async parseFile(file: TFile): Promise<Conversation | null> {
+	private async parsePath(path: string, mtime: number): Promise<Conversation | null> {
 		let raw: string;
 		try {
-			raw = await this.app.vault.read(file);
+			raw = await this.files.read(path);
 		} catch (e) {
 			console.error('[Curtis] Failed to read conversation file:', e);
 			return null;
 		}
-		return parseConversationMarkdown(raw, file.stat.mtime);
+		return parseConversationMarkdown(raw, mtime, this.yaml);
 	}
-
-	private serializeMarkdown(conv: Conversation): string {
-		const fm: Record<string, unknown> = {
-			curtis: 'conversation',
-			id: conv.id,
-			created: conv.createdAt,
-			updated: conv.updatedAt,
-			provider: conv.provider,
-			model: conv.model,
-		};
-
-		const parts: string[] = [`---\n${stringifyYaml(fm).replace(/\n+$/, '\n')}---`, '', `# ${conv.title}`, ''];
-		for (const msg of conv.messages) {
-			const meta: Record<string, unknown> = { id: msg.id, ts: msg.timestamp, role: msg.role };
-			if (msg.provider) meta.provider = msg.provider;
-			if (msg.model) meta.model = msg.model;
-			if (msg.cost) meta.cost = msg.cost;
-			if (msg.tokens) meta.tokens = msg.tokens;
-			if (msg.images && msg.images.length > 0) meta.images = msg.images;
-			if (msg.attachedNotes && msg.attachedNotes.length > 0) meta.attachedNotes = msg.attachedNotes;
-			if (msg.tool_calls && msg.tool_calls.length > 0) meta.tool_calls = msg.tool_calls;
-			if (msg.tool_call_id) meta.tool_call_id = msg.tool_call_id;
-			if (msg.tool_error) meta.tool_error = true;
-			if (msg.memoriesUsedIds && msg.memoriesUsedIds.length > 0) meta.mem = msg.memoriesUsedIds;
-			// Escape the comment terminator so metadata containing "-->"
-			// (e.g. tool arguments editing markdown with HTML comments) can't
-			// break out of the marker.
-			const json = JSON.stringify(meta).replace(/-->/g, '--\\u003E');
-			// Likewise, a message body quoting the marker itself would split
-			// this message in two on the next parse — neutralize the opener.
-			// The zero-width space is invisible and survives round-trips.
-			const content = (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content ?? ''))
-				.replace(/<!--\s*curtis:msg/g, '<!--\u200Bcurtis:msg');
-			parts.push(
-				`## ${ROLE_LABELS[msg.role] ?? 'AI'}`,
-				`<!-- curtis:msg ${json} -->`,
-				'',
-				content.trim(),
-				''
-			);
-		}
-		return parts.join('\n');
-	}
-}
-
-/** Turn a conversation title into a filesystem-safe filename fragment. */
-function slugify(title: string): string {
-	const cleaned = (title || '')
-		.replace(/[\\/:*?"<>|#^[\]]/g, '')
-		// eslint-disable-next-line no-control-regex -- strip ASCII control chars that are illegal in filenames
-		.replace(/[\x00-\x1f]/g, '')
-		.replace(/\s+/g, ' ')
-		.replace(/^\.+/, '')
-		.trim()
-		.replace(/[. ]+$/, '');
-	const trimmed = cleaned.length > 60 ? cleaned.slice(0, 60).trim() : cleaned;
-	return trimmed || 'Untitled';
-}
-
-/**
- * Parse a conversation markdown file into a Conversation.
- *
- * Layout (written by serializeMarkdown; hand edits tolerated):
- *
- *   ---
- *   curtis: conversation
- *   id: conv_...
- *   ...
- *   ---
- *
- *   # Title
- *
- *   ## You
- *   <!-- curtis:msg {"id":"...","ts":...,"role":"user"} -->
- *
- *   message content
- *
- * The marker ends the heading area and opens the message; a message's content
- * runs from the end of its marker to the role heading that precedes the next
- * marker (or EOF). Sections without a marker can't be attributed to a role,
- * so they are not ingested — they stay readable in the file.
- *
- * Returns null when the file isn't a Curtis conversation (no frontmatter
- * signature) or the frontmatter is unreadable.
- */
-export function parseConversationMarkdown(raw: string, fallbackMtime: number): Conversation | null {
-	const fmMatch = raw.match(/^---\n([\s\S]*?)\n---\s*\n?/);
-	if (!fmMatch) return null;
-	let fm: Record<string, unknown>;
-	try {
-		fm = parseYaml(fmMatch[1]) as Record<string, unknown>;
-	} catch {
-		return null;
-	}
-	if (!fm || fm.curtis !== 'conversation' || typeof fm.id !== 'string') return null;
-
-	const bodyStart = fmMatch[0].length;
-	const body = raw.slice(bodyStart);
-
-	// Locate every message marker.
-	MSG_MARKER_RE.lastIndex = 0;
-	const markers: Array<{ meta: Record<string, unknown>; start: number; end: number }> = [];
-	let m: RegExpExecArray | null;
-	while ((m = MSG_MARKER_RE.exec(body)) !== null) {
-		try {
-			markers.push({ meta: JSON.parse(m[1]) as Record<string, unknown>, start: m.index, end: m.index + m[0].length });
-		} catch {
-			// Malformed marker — treat as content, not a boundary.
-		}
-	}
-
-	// Title = first H1 in the region before the first marker.
-	const pre = body.slice(0, markers[0]?.start ?? body.length);
-	const titleMatch = pre.match(/^# (.+)$/m);
-	const title = titleMatch?.[1]?.trim() || 'Untitled';
-
-	// For each marker, the content region ends where the NEXT message's role
-	// heading begins. Scan back from the next marker over whitespace; if the
-	// line above it is one of our fixed role headings, that heading starts the
-	// next block — otherwise the next marker itself is the boundary.
-	const messages: ConversationMessage[] = [];
-	for (let i = 0; i < markers.length; i++) {
-		const { meta } = markers[i];
-		const role = readRole(meta.role);
-		if (!role) continue;
-		let contentEnd = body.length;
-		if (i + 1 < markers.length) {
-			const next = markers[i + 1].start;
-			let j = next;
-			while (j > 0 && /[\s]/.test(body[j - 1])) j--;
-			const lineStart = body.lastIndexOf('\n', j - 1) + 1;
-			const line = body.slice(lineStart, next).trimEnd();
-			contentEnd = HEADING_LINE_RE.test(line) ? lineStart : next;
-		}
-		const content = body.slice(markers[i].end, contentEnd).replace(/^\n+/, '').replace(/\s+$/, '');
-		messages.push({
-			id: typeof meta.id === 'string' ? meta.id : `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-			role,
-			content,
-			timestamp: typeof meta.ts === 'number' ? meta.ts : fallbackMtime,
-			provider: typeof meta.provider === 'string' ? meta.provider : undefined,
-			model: typeof meta.model === 'string' ? meta.model : undefined,
-			cost: typeof meta.cost === 'number' ? meta.cost : undefined,
-			tokens: isTokenUsage(meta.tokens) ? meta.tokens : undefined,
-			images: readStringArray(meta.images),
-			attachedNotes: readStringArray(meta.attachedNotes),
-			tool_calls: Array.isArray(meta.tool_calls) ? (meta.tool_calls as ConversationMessage['tool_calls']) : undefined,
-			tool_call_id: typeof meta.tool_call_id === 'string' ? meta.tool_call_id : undefined,
-			tool_error: meta.tool_error === true || undefined,
-			memoriesUsedIds: readStringArray(meta.mem),
-		});
-	}
-
-	const updatedAt = typeof fm.updated === 'number' ? fm.updated : fallbackMtime;
-	const created = typeof fm.created === 'number' ? fm.created : updatedAt;
-	return {
-		id: fm.id,
-		title,
-		messages,
-		createdAt: created,
-		updatedAt,
-		provider: typeof fm.provider === 'string' ? fm.provider : '',
-		model: typeof fm.model === 'string' ? fm.model : '',
-	};
-}
-
-function readRole(v: unknown): ConversationMessage['role'] | undefined {
-	return v === 'user' || v === 'assistant' || v === 'tool' || v === 'system' ? v : undefined;
-}
-
-function readStringArray(v: unknown): string[] | undefined {
-	if (!Array.isArray(v)) return undefined;
-	const arr = v.filter((x): x is string => typeof x === 'string');
-	return arr.length > 0 ? arr : undefined;
-}
-
-function isTokenUsage(v: unknown): v is TokenUsage {
-	if (!v || typeof v !== 'object') return false;
-	const o = v as Record<string, unknown>;
-	return typeof o.promptTokens === 'number' && typeof o.completionTokens === 'number' && typeof o.totalTokens === 'number';
 }

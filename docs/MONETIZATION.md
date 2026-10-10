@@ -12,7 +12,7 @@ curtis-ai-chat is **the first product in a planned Curtis AI line**. That framin
 
 Three facts shape the strategy:
 
-1. **Public commitment.** The README says: *"Curtis AI Chat is and will remain free and open source under the MIT license. Every feature works with your own API keys. Sponsorship is voluntary and appreciated, never required."* That's a contract with early users — reversing it would burn trust we need for product #2.
+1. **Public commitment.** The README says: *"Curtis AI is and will remain free and open source under the MIT license. Every feature works with your own API keys. Sponsorship is voluntary and appreciated, never required."* That's a contract with early users — reversing it would burn trust we need for product #2.
 2. **BYOK architecture.** The plugin never pays AI cost. Users pay their provider directly. There is no metered-cost pressure that forces a paid tier.
 3. **Market reality.** The Obsidian AI-plugin category is free+sponsor across the board — Smart Connections, Copilot for Obsidian, Text Generator. Charging for plugin features alone, on product #1 of N, is the wrong fight.
 

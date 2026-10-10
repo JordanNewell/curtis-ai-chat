@@ -1,6 +1,6 @@
 # Memory
 
-Curtis AI Chat remembers durable facts about you across conversations. This doc explains what gets stored, where, how it's used, how to manage it, and the editing UI new in v1.0.
+Curtis AI remembers durable facts about you across conversations. This doc explains what gets stored, where, how it's used, how to manage it, and the editing UI new in v1.0.
 
 ## What memory is for
 
@@ -43,7 +43,7 @@ You can edit this file directly — add bullets, delete them, rewrite them. The 
 
 ### Ask before saving (default)
 
-After each assistant turn, Curtis AI Chat fires a background call to the active model with a strict extraction prompt:
+After each assistant turn, Curtis AI fires a background call to the active model with a strict extraction prompt:
 
 > *"Extract 0-3 durable facts about the user from this chat turn. A durable fact is something true across future conversations: a preference, identity trait, long-lived project detail, or standing instruction. Do NOT capture ephemeral requests. Respond with ONLY a JSON array."*
 

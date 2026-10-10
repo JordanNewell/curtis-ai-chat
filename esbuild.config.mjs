@@ -1,7 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
 import { builtinModules } from "module";
-import { copyFileSync } from "fs";
+import { copyFileSync, mkdirSync, existsSync } from "fs";
 
 const banner =
 `/*
@@ -12,10 +12,52 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = (process.argv[2] === 'production');
 
+// Runs on every rebuild (initial build, prod rebuild, and each watch rebuild),
+// so styles edited while `npm run dev` is watching stay in sync at the root.
+const copyStyles = {
+	name: 'copy-styles',
+	setup(build) {
+		build.onEnd(() => {
+			try {
+				copyFileSync('src/styles.css', 'styles.css');
+			} catch (e) {
+				console.warn('Warning: Could not copy styles.css');
+			}
+		});
+	},
+};
+
+// Obsidian loads the plugin from the vault's own copy of main.js — a build
+// that only writes the repo root leaves every manual test running stale code
+// (the exact way the "Open another terminal window" bug looked unfixed).
+// Same three files the smoke harness bootstraps; skipped when there is no
+// demo-vault (CI). Registered after copy-styles: the vault gets the root
+// styles.css copyStyles just wrote. A disk sync is not a plugin reload —
+// Obsidian still needs one to pick it up.
+const DEMO_VAULT_PLUGIN = 'demo-vault/.obsidian/plugins/curtis-ai-chat';
+const syncDemoVault = {
+	name: 'sync-demo-vault',
+	setup(build) {
+		build.onEnd(() => {
+			if (!existsSync('demo-vault')) return;
+			try {
+				mkdirSync(DEMO_VAULT_PLUGIN, { recursive: true });
+				for (const f of ['main.js', 'manifest.json', 'styles.css']) {
+					copyFileSync(f, `${DEMO_VAULT_PLUGIN}/${f}`);
+				}
+				console.log(`Synced build → ${DEMO_VAULT_PLUGIN}`);
+			} catch (e) {
+				console.warn('Warning: Could not sync build into demo-vault');
+			}
+		});
+	},
+};
+
 const context = await esbuild.context({
 	banner: {
 		js: banner,
 	},
+	plugins: [copyStyles, syncDemoVault],
 	entryPoints: ['src/main.ts'],
 	bundle: true,
 	external: [
@@ -41,13 +83,6 @@ const context = await esbuild.context({
 	minify: prod,
 	outfile: 'main.js',
 });
-
-// Copy styles.css from src/ to root output
-try {
-	copyFileSync('src/styles.css', 'styles.css');
-} catch (e) {
-	console.warn('Warning: Could not copy styles.css');
-}
 
 if (prod) {
 	await context.rebuild();

@@ -1,12 +1,14 @@
 // Sidebar Chat View — persistent ItemView for AI chat
 
 import { ItemView, Menu, Notice, Platform, WorkspaceLeaf, setIcon, TFile, debounce } from 'obsidian';
-import type { Conversation, ConversationMessage, AIMessage, MessageContent, TokenUsage, ToolCall, MemoryProposal } from '../types';
+import type { Agent, Conversation, ConversationMessage, AIMessage, AIProvider, MessageContent, TokenUsage, ToolCall, MemoryProposal } from '../types';
 import { toBase64 } from '../utils/base64';
 import { MessageRenderer } from './message-renderer';
 import { CURTIS_ICON_ID } from '../icons';
 import { ConversationStore } from './conversation-store';
 import { ModelPickerModal, buildModelPickerEntries } from '../ui/modals/model-picker-modal';
+import { RenameConversationModal } from '../ui/modals/rename-conversation-modal';
+import { AgentPickerModal } from '../ui/modals/agent-picker-modal';
 import { ArenaModelPickerModal } from '../ui/modals/arena-model-picker-modal';
 import type { ArenaSelection, ArenaModelEntry } from '../ui/modals/arena-model-picker-modal';
 import { attachMessageActions, attachUserMessageActions } from './message-actions';
@@ -26,54 +28,18 @@ import {
 	stopSpeaking,
 	isMediaRecorderSupported,
 	isSpeechSupported,
+	cleanTextForSpeech,
 } from './voice';
-import { TTSController } from './tts-controller';
+import { NativeSpeechBackend } from './tts-backends';
+import { TTSController, splitSentencesWithOffsets } from './tts-controller';
+import type { TTSConfig, TTSState } from './tts-controller';
 import { notifyResponse, responsePreview } from './notifications';
+import { providerColor } from '../providers/colors';
+import { setAnthropicThinkingHints, ThinkingStreamSplitter } from '../providers/anthropic';
 import type CurtisPlugin from '../main';
 
 export const CHAT_VIEW_TYPE = 'curtis-chat';
 
-/** Brand color per built-in provider id. Used for the role/picker dot.
- *  Custom providers fall back to --interactive-accent via CSS. */
-const PROVIDER_COLORS: Record<string, string> = {
-	anthropic: '#d97757',
-	openai: '#10a37f',
-	gemini: '#4285f4',
-	'zai-glm': '#3b82f6',
-	ollama: '#9333ea',
-	openrouter: '#6464ff',
-	mistral: '#fa520f',
-	groq: '#f55036',
-	deepseek: '#4d6bfe',
-	xai: '#ffffff',
-	perplexity: '#20808d',
-	novita: '#00d4aa',
-	deepinfra: '#ff6b35',
-	hyperbolic: '#a855f7',
-	chutes: '#facc15',
-	replicate: '#000000',
-	lepton: '#7c3aed',
-	lambda: '#ef4444',
-	huggingface: '#ff9d00',
-	'azure-openai': '#0078d4',
-	'github-models': '#6e40c9',
-	fal: '#7c3aed',
-	cerebras: '#e63946',
-	sambanova: '#1e88e5',
-	requesty: '#22c55e',
-};
-
-function providerColor(providerId: string | undefined): string | undefined {
-	if (!providerId) return undefined;
-	// Direct hit
-	if (PROVIDER_COLORS[providerId]) return PROVIDER_COLORS[providerId];
-	// Partial match (e.g. custom providers with prefixed ids)
-	const lower = providerId.toLowerCase();
-	for (const key of Object.keys(PROVIDER_COLORS)) {
-		if (lower.includes(key)) return PROVIDER_COLORS[key];
-	}
-	return undefined;
-}
 
 /** Map a file extension to a MIME type for the data URL prefix. */
 function imageMimeFromExt(ext: string): string {
@@ -96,6 +62,18 @@ function bytesToBase64(buf: ArrayBuffer): string {
 	return toBase64(new Uint8Array(buf));
 }
 
+/** Model-level failure patterns: the selected model id was retired, gated, or
+ *  unknown to the provider. Checked BEFORE the 401/403 branch because gated
+ *  and decommissioned models often surface as 403/404 — classifying them as
+ *  auth failures sends users off to re-enter API keys that are perfectly valid. */
+const MODEL_UNAVAILABLE_RE =
+	/model[_\s-]*not[_\s-]*(found|exist|available)|model_not_found|unknown model|invalid model|unsupported model|access to (this|the|that) model|model.*(decommissioned|deprecated|retired|no longer|does not exist|doesn.t exist)/;
+/** Weaker signals that only indicate a dead model when the error body also
+ *  names the model or carries a 404 status (e.g. OpenAI's "The model `x`
+ *  does not exist or you do not have access to it", z.ai's "model not
+ *  supported" for ids the plan stopped serving). */
+const MODEL_GONE_WEAK_RE = /(does not|doesn.t) exist|not available|no longer|not supported|unsupported/;
+
 /**
  * Translate a provider/stream error into a user-readable message with the
  * likely cause + suggested fix. Patterns observed across providers:
@@ -105,20 +83,6 @@ function bytesToBase64(buf: ArrayBuffer): string {
  *   - HTTP 429 → rate limit
  *   - HTTP 5xx → provider down
  */
-/**
- * Model-level failure patterns: the selected model id was retired, gated, or
- * unknown to the provider. Checked BEFORE the 401/403 branch because gated
- * and decommissioned models often surface as 403/404 — classifying them as
- * auth failures sends users off to re-enter API keys that are perfectly valid.
- */
-const MODEL_UNAVAILABLE_RE =
-	/model[_\s-]*not[_\s-]*(found|exist|available)|model_not_found|unknown model|invalid model|unsupported model|access to (this|the|that) model|model.*(decommissioned|deprecated|retired|no longer|does not exist|doesn.t exist)/;
-/** Weaker signals that only indicate a dead model when the error body also
- *  names the model or carries a 404 status (e.g. OpenAI's "The model `x`
- *  does not exist or you do not have access to it", z.ai's "model not
- *  supported" for ids the plan stopped serving). */
-const MODEL_GONE_WEAK_RE = /(does not|doesn.t) exist|not available|no longer|not supported|unsupported/;
-
 function friendlyError(error: Error, hasImages = false): { message: string; cause?: string } {
 	const msg = (error.message || '').toLowerCase();
 	const mentionsModel = msg.includes('model');
@@ -164,6 +128,11 @@ export class ChatView extends ItemView {
 	private renderer: MessageRenderer;
 	private store: ConversationStore;
 	private messagesContainer!: HTMLElement;
+	/** Transcript is scrolled more than a hop above the bottom — streaming
+	 *  updates must not yank the view down (smart autoscroll) and the
+	 *  jump-to-latest button shows instead. */
+	private userScrolledUp = false;
+	private scrollBtn: HTMLElement | null = null;
 	/** Conversation THIS pane renders. Per-instance so multiple panes (splits,
 	 *  popout windows) can each hold a different conversation; null only
 	 *  before the first bind (fresh vault, no conversations yet). */
@@ -173,6 +142,9 @@ export class ChatView extends ItemView {
 	 *  change — the last pane the user touched wins as the default. */
 	private activeProviderId = '';
 	private activeModelId = '';
+	/** Header pill for the bound named agent — hidden when the conversation
+	 *  runs the default assistant. */
+	private agentPillEl: HTMLButtonElement | null = null;
 	/** True while this view handles its own re-render after a store write —
 	 *  conversation:changed handlers skip so panes don't double-render. */
 	private suppressStoreEvents = false;
@@ -184,8 +156,6 @@ export class ChatView extends ItemView {
 	private currentSendHasImages = false;
 	/** Persistent background layer (wallpaper + brand watermark). */
 	private backgroundLayer!: HTMLElement;
-	/** Hint row below input — text reflects current enterKeyBehavior setting. */
-	private inputHintEl!: HTMLElement;
 	private inputEl!: HTMLTextAreaElement;
 	private sendBtn!: HTMLButtonElement;
 	private abortBtn!: HTMLButtonElement;
@@ -232,6 +202,10 @@ export class ChatView extends ItemView {
 	private micBtn!: HTMLButtonElement;
 	/** Auto-speak toggle in the header — speaks new assistant responses aloud. */
 	private autoSpeakBtn!: HTMLButtonElement;
+	/** Conversation title in the top bar — quiet label, click renames.
+	 *  Named to avoid the base View's internal (undocumented) `titleEl`,
+	 *  which a same-named field here would shadow and null out mid-load. */
+	private conversationTitleEl: HTMLElement | null = null;
 
 	// --- Voice state ------------------------------------------------------
 	/** Active recorder while mic is recording; null when idle. */
@@ -259,7 +233,7 @@ export class ChatView extends ItemView {
 	// --- Arena mode -------------------------------------------------------
 	/** True while the user has the arena toggle active. */
 	private arenaMode = false;
-	/** Models selected for the next arena send (2, head-to-head). */
+	/** Models selected for the next arena send (2-4, side by side). */
 	private arenaSelectedModels: ArenaSelection[] = [];
 	/** In-flight arena AbortControllers, keyed by `${providerId}:${modelId}`. */
 	private arenaAbortControllers: Map<string, AbortController> = new Map();
@@ -290,13 +264,14 @@ export class ChatView extends ItemView {
 		this.messagesContainer.empty();
 		// Re-show the hero orb + welcome copy.
 		this.renderEmptyState();
+		this.refreshConversationTitle();
 		this.inputEl.focus();
 	}
 
 	constructor(leaf: WorkspaceLeaf, plugin: CurtisPlugin) {
 		super(leaf);
 		this.plugin = plugin;
-		this.renderer = new MessageRenderer(plugin.app);
+		this.renderer = new MessageRenderer(plugin.app, () => plugin.settings.showLinkFavicons !== false);
 		this.store = plugin.conversationStore;
 	}
 
@@ -305,7 +280,9 @@ export class ChatView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return 'Curtis AI';
+		// Tab and popout headers name the bound conversation — with several
+		// panes open, identical "Curtis AI" labels are indistinguishable.
+		return this.getConversationForView()?.title || 'Curtis AI';
 	}
 
 	getIcon(): string {
@@ -317,18 +294,160 @@ export class ChatView extends ItemView {
 	 *  menu and the tab-header context menu. The popout item is desktop-
 	 *  only; mobile has no popout windows. */
 	onPaneMenu(menu: Menu, source: string): void {
+		const conv = this.getConversationForView();
+		if (conv) {
+			menu.addItem((item) => item
+				.setTitle('Rename conversation')
+				.setIcon('pencil')
+				.onClick(() => this.openRenameConversationModal()));
+			// Swarm — marking a chat as leader is the only setup step: it gets
+			// the tool loop and the spawn_agent tool on its next send.
+			const isLeader = conv.role === 'leader';
+			menu.addItem((item) => item
+				.setTitle(isLeader ? 'Remove leader mode' : 'Make leader (spawn agents)')
+				.setIcon('crown')
+				.onClick(() => {
+					this.store.setConversationRole(conv.id, isLeader ? undefined : 'leader');
+					new Notice(isLeader
+						? 'Leader mode off — this chat is a normal chat again'
+						: `Leader mode on — ask for parallel work and this chat can spawn up to ${this.plugin.settings.swarmMaxFollowers} follower agent(s) per message`);
+				}));
+			menu.addItem((item) => item
+				.setTitle('Set agent…')
+				.setIcon('bot')
+				.onClick(() => this.openAgentPicker()));
+			// Export lives here, not the topbar — the row keeps only
+			// conversation-flow actions (history, search, terminal).
+			menu.addItem((item) => item
+				.setTitle('Export conversation')
+				.setIcon('download')
+				.onClick((evt) => this.showExportMenu(evt)));
+		}
 		menu.addItem((item) => item
-			.setTitle('Open new chat pane')
-			.setIcon('square-split-horizontal')
-			.onClick(() => void this.plugin.openNewChatPane('split')));
+			.setTitle('Open new chat tab')
+			.setIcon('file-plus')
+			.onClick(() => void this.plugin.openNewChatPane('tab')));
 		if (Platform.isDesktop) {
 			menu.addItem((item) => item
 				.setTitle('Open chat in new window')
-				.setIcon('popout')
-				.onClick(() => void this.plugin.openNewChatPane('window')));
+				.setIcon('app-window')
+				.onClick(() => void this.plugin.openNewChatPane('window', conv?.id ?? 'fresh')));
+			// Same option pair chats get — the pane menu is where "another
+			// terminal, where?" is answered, so both always create.
+			menu.addItem((item) => item
+				.setTitle('Open new terminal tab')
+				.setIcon('file-plus')
+				.onClick(() => void this.plugin.openTerminalPane('tab', { another: true })));
+			menu.addItem((item) => item
+				.setTitle('Open terminal in new window')
+				.setIcon('app-window')
+				.onClick(() => void this.plugin.openTerminalPane('window', { another: true })));
+		} else {
+			// Mobile: no popout windows — dock the terminal as a tab running
+			// the vault shell.
+			menu.addItem((item) => item
+				.setTitle('Open terminal')
+				.setIcon('terminal')
+				.onClick(() => void this.plugin.openTerminalPane('tab')));
 		}
 		menu.addSeparator();
 		super.onPaneMenu(menu, source);
+	}
+
+	/** The export options (Markdown / .curt / recap) as a cascading menu —
+	 * opened from the pane menu's "Export conversation" item. Keyboard
+	 * activation has no cursor to anchor on, so it centers on the pane. */
+	private showExportMenu(evt: MouseEvent | KeyboardEvent): void {
+		const menu = new Menu();
+		menu.addItem((item) =>
+			item
+				.setTitle('Download as Markdown')
+				.setIcon('file-text')
+				.onClick(() => this.exportCurrentConversation())
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle('Save as .curt (portable)')
+				.setIcon('package')
+				.onClick(() => {
+					const conv = this.getConversationForView();
+					if (!conv || conv.messages.length === 0) {
+						new Notice('Nothing to export');
+						return;
+					}
+					downloadConversationCurt(conv, this.plugin.manifest.version);
+					new Notice(`Exported: ${conv.title}`);
+				})
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle('Recap conversation')
+				.setIcon('list-checks')
+				.onClick(() => void runRecap(this.plugin, this.conversationId, () => this.renderCurrentConversation()))
+		);
+		if (evt instanceof MouseEvent) {
+			menu.showAtMouseEvent(evt);
+		} else {
+			const rect = this.contentEl.getBoundingClientRect();
+			menu.showAtPosition({ x: rect.left + rect.width / 2, y: rect.top + 80 });
+		}
+	}
+
+	/** True once onOpen has fully completed — the pane header must not be
+	 *  refreshed before that: Obsidian's internal updateHeader touches the
+	 *  tab-header DOM, which is still null while the view is loading, and
+	 *  calling it mid-load crashes the loader for this view. */
+	private paneHeaderReady = false;
+
+	/** Ask Obsidian to re-read getDisplayText — tab headers cache the label.
+	 *  There is no public refresh; WorkspaceLeaf.updateHeader does it at
+	 *  runtime. Guarded twice — flag until onOpen completes, and a catch in
+	 *  case the header DOM is still absent — so a renamed internal or an
+	 *  early call only ever costs a stale label, never a crash. */
+	private refreshPaneHeader(): void {
+		if (!this.paneHeaderReady) return;
+		try {
+			(this.leaf as unknown as { updateHeader?: () => void } | null)?.updateHeader?.();
+		} catch {
+			/* header DOM not built yet — the initial render reads getDisplayText anyway */
+		}
+	}
+
+	/** Sync the conversation title to the topbar label and the pane header.
+	 *  Runs on every rebind and on meta changes (rename) — idempotent. */
+	private refreshConversationTitle(): void {
+		const conv = this.getConversationForView();
+		const headerTitle = conv?.title || 'Curtis AI';
+		this.updateAgentPill();
+		// Leader chats wear a quiet crown before the title — the one in-pane
+		// hint that this chat can spawn agents.
+		if (this.conversationTitleEl) {
+			this.conversationTitleEl.empty();
+			if (conv?.role === 'leader') {
+				const badge = this.conversationTitleEl.createSpan({ cls: 'ai-chat-leader-badge' });
+				setIcon(badge, 'crown');
+			}
+			this.conversationTitleEl.createSpan({ text: conv?.title ?? '' });
+		}
+		// Obsidian's inline view-header caches getDisplayText from load and
+		// offers no public accessor to refresh it — the undocumented
+		// `titleEl` field and the `.view-header-title` DOM node (a stable
+		// class) cover it; every step is guarded so a miss is only cosmetic.
+		(this as unknown as { titleEl?: HTMLElement | null }).titleEl?.setText(headerTitle);
+		const leafEl = (this.leaf as unknown as { containerEl?: HTMLElement | null } | null)?.containerEl ?? null;
+		leafEl?.querySelector('.view-header-title')?.setText(headerTitle);
+		this.refreshPaneHeader();
+	}
+
+	/** Rename the bound conversation — the topbar title click and the pane
+	 *  menu both land here. Goes through the store so the vault file retitles
+	 *  and every pane bound to the conversation updates. */
+	private openRenameConversationModal(): void {
+		const conv = this.getConversationForView();
+		if (!conv) return;
+		new RenameConversationModal(this.app, conv.title, (title) => {
+			this.store.renameCurrentConversation(title, conv.id);
+		}).open();
 	}
 
 	/** The conversation this pane renders; undefined when unbound (fresh
@@ -367,6 +486,63 @@ export class ChatView extends ItemView {
 		if (btn instanceof HTMLElement) this.updateModelPickerButton(btn);
 	}
 
+	/**
+	 * Effective send config for the bound conversation: a named agent IS the
+	 * config — its provider/model override the pane picker, the way the lane
+	 * was defined. Returns null when nothing is authenticated (callers show
+	 * the standard notice).
+	 */
+	private resolveSendConfig(): { provider: AIProvider; modelId: string; agent: Agent | undefined } | null {
+		const conv = this.getConversationForView();
+		const agent = this.plugin.agents.getAgent(conv?.agentId);
+		const providerId = agent?.providerId || this.activeProviderId;
+		const modelId = agent?.modelId || this.activeModelId;
+		const provider = this.plugin.providerRegistry.getProvider(providerId);
+		if (!provider || !provider.isAuthenticated()) return null;
+		return { provider, modelId, agent };
+	}
+
+	/** Agent-mode model override from Settings → Agent. Null when unset or
+	 *  unauthenticated, or when a named agent is bound — a named agent IS its
+	 *  own model routing, so the settings override steps aside. */
+	private resolveAgentLane(boundAgent: Agent | undefined): { provider: AIProvider; modelId: string } | null {
+		if (boundAgent) return null;
+		const { agentProviderId, agentModelId } = this.plugin.settings;
+		if (!agentProviderId || !agentModelId) return null;
+		const provider = this.plugin.providerRegistry.getProvider(agentProviderId);
+		if (!provider || !provider.isAuthenticated()) return null;
+		return { provider, modelId: agentModelId };
+	}
+
+	/** Sync the agent pill with the bound conversation. No agent → hidden. */
+	private updateAgentPill(): void {
+		const pill = this.agentPillEl;
+		if (!pill) return;
+		const agent = this.plugin.agents.getAgent(this.getConversationForView()?.agentId);
+		pill.empty();
+		pill.toggleClass('is-hidden', !agent);
+		if (!agent) return;
+		pill.title = `${agent.name} — click to change agent`;
+		pill.setAttribute('aria-label', `Agent: ${agent.name}`);
+		pill.createSpan({ cls: 'ai-agent-pill-emoji', text: agent.emoji });
+		pill.createSpan({ cls: 'ai-agent-pill-name', text: agent.name });
+	}
+
+	/** Open the agent picker for the bound conversation. */
+	private openAgentPicker(): void {
+		const convId = this.conversationId;
+		if (!convId) {
+			new Notice('Send a first message to start a chat, then pick an agent');
+			return;
+		}
+		new AgentPickerModal(this.app, this.plugin, (agent) => {
+			this.plugin.conversationStore.setConversationAgent(convId, agent?.id);
+			new Notice(agent
+				? `${agent.emoji} ${agent.name} — this chat now runs on ${agent.modelId}`
+				: 'Agent cleared — default assistant');
+		}).open();
+	}
+
 	/** Reconcile this pane with a conversation mutation that happened
 	 *  elsewhere (another pane, a vault file edit/delete). */
 	private onConversationChanged(evt: { id: string; kind: 'messages' | 'meta' | 'delete' }): void {
@@ -387,6 +563,9 @@ export class ChatView extends ItemView {
 			return;
 		}
 		if (evt.id !== this.conversationId) return;
+		// Title-only sync even mid-stream — a rename while generating must
+		// not wait for the stream to end.
+		if (evt.kind === 'meta') this.refreshConversationTitle();
 		// A pane mid-stream manages its own DOM; the final store writes are
 		// followed by its own re-render.
 		if (this.isGenerating || this.arenaAbortControllers.size > 0) return;
@@ -404,27 +583,66 @@ export class ChatView extends ItemView {
 		container.empty();
 		container.addClass('ai-chat-view');
 
-		// Pane-header action — one-click popout. Desktop-only for the same
-		// reason as the menu entry: mobile has no popout windows.
+		// Pane-header actions — a second chat one click away, always visible
+		// (the "..." pane menu holds the fuller set: rename, window, splits).
+		this.addAction('file-plus', 'Open new chat tab', () => {
+			void this.plugin.openNewChatPane('tab');
+		});
+		// Popout is desktop-only for the same reason as the menu entry:
+		// mobile has no popout windows.
 		if (Platform.isDesktop) {
-			this.addAction('popout', 'Open chat in new window', () => {
-				void this.plugin.openNewChatPane('window');
+			this.addAction('app-window', 'Open chat in new window', () => {
+				// Carries this pane's conversation into the window when one
+				// is bound — the icon sits on the pane, so "this chat" is the
+				// expected payload.
+				void this.plugin.openNewChatPane('window', this.conversationId ?? 'fresh');
 			});
 		}
 
-		// Per-pane binding: start on the most recent conversation with the
-		// workspace-default provider/model. From here on this pane's fields
-		// are the source of truth; settings hold the defaults for new panes.
-		this.conversationId = this.store.getCurrentConversation()?.id ?? null;
+		// Per-pane binding with the workspace-default provider/model. From
+		// here on this pane's fields are the source of truth; settings hold
+		// the defaults for new panes. Tabs/windows opened by command start a
+		// FRESH conversation (a second view of an existing thread is what the
+		// history dropdown is for); a popout from a pane carries that pane's
+		// conversation over. Default: the most recent conversation.
 		this.activeProviderId = this.plugin.settings.activeProvider;
 		this.activeModelId = this.plugin.settings.activeModel;
+		const pendingBind = this.plugin.takePendingPaneBind();
+		if (pendingBind === 'fresh') {
+			this.conversationId = this.store.createConversation(
+				this.activeProviderId,
+				this.activeModelId
+			).id;
+		} else if (pendingBind) {
+			this.conversationId = this.store.getConversation(pendingBind)?.id ?? null;
+		} else {
+			// Default bind: the most recent conversation. A pane SPLIT clones
+			// this view and lands in this same branch — two live panes on one
+			// thread reads as "split copied my chat". When another pane
+			// already renders the most recent conversation, stay unbound:
+			// this pane renders as a fresh chat and lazily creates its own
+			// conversation on first send. Deliberate same-thread views
+			// (history dropdown, popout carry-over) bind explicitly above.
+			const current = this.store.getCurrentConversation()?.id ?? null;
+			const isClone = current
+				? this.app.workspace
+						.getLeavesOfType(CHAT_VIEW_TYPE)
+						.some(
+							(leaf) =>
+								leaf.view instanceof ChatView &&
+								leaf.view !== this &&
+								leaf.view.conversationId === current
+						)
+				: false;
+			this.conversationId = isClone ? null : current;
+		}
 
 		// Persistent background layer — wallpaper only. Sits behind the message
 		// list (z-index 0). Empty-state copy is rendered separately by
 		// renderEmptyState inside messagesContainer.
 		this.renderBackground(container);
 
-		await this.renderHeader(container);
+		this.renderTopbar(container);
 		this.renderMessagesContainer(container);
 		await this.renderInputArea(container);
 
@@ -462,6 +680,13 @@ export class ChatView extends ItemView {
 				if (file) this.debouncedPulse(file);
 			})
 		);
+
+		// The tab header caches the label Obsidian built at leaf creation —
+		// before this pane bound its conversation. One deferred refresh now
+		// that load is complete; later title changes hit the same path
+		// synchronously.
+		this.paneHeaderReady = true;
+		window.setTimeout(() => this.refreshPaneHeader(), 0);
 	}
 
 	/** Relevance pulse core: local cosine between the opened note and indexed
@@ -494,8 +719,6 @@ export class ChatView extends ItemView {
 	 *  jumps straight into that past conversation. */
 	private renderPulseBar(notePath: string, conversationId: string, title: string, updatedAt: number): void {
 		this.pulseBar?.remove();
-		const header = this.contentEl.querySelector('.ai-chat-header');
-		if (!(header instanceof HTMLElement)) return;
 		const bar = createDiv({ cls: 'ai-chat-pulse' });
 		const label = bar.createSpan({
 			cls: 'ai-chat-pulse-label',
@@ -519,20 +742,21 @@ export class ChatView extends ItemView {
 			this.pulseBar?.remove();
 			this.pulseBar = null;
 		});
-		this.contentEl.insertBefore(bar, header.nextSibling);
+		// Sits directly under the top bar, above the message list.
+		this.contentEl.insertBefore(bar, this.messagesContainer);
 		this.pulseBar = bar;
 	}
 
 	/**
-	 * Refresh the active-note pill in the header. Removes any existing pill
+	 * Refresh the active-note pill in the top bar. Removes any existing pill
 	 * and re-renders it at the same position (right after the new-chat button)
 	 * if a markdown note is currently active.
 	 */
 	private refreshActiveNoteIndicator(): void {
-		const header = this.contentEl.querySelector('.ai-chat-header');
-		if (!(header instanceof HTMLElement)) return;
+		const topbar = this.contentEl.querySelector('.ai-chat-topbar-inner');
+		if (!(topbar instanceof HTMLElement)) return;
 		// Remove any existing pill (could be stale after a note switch).
-		const existing = header.querySelector('.ai-chat-active-note');
+		const existing = topbar.querySelector('.ai-chat-active-note');
 		existing?.remove();
 		const file = getActiveNoteFile(this.app);
 		if (!file) return;
@@ -541,28 +765,27 @@ export class ChatView extends ItemView {
 		this.renderActiveNoteIndicator(tempHost);
 		const pill = tempHost.firstElementChild;
 		if (!(pill instanceof HTMLElement)) return;
-		// Position: insert after the new chat button (first .ai-chat-icon-btn in
-		// the primary row) so the pill stays before the model picker.
-		const mainRow = header.querySelector('.ai-chat-header-main');
-		const newChatBtn = mainRow?.querySelector('.ai-chat-icon-btn');
-		if (mainRow instanceof HTMLElement && newChatBtn) {
-			mainRow.insertBefore(pill, newChatBtn.nextSibling);
-		} else if (mainRow instanceof HTMLElement) {
-			mainRow.insertBefore(pill, mainRow.firstChild);
+		// Position: right after the new-chat button, before the spacer.
+		const newChatBtn = topbar.querySelector('.ai-chat-icon-btn');
+		if (newChatBtn) {
+			topbar.insertBefore(pill, newChatBtn.nextSibling);
 		} else {
-			header.insertBefore(pill, header.firstChild);
+			topbar.insertBefore(pill, topbar.firstChild);
 		}
 	}
 
-	private async renderHeader(container: HTMLElement): Promise<void> {
-		const header = container.createDiv({ cls: 'ai-chat-header' });
-
-		// Primary row — new chat, active-note pill, model picker. The picker
-		// stretches to fill, so this line reads as the conversation's identity.
-		const main = header.createDiv({ cls: 'ai-chat-header-main' });
+	/** Slim top bar — session-level chrome. Title left, model picker
+	 *  centered between it and the tools cluster, conversation tools right;
+	 *  everything about delivering the next message (attach, mic, arena,
+	 *  auto-speak, send) lives in the composer at the bottom. Contents ride
+	 *  in an inner wrapper so the bar caps to the composer column on wide
+	 *  panes — one aligned chat column, like the big web UIs. */
+	private renderTopbar(container: HTMLElement): void {
+		const topbar = container.createDiv({ cls: 'ai-chat-topbar' });
+		const topbarInner = topbar.createDiv({ cls: 'ai-chat-topbar-inner' });
 
 		// New chat — icon button
-		const newChatBtn = main.createEl('button', { cls: 'ai-chat-icon-btn' });
+		const newChatBtn = topbarInner.createEl('button', { cls: 'ai-chat-icon-btn' });
 		setIcon(newChatBtn, 'plus');
 		newChatBtn.title = 'New chat';
 		newChatBtn.setAttribute('aria-label', 'New chat');
@@ -571,37 +794,41 @@ export class ChatView extends ItemView {
 		// Active-note indicator — pill showing the note the user is editing.
 		// Click to attach it to the pending message (reuses @-mention pipeline).
 		// Kept out of the DOM when there's no active markdown note.
-		this.renderActiveNoteIndicator(main);
+		this.renderActiveNoteIndicator(topbarInner);
 
-		// Model picker button — always routes through the modal so we get
-		// capability pills and consistent UX regardless of model count.
-		const pickerBtn = main.createEl('button', { cls: 'ai-model-picker-btn' });
-		this.updateModelPickerButton(pickerBtn);
-		pickerBtn.addEventListener('click', () => this.openModelPicker(pickerBtn));
+		// Conversation title — quiet, ellipsized, click to rename. The only
+		// in-pane label of which conversation this is; the tab header shows
+		// the same text.
+		this.conversationTitleEl = topbarInner.createDiv({ cls: 'ai-chat-topbar-title' });
+		this.conversationTitleEl.setAttribute('role', 'button');
+		this.conversationTitleEl.setAttribute('aria-label', 'Rename conversation');
+		this.conversationTitleEl.title = 'Rename conversation';
+		this.conversationTitleEl.addEventListener('click', () => {
+			// Empty title = no conversation bound (fresh chat) — nothing to
+			// rename, and the invisible zone must not open a modal.
+			if (!this.getConversationForView()) return;
+			this.openRenameConversationModal();
+		});
 
-		// Tools row — mode toggles and utilities. Stays inline with the
-		// primary row on wide panes and stacks under it on narrow ones
-		// (double-deck header) instead of cramming every control into one line.
-		const tools = header.createDiv({ cls: 'ai-chat-header-tools' });
-
-		// Arena toggle — switches the picker path to multi-select and routes
-		// the next send to all selected models in parallel.
-		const arenaBtn = tools.createEl('button', { cls: 'ai-chat-icon-btn ai-chat-arena-btn' });
-		setIcon(arenaBtn, 'wand');
-		arenaBtn.title = 'Arena mode';
-		arenaBtn.setAttribute('aria-label', 'Arena mode');
-		arenaBtn.toggleClass('is-active', this.arenaMode);
-		arenaBtn.addEventListener('click', () => this.toggleArenaMode(arenaBtn));
-
-		// Auto-speak toggle — when on, new assistant responses are spoken aloud.
-		// Only render when speechSynthesis is available (desktop Chromium-based).
-		if (isSpeechSupported()) {
-			this.autoSpeakBtn = tools.createEl('button', { cls: 'ai-chat-icon-btn ai-chat-autospeak-btn' });
-			setIcon(this.autoSpeakBtn, 'volume-2');
-			this.autoSpeakBtn.title = 'Auto-speak responses';
-			this.autoSpeakBtn.setAttribute('aria-label', 'Auto-speak responses');
-			this.autoSpeakBtn.addEventListener('click', () => this.toggleAutoSpeak());
+		// Model picker — desktop: centered between the title and the tools, the
+		// two flex-1 zones on either side making it the bar's midpoint. Mobile:
+		// 390px can't hold title + picker + four tools in one row, so the
+		// picker leaves the title row for a quiet chip in the composer row
+		// (renderInputArea) — same dropdown, same pane-state semantics.
+		if (!Platform.isMobile) {
+			const pickerBtn = topbarInner.createEl('button', { cls: 'ai-model-picker-btn' });
+			this.updateModelPickerButton(pickerBtn);
+			pickerBtn.addEventListener('click', () => this.openModelDropdown(pickerBtn));
 		}
+
+		// Agent pill — visible only while the bound conversation runs a named
+		// agent (the pill is the model picker's sibling: both are lane config).
+		this.agentPillEl = topbarInner.createEl('button', { cls: 'ai-agent-pill' });
+		this.agentPillEl.addEventListener('click', () => this.openAgentPicker());
+		this.updateAgentPill();
+
+		// Right cluster — pushes to the end of the bar.
+		const tools = topbarInner.createDiv({ cls: 'ai-chat-topbar-tools' });
 
 		// History — icon button
 		const historyBtn = tools.createEl('button', { cls: 'ai-chat-icon-btn' });
@@ -609,42 +836,6 @@ export class ChatView extends ItemView {
 		historyBtn.title = 'Conversation history';
 		historyBtn.setAttribute('aria-label', 'Conversation history');
 		historyBtn.addEventListener('click', () => this.showHistoryDropdown(historyBtn));
-
-		// Export — download current conversation as markdown or a portable .curt
-		const exportBtn = tools.createEl('button', { cls: 'ai-chat-icon-btn' });
-		setIcon(exportBtn, 'download');
-		exportBtn.title = 'Export conversation';
-		exportBtn.setAttribute('aria-label', 'Export conversation');
-		exportBtn.addEventListener('click', (e) => {
-			const menu = new Menu();
-			menu.addItem((item) =>
-				item
-					.setTitle('Download as Markdown')
-					.setIcon('file-text')
-					.onClick(() => this.exportCurrentConversation())
-			);
-			menu.addItem((item) =>
-				item
-					.setTitle('Save as .curt (portable)')
-					.setIcon('package')
-					.onClick(() => {
-						const conv = this.getConversationForView();
-						if (!conv || conv.messages.length === 0) {
-							new Notice('Nothing to export');
-							return;
-						}
-						downloadConversationCurt(conv);
-						new Notice(`Exported: ${conv.title}`);
-					})
-			);
-			menu.addItem((item) =>
-				item
-					.setTitle('Recap conversation')
-					.setIcon('list-checks')
-					.onClick(() => void runRecap(this.plugin, this.conversationId, () => this.renderCurrentConversation()))
-			);
-			menu.showAtMouseEvent(e);
-		});
 
 		// Search — fuzzy-search across ALL conversations (assignable hotkey)
 		const searchBtn = tools.createEl('button', { cls: 'ai-chat-icon-btn' });
@@ -654,17 +845,31 @@ export class ChatView extends ItemView {
 		searchBtn.addEventListener('click', () =>
 			void this.plugin.openChatSearch((id) => this.switchConversation(id))
 		);
+
+		// Terminal — desktop opens the shell pane in its own window; mobile
+		// docks it as a tab running the vault shell (no OS shell exists
+		// there).
+		const terminalBtn = tools.createEl('button', { cls: 'ai-chat-icon-btn' });
+		setIcon(terminalBtn, 'terminal');
+		terminalBtn.title = 'Open terminal';
+		terminalBtn.setAttribute('aria-label', 'Open terminal');
+		terminalBtn.addEventListener('click', () =>
+			void this.plugin.openTerminalPane(Platform.isDesktop ? 'window' : 'tab'));
 	}
 
 	/**
-	 * Render the active-note indicator pill into the header. Re-renders the
+	 * Render the active-note indicator pill into the top bar. Re-renders the
 	 * pill on every call so the label stays in sync when the user switches
 	 * notes. No-op (renders nothing) when no markdown note is active.
 	 */
-	private renderActiveNoteIndicator(header: HTMLElement): void {
+	private renderActiveNoteIndicator(topbar: HTMLElement): void {
 		const file = getActiveNoteFile(this.app);
 		if (!file) return;
-		const noteBtn = header.createDiv({ cls: 'ai-chat-active-note' });
+		// Mobile collapses the pill to an icon-only 44px hit target — the name
+		// lives in the aria-label/title, so nothing is lost.
+		const noteBtn = topbar.createDiv({
+			cls: 'ai-chat-active-note' + (Platform.isMobile ? ' is-compact' : ''),
+		});
 		setIcon(noteBtn, 'file-text');
 		const name = file.basename.length > 20
 			? file.basename.slice(0, 17) + '...'
@@ -733,34 +938,33 @@ export class ChatView extends ItemView {
 
 	private renderMessagesContainer(container: HTMLElement): void {
 		this.messagesContainer = container.createDiv({ cls: 'ai-chat-messages' });
+		this.messagesContainer.addEventListener('scroll', () => this.onMessagesScroll(), { passive: true });
+		// Floating jump-to-latest — appears when the transcript is scrolled up
+		// (classic during a long stream), hidden while pinned to the bottom.
+		this.scrollBtn = container.createDiv({ cls: 'ai-chat-scroll-btn is-hidden' });
+		setIcon(this.scrollBtn, 'arrow-down');
+		this.scrollBtn.setAttribute('aria-label', 'Jump to latest');
+		this.scrollBtn.addEventListener('click', () => {
+			this.userScrolledUp = false;
+			this.scrollBtn?.addClass('is-hidden');
+			this.scrollToBottom();
+		});
+	}
+
+	/** Track whether the user deliberately scrolled up — drives both the
+	 *  smart-autoscroll suppression and the jump button's visibility. */
+	private onMessagesScroll(): void {
+		const el = this.messagesContainer;
+		if (!el) return;
+		const up = el.scrollHeight - el.scrollTop - el.clientHeight > 80;
+		if (up === this.userScrolledUp) return;
+		this.userScrolledUp = up;
+		this.scrollBtn?.toggleClass('is-hidden', !up);
 	}
 
 	private renderBackground(container: HTMLElement): void {
 		this.backgroundLayer = container.createDiv({ cls: 'ai-chat-background' });
 		this.refreshBackground();
-	}
-
-	/** Update the hint text to match the current enterKeyBehavior setting. */
-	refreshInputHint(): void {
-		if (!this.inputHintEl) return;
-		this.inputHintEl.empty();
-		if (this.plugin.settings.enterKeyBehavior === 'newline') {
-			this.inputHintEl.createEl('kbd', { text: 'Ctrl' });
-			this.inputHintEl.appendText('+');
-			this.inputHintEl.createEl('kbd', { text: 'Enter' });
-			this.inputHintEl.appendText(' send · ');
-			this.inputHintEl.createEl('kbd', { text: 'Enter' });
-			this.inputHintEl.appendText(' newline · ');
-			this.inputHintEl.createEl('kbd', { text: '/' });
-			this.inputHintEl.appendText(' commands');
-		} else {
-			this.inputHintEl.createEl('kbd', { text: 'Enter' });
-			this.inputHintEl.appendText(' send · ');
-			this.inputHintEl.createEl('kbd', { text: 'Shift+Enter' });
-			this.inputHintEl.appendText(' newline · ');
-			this.inputHintEl.createEl('kbd', { text: '/' });
-			this.inputHintEl.appendText(' commands');
-		}
 	}
 
 	/** Re-render the background layer based on current settings.
@@ -782,6 +986,10 @@ export class ChatView extends ItemView {
 		} else {
 			layer.removeClass('has-wallpaper');
 		}
+		// Mirror onto the view container: the transcript styles need to know
+		// a wallpaper is active (plain document text gets a protective card
+		// only in that case).
+		this.containerEl.toggleClass('has-wallpaper', layer.hasClass('has-wallpaper'));
 		// No persistent watermark — the brand orb is rendered inside the
 		// empty-state block (renderEmptyState) so it appears on new chat and
 		// disappears when the first message arrives.
@@ -793,14 +1001,11 @@ export class ChatView extends ItemView {
 		// Pending image thumbnails (hidden until first attach).
 		this.imageStrip = inputArea.createDiv({ cls: 'ai-chat-image-strip is-hidden' });
 
-		// The textarea card sits alone on its own full-width line so nothing
-		// bunches beside it. Attach, mic, the Enter/Shift+Enter hint and the
-		// send button share the action row UNDER the box (ChatGPT-style).
-		// The Stop button replaces Send in-place while streaming.
-		const row = inputArea.createDiv({ cls: 'ai-chat-input-row' });
-
-		const wrap = row.createDiv({ cls: 'ai-chat-input-wrap' });
-		this.inputEl = wrap.createEl('textarea', {
+		// THE composer — borderless. The textarea and every control that
+		// shapes the next message sit directly on the pane surface; no card,
+		// no divider. The Stop button replaces Send in-place while streaming.
+		const composer = inputArea.createDiv({ cls: 'ai-chat-input-wrap ai-composer' });
+		this.inputEl = composer.createEl('textarea', {
 			cls: 'ai-chat-input',
 			placeholder: 'Message Curtis…',
 		});
@@ -817,9 +1022,18 @@ export class ChatView extends ItemView {
 		// Drag-and-drop images anywhere on the input area.
 		this.setupDragDrop(inputArea);
 
-		// Action row under the box: attach + mic on the left, hint centered,
-		// send on the right.
-		const btnRow = inputArea.createDiv({ cls: 'ai-chat-btn-row' });
+		// Control row under the typing area: attach + mic + arena + auto-speak
+		// on the left, send anchored right. The model picker lives in the top
+		// bar on desktop — the row holds only what touches the next message's
+		// delivery. On mobile the picker migrates here as a quiet chip (M4):
+		// 390px can't fit picker + title + tools in one bar.
+		const btnRow = composer.createDiv({ cls: 'ai-chat-btn-row' });
+
+		if (Platform.isMobile) {
+			const pickerChip = btnRow.createEl('button', { cls: 'ai-model-picker-btn' });
+			this.updateModelPickerButton(pickerChip);
+			pickerChip.addEventListener('click', () => this.openModelDropdown(pickerChip));
+		}
 
 		// Paperclip attaches images (file picker); mic toggles voice input
 		// (only rendered when MediaRecorder exists). The hidden <input> is a
@@ -858,10 +1072,33 @@ export class ChatView extends ItemView {
 			this.micBtn.addEventListener('click', () => void this.handleMicClick());
 		}
 
-		// Hint fills the space between the attach group and the send button.
-		this.inputHintEl = btnRow.createDiv({ cls: 'ai-chat-input-hint' });
-		this.refreshInputHint();
+		// Arena toggle — routes the next send to all selected models in
+		// parallel. Crossed swords — the duel/versus read, not another gray
+		// wand.
+		const arenaBtn = btnRow.createEl('button', { cls: 'ai-chat-icon-btn ai-chat-arena-btn' });
+		setIcon(arenaBtn, 'swords');
+		arenaBtn.title = 'Arena mode';
+		arenaBtn.setAttribute('aria-label', 'Arena mode');
+		arenaBtn.toggleClass('is-active', this.arenaMode);
+		arenaBtn.addEventListener('click', () => this.toggleArenaMode(arenaBtn));
 
+		// Auto-speak toggle — when on, new assistant responses are spoken
+		// aloud. Sits beside the mic: the audio pair. Only rendered when
+		// speech is available.
+		if (isSpeechSupported()) {
+			this.autoSpeakBtn = btnRow.createEl('button', { cls: 'ai-chat-icon-btn ai-chat-autospeak-btn' });
+			setIcon(this.autoSpeakBtn, 'volume-2');
+			this.autoSpeakBtn.title = 'Auto-speak responses';
+			this.autoSpeakBtn.setAttribute('aria-label', 'Auto-speak responses');
+			this.autoSpeakBtn.addEventListener('click', () => this.toggleAutoSpeak());
+			// Persisted preference — restore the header button's state.
+			this.autoSpeak = this.plugin.settings.ttsAutoSpeak;
+			this.autoSpeakBtn.toggleClass('is-active', this.autoSpeak);
+		}
+
+		// Send — anchored to the row's right end by .ai-chat-send-col's
+		// margin-left: auto. The Stop button replaces it in-place while
+		// streaming.
 		const sendCol = btnRow.createDiv({ cls: 'ai-chat-send-col' });
 		this.sendBtn = sendCol.createEl('button', { cls: 'ai-chat-send-btn' });
 		setIcon(this.sendBtn, 'arrow-up');
@@ -895,6 +1132,97 @@ export class ChatView extends ItemView {
 	}
 
 	// --- Model picker -----------------------------------------------------
+
+	/** Anchored dropdown at the picker pill — the affordance the pill
+	 *  promises. Lists the active provider's models for one-click switching;
+	 *  "All models…" hands off to the full modal (capability pills, search)
+	 *  so deep browsing keeps its home. */
+	private openModelDropdown(anchor: HTMLElement): void {
+		// Second click on the pill closes the open dropdown.
+		const existing = this.containerEl.querySelector('.ai-model-dropdown');
+		if (existing) {
+			existing.remove();
+			anchor.removeClass('is-open');
+			return;
+		}
+		const enabled = this.plugin.providerRegistry.getAllEnabledProviders();
+		const active = enabled.find((p) => p.id === this.activeProviderId);
+		// No enabled providers (or the active one vanished) — the modal's
+		// empty-state messaging handles this better than an empty dropdown.
+		if (!active || active.provider.models.length === 0) {
+			this.openModelPicker(anchor);
+			return;
+		}
+
+		const dropdown = this.containerEl.createDiv({ cls: 'ai-model-dropdown' });
+		const doc = this.containerEl.ownerDocument;
+		const close = (): void => {
+			dropdown.remove();
+			doc.removeEventListener('click', handler, true);
+			anchor.removeClass('is-open');
+		};
+		const handler = (e: MouseEvent): void => {
+			if (!dropdown.contains(e.target as Node) && !anchor.contains(e.target as Node)) {
+				close();
+			}
+		};
+
+		const color = providerColor(active.id);
+		for (const model of active.provider.models) {
+			const isActive = active.id === this.activeProviderId && model.id === this.activeModelId;
+			const item = dropdown.createDiv({
+				cls: 'ai-model-dropdown-item' + (isActive ? ' is-active' : ''),
+			});
+			const dot = item.createDiv({ cls: 'ai-model-dropdown-dot' });
+			if (color) dot.style.setProperty('--provider-color', color);
+			item.createDiv({ cls: 'ai-model-dropdown-name', text: model.name || model.id });
+			if (isActive) {
+				const check = item.createDiv({ cls: 'ai-model-dropdown-check' });
+				setIcon(check, 'check');
+			}
+			item.addEventListener('click', () => {
+				this.setActiveModel(active.id, model.id);
+				close();
+			});
+		}
+
+		// Hand off to the full picker for cross-provider browsing.
+		const more = dropdown.createDiv({ cls: 'ai-model-dropdown-more' });
+		more.createDiv({ cls: 'ai-model-dropdown-more-icon' });
+		setIcon(more, 'search');
+		more.createSpan({ text: 'All models…' });
+		more.addEventListener('click', () => {
+			close();
+			this.openModelPicker(anchor);
+		});
+
+		// Position: prefer under the pill, left-aligned to it. The composer
+		// row sits near the bottom of the window, so when there is no room
+		// below, flip above the pill — and cap the height to the space that
+		// actually exists either way, so items never fall off screen.
+		const rect = anchor.getBoundingClientRect();
+		const containerRect = this.containerEl.getBoundingClientRect();
+		const margin = 6;
+		const spaceBelow = window.innerHeight - rect.bottom - margin;
+		const spaceAbove = rect.top - margin;
+		if (dropdown.offsetHeight > spaceBelow && spaceAbove > spaceBelow) {
+			dropdown.setCssProps({
+				bottom: `${containerRect.bottom - rect.top + margin}px`,
+				left: `${rect.left - containerRect.left}px`,
+				maxHeight: `${Math.min(Math.round(spaceAbove), 320)}px`,
+			});
+		} else {
+			dropdown.setCssProps({
+				top: `${rect.bottom - containerRect.top + margin}px`,
+				left: `${rect.left - containerRect.left}px`,
+				maxHeight: `${Math.min(Math.max(Math.round(spaceBelow), 120), 320)}px`,
+			});
+		}
+		anchor.addClass('is-open');
+		// Capture phase so the opening click (already dispatched) can't
+		// immediately close it, and outside clicks always do.
+		window.setTimeout(() => doc.addEventListener('click', handler, true), 10);
+	}
 
 	private openModelPicker(_anchor: HTMLElement): void {
 		const entries = buildModelPickerEntries(
@@ -1204,6 +1532,7 @@ export class ChatView extends ItemView {
 		// constructing (e.g. command open + settings change in the same tick)
 		// — the container doesn't exist yet and onOpen renders on its own.
 		if (!this.messagesContainer) return;
+		this.refreshConversationTitle();
 		this.messagesContainer.empty();
 		this.closeMemoryPopover();
 		const conv = this.getConversationForView();
@@ -1226,6 +1555,10 @@ export class ChatView extends ItemView {
 			}
 			this.appendMessageToDOM(msg);
 		}
+		// A full re-render (send, regenerate, history switch) means the user
+		// is re-engaging with the tail — reset reading position tracking.
+		this.userScrolledUp = false;
+		this.scrollBtn?.addClass('is-hidden');
 		this.scrollToBottom();
 	}
 
@@ -1278,7 +1611,7 @@ export class ChatView extends ItemView {
 		if (activeNote) {
 			empty.createDiv({
 				cls: 'ai-chat-empty-hint',
-				text: `I can see you're working on "${activeNote.basename}". Ask me anything about it, or click the note name in the header to attach it.`,
+				text: `I can see you're working on "${activeNote.basename}". Ask me anything about it, or click the note name at the top to attach it.`,
 			});
 		} else {
 			empty.createDiv({
@@ -1373,6 +1706,12 @@ export class ChatView extends ItemView {
 		});
 	}
 
+	/** Compact clock label for the assistant meta row — the full date lives
+	 *  in the hover tooltip, keeping the row at a glance-size. */
+	private messageTime(ts: number): string {
+		return new Date(ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+	}
+
 	private appendMessageToDOM(msg: ConversationMessage): HTMLElement {
 		// Tool role messages render as a distinct "tool result" bubble.
 		if (msg.role === 'tool') {
@@ -1393,8 +1732,16 @@ export class ChatView extends ItemView {
 			const model = provider?.models.find((m) => m.id === msg.model);
 			const label = model?.name || msg.model || 'Assistant';
 			const meta = wrapper.createDiv({ cls: 'ai-message-meta' });
+			// Brand mark leads the meta row — the only in-chat Curtis presence
+			// once the empty-state orb is gone.
+			meta.createDiv({ cls: 'ai-message-avatar' });
 			meta.createDiv({ cls: 'ai-message-role-dot' });
 			meta.createDiv({ cls: 'ai-message-role', text: label });
+			meta.createDiv({
+				cls: 'ai-message-time',
+				text: this.messageTime(msg.timestamp),
+				attr: { title: new Date(msg.timestamp).toLocaleString() },
+			});
 			if (msg.tokens && this.plugin.settings.showTokenUsage) {
 				meta.createDiv({ cls: 'ai-message-info', text: `${msg.tokens.totalTokens} tok` });
 			}
@@ -1414,6 +1761,8 @@ export class ChatView extends ItemView {
 
 		if (msg.role === 'user') {
 			this.renderer.renderUserMessage(contentEl, msg.content);
+			// Hover tooltip carries the full timestamp — the bubble stays clean.
+			contentEl.setAttribute('title', new Date(msg.timestamp).toLocaleString());
 			// Render any attached images below the text. msg.images holds vault paths.
 			if (msg.images && msg.images.length > 0) {
 				const gallery = contentEl.createDiv({ cls: 'ai-message-image-gallery' });
@@ -1597,9 +1946,12 @@ export class ChatView extends ItemView {
 		}
 	}
 
-	/** Toggle auto-speak on/off. Visible state lives on the header button. */
+	/** Toggle auto-speak on/off. Visible state lives on the header button;
+	 *  the preference persists across sessions. */
 	private toggleAutoSpeak(): void {
 		this.autoSpeak = !this.autoSpeak;
+		this.plugin.settings.ttsAutoSpeak = this.autoSpeak;
+		void this.plugin.saveSettings();
 		this.autoSpeakBtn?.toggleClass('is-active', this.autoSpeak);
 		if (this.autoSpeak) {
 			new Notice('Auto-speak on');
@@ -1650,10 +2002,131 @@ export class ChatView extends ItemView {
 				setIcon(btn, 'square');
 				btn.addClass('is-speaking');
 				this.currentlySpeaking = msg.id;
-				this.ttsController = new TTSController();
-				this.ttsController.play(msg.content);
+				const config = this.getTtsConfig();
+				this.ttsController = new TTSController(new NativeSpeechBackend(config.voiceUri), config);
+				this.ttsController.play(this.prepareSpokenSentences(wrapper, msg));
 				this.renderTTSPlayer(wrapper, msg);
 			}
+		});
+	}
+
+	/** Read-aloud config from settings — feeds the player controller and the
+	 *  auto-speak path alike. */
+	private getTtsConfig(): TTSConfig {
+		const s = this.plugin.settings;
+		return { voiceUri: s.ttsVoiceUri, rate: s.ttsRate, pitch: s.ttsPitch };
+	}
+
+	/**
+	 * Sentence source for read-aloud: split the *rendered* message body so
+	 * the sentences the player reads are exactly the text on screen — the
+	 * karaoke highlight indices then cannot drift from what is visible, and
+	 * code/tables/UI chrome are naturally skipped instead of spoken. With
+	 * highlighting enabled, each sentence's text nodes are wrapped in
+	 * .ai-tts-sent spans carrying data-sentence indices that line up with
+	 * the returned array. Falls back to splitting cleaned message content
+	 * when there is no usable DOM.
+	 */
+	private prepareSpokenSentences(wrapper: HTMLElement, msg: ConversationMessage): string[] {
+		const fallback = (): string[] => splitSentencesWithOffsets(cleanTextForSpeech(msg.content)).map((s) => s.text);
+		const body = wrapper.querySelector<HTMLElement>('.ai-message-content');
+		if (!body || !body.textContent?.trim()) return fallback();
+
+		// A previous playback that never reached its unwrap path (message
+		// re-rendered mid-play, crash) would leave stale marks — clear them
+		// so text collection sees the original tree.
+		body.querySelectorAll('.ai-tts-sent').forEach((el) => this.unwrapSentenceMark(el as HTMLElement));
+
+		// Collect text nodes in document order with their offsets in the
+		// concatenated text.
+		const nodes: { node: Text; start: number }[] = [];
+		let full = '';
+		const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+			acceptNode: (node) => {
+				const parent = (node as Text).parentElement;
+				if (!parent?.textContent?.trim()) return NodeFilter.FILTER_SKIP;
+				if (parent.closest('pre, code, button, .ai-message-actions, .ai-tts-player')) {
+					return NodeFilter.FILTER_SKIP;
+				}
+				return NodeFilter.FILTER_ACCEPT;
+			},
+		});
+		for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+			const text = n.nodeValue ?? '';
+			if (text.trim()) {
+				nodes.push({ node: n as Text, start: full.length });
+				full += text;
+			}
+		}
+
+		const spans = splitSentencesWithOffsets(full);
+		if (spans.length === 0) return fallback();
+
+		if (this.plugin.settings.ttsHighlight) {
+			const indexed = spans.map((s, idx) => ({ ...s, idx }));
+			for (const { node, start: nodeStart } of nodes) {
+				const nodeText = node.nodeValue ?? '';
+				const nodeEnd = nodeStart + nodeText.length;
+				const overlapping = indexed.filter((s) => s.start < nodeEnd && s.end > nodeStart);
+				// Slice the node at each sentence boundary, wrapping the
+				// covered slices. A sentence spanning several nodes ends up
+				// with one mark per node, all sharing its sentence index.
+				let remaining = node;
+				let consumed = 0;
+				for (const s of overlapping) {
+					const from = Math.max(s.start, nodeStart) - nodeStart;
+					const to = Math.min(s.end, nodeEnd) - nodeStart;
+					if (to <= consumed) continue;
+					if (from > consumed) {
+						remaining = remaining.splitText(from - consumed);
+						consumed = from;
+					}
+					const len = to - from;
+					let tail: Text | null = null;
+					if (len < remaining.length) {
+						tail = remaining.splitText(len);
+					}
+					// Created via body's Obsidian element prototype, then moved
+					// into place over the sentence's text node.
+					const mark = body.createSpan({ cls: 'ai-tts-sent', attr: { 'data-sentence': String(s.idx) } });
+					remaining.replaceWith(mark);
+					mark.appendChild(remaining);
+					remaining = tail ?? remaining;
+					consumed = to;
+				}
+			}
+		}
+
+		return spans.map((s) => s.text);
+	}
+
+	/** Restore a highlight span's text back into its parent. */
+	private unwrapSentenceMark(mark: HTMLElement): void {
+		const parent = mark.parentNode;
+		if (!parent) return;
+		mark.removeClass('is-active');
+		while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+		mark.remove();
+		parent.normalize();
+	}
+
+	/** Karaoke: mark the sentence being read; unwrap all marks when playback
+	 *  ends or stops. Marks are created by prepareSpokenSentences. */
+	private updateTtsHighlight(wrapper: HTMLElement, state: TTSState): void {
+		if (!this.plugin.settings.ttsHighlight) return;
+		const marks = wrapper.querySelectorAll<HTMLElement>('.ai-tts-sent');
+		if (marks.length === 0) return;
+		if (!state.isPlaying) {
+			marks.forEach((el) => this.unwrapSentenceMark(el));
+			return;
+		}
+		marks.forEach((el) => el.removeClass('is-active'));
+		const active = wrapper.querySelectorAll<HTMLElement>(
+			`.ai-tts-sent[data-sentence="${state.currentSentence}"]`
+		);
+		active.forEach((el, i) => {
+			el.addClass('is-active');
+			if (i === 0) el.scrollIntoView({ block: 'nearest' });
 		});
 	}
 
@@ -1670,6 +2143,7 @@ export class ChatView extends ItemView {
 
 		const unsub = this.ttsController!.subscribe((state) => {
 			player.empty();
+			this.updateTtsHighlight(wrapper, state);
 
 			// Pause/resume
 			const playPause = player.createEl('button', { cls: 'ai-tts-btn ai-tts-playpause' });
@@ -1739,8 +2213,6 @@ export class ChatView extends ItemView {
 			}
 		});
 
-		// Tag the player with the unsubscribe so a re-render can clean up.
-		player.dataset.unsubscribeRef = '1';
 		// Best-effort cleanup when the player is removed from the DOM (e.g.
 		// when the conversation re-renders). MutationObserver is overkill —
 		// a single onunload hook on the wrapper covers the common cases.
@@ -1766,6 +2238,7 @@ export class ChatView extends ItemView {
 		// Auto-speak uses the simple path (no player UI) — the player is only
 		// rendered when the user explicitly clicks Speak.
 		speakText(msg.content, {
+			...this.getTtsConfig(),
 			onEnd: () => {
 				if (this.currentlySpeaking === msg.id) this.currentlySpeaking = null;
 			},
@@ -1875,43 +2348,18 @@ export class ChatView extends ItemView {
 		this.hideSlashMenu();
 		this.hideMentionMenu();
 
-		// Arena branch — fan out to all selected models in parallel. Lives
-		// before slash-command handling so /help etc. still work in arena
-		// mode (they consume the input without sending).
+		// Slash command interception — a consumed command suppresses the send;
+		// an unknown command falls through and is sent literally.
+		if (await this.runSlashCommand(trimmed)) return;
+
+		// Arena branch — fan out to all selected models in parallel.
 		if (this.arenaMode && this.arenaSelectedModels.length >= 2) {
-			// Slash commands still take precedence inside arena.
-			if (trimmed.startsWith('/')) {
-				const before = this.inputEl.value;
-				const consumed = await handleSlashCommand(trimmed, this.slashContext());
-				if (consumed) {
-					// Only clear when the command left the input untouched — /paste
-					// REPLACES the input with the clipboard text.
-					if (this.inputEl.value === before) this.inputEl.value = '';
-					this.autoResizeInput();
-					return;
-				}
-			}
 			const prompt = trimmed;
 			this.inputEl.value = '';
 			this.mentionEndOffset = -1;
 			this.autoResizeInput();
 			void this.sendArenaMessage(prompt);
 			return;
-		}
-
-		// Slash command interception — consumed commands suppress the send.
-		if (trimmed.startsWith('/')) {
-			const before = this.inputEl.value;
-			const consumed = await handleSlashCommand(trimmed, this.slashContext());
-			if (consumed) {
-				// Only clear when the command left the input untouched — /paste
-				// REPLACES the input with the clipboard text (clearing here used
-				// to wipe it in the same tick, making /paste a no-op).
-				if (this.inputEl.value === before) this.inputEl.value = '';
-				this.autoResizeInput();
-				return;
-			}
-			// Unknown slash command falls through and gets sent literally.
 		}
 
 		// Ensure we have an active conversation
@@ -1930,13 +2378,20 @@ export class ChatView extends ItemView {
 		// while the stream is in flight.
 		const convId = this.conversationId;
 
-		let provider;
-		try {
-			provider = this.plugin.getAuthenticatedProvider();
-		} catch {
+		// A follower's conversation belongs to its leader while a swarm run
+		// is in flight — interleaved writes would tangle both transcripts.
+		if (this.plugin.swarm.isFollowerBusy(convId)) {
+			new Notice('This agent is working for its leader — stop the leader first');
+			return;
+		}
+
+		// Effective lane: a named agent overrides the pane's provider/model.
+		const sendConfig = this.resolveSendConfig();
+		if (!sendConfig) {
 			new Notice('No AI provider configured or authenticated. Check settings.');
 			return;
 		}
+		const { provider, modelId, agent } = sendConfig;
 
 		// Add user message — capture any pending image attachments (vault paths).
 		const imagePaths = this.pendingImages.map((p) => p.path);
@@ -1951,13 +2406,12 @@ export class ChatView extends ItemView {
 			role: 'user',
 			content: trimmed,
 			provider: provider.id,
-			model: this.activeModelId,
+			model: modelId,
+			...(agent ? { agentId: agent.id } : {}),
 			images: imagePaths.length > 0 ? imagePaths : undefined,
 			attachedNotes: notePaths.length > 0 ? notePaths : undefined,
 		});
 		this.suppressStoreEvents = false;
-		// Track for error-reporting (so we can suggest vision model if it fails).
-		this.currentSendHasImages = imagePaths.length > 0;
 		// Clear the pending strips — images + notes are now persisted on the message.
 		this.pendingImages = [];
 		this.renderImageStrip();
@@ -1976,271 +2430,33 @@ export class ChatView extends ItemView {
 			void this.plugin.saveSettings();
 		}
 
-		// Show generating state
-		this.isGenerating = true;
-		this.setGeneratingUI(true);
-		this.streamingContent = '';
-
-		// Create assistant message placeholder with role label + "Thinking…" state
-		// (convId was pinned above, before the user message was stored.)
-		const conv = this.store.getConversation(convId)!;
-		// Snapshot of the memory ids injected this turn. Attached to the stored
-		// assistant message so the "N memories" chip stays truthful even after
-		// the fact set changes (removed facts render as "since removed").
-		const memoryIds = this.plugin.settings.enableMemory
-			? this.plugin.memoryStore.getFacts().map((f) => f.id)
-			: [];
-		const assistantWrapper = this.messagesContainer.createDiv({
-			cls: 'ai-message ai-message-assistant ai-message-thinking',
-		});
-
-		const modelLabel = (() => {
-			const p = this.plugin.providerRegistry.getProvider(provider.id);
-			const m = p?.models.find((x) => x.id === this.activeModelId);
-			return m?.name || this.activeModelId || 'Assistant';
-		})();
-
-		const meta = assistantWrapper.createDiv({ cls: 'ai-message-meta' });
-		const color = providerColor(provider.id);
-		if (color) assistantWrapper.style.setProperty('--provider-color', color);
-		meta.createDiv({ cls: 'ai-message-role-dot' });
-		meta.createDiv({ cls: 'ai-message-role', text: modelLabel });
-
-		const assistantContent = assistantWrapper.createDiv({ cls: 'ai-message-content' });
-		this.scrollToBottom();
-
-		this.abortController = new AbortController();
-
-		// Track whether the assistant message was already persisted (via onUsage)
-		// to avoid the double-add bug — usage may fire before or after final chunk.
-		let assistantStored = false;
-		let storedMessageId: string | null = null;
-		let firstChunkReceived = false;
-		// Set by onError callbacks / a thrown error — drives the failure
-		// notification and suppresses the completion one.
-		let errorSeen = false;
-
-		try {
-			// Build messages array from conversation history
-			const aiMessages: AIMessage[] = await this.buildMessagesArray(conv);
-
-			// Agent mode branch: if enabled + provider supports OpenAI tool calls,
-			// delegate to callAgentLoop. Tool invocations render as separate
-			// bubbles inserted BEFORE the final assistant bubble. The final text
-			// still arrives via onChunk so the existing streaming UI works.
-			const agentActive = this.plugin.settings.enableAgent
-				&& provider.supportsToolCalls?.() === true;
-
-			if (agentActive) {
-				await this.plugin.callAgentLoop(aiMessages, this.activeModelId, {
-					onChunk: (chunk: string) => {
-						if (!firstChunkReceived) {
-							firstChunkReceived = true;
-							assistantWrapper.removeClass('ai-message-thinking');
-							assistantWrapper.addClass('ai-message-streaming');
-						}
-						this.streamingContent += chunk;
-						this.renderer.renderStreamedMessage(assistantContent, this.streamingContent);
-						this.scrollToBottom();
-					},
-					onUsage: (usage: TokenUsage) => {
-						if (!assistantStored) {
-							const stored = this.store.addMessageTo(convId, {
-								role: 'assistant',
-								content: this.streamingContent,
-								tokens: usage,
-								cost: this.estimateMessageCost(provider.id, this.activeModelId, usage) ?? undefined,
-								provider: provider.id,
-								model: this.activeModelId,
-								memoriesUsedIds: memoryIds.length > 0 ? memoryIds : undefined,
-							});
-							if (stored) {
-								storedMessageId = stored.id;
-								assistantStored = true;
-							}
-						}
-						if (this.plugin.settings.showTokenUsage) {
-							const info = assistantWrapper.querySelector('.ai-message-info');
-							if (info instanceof HTMLElement) {
-								info.setText(`${usage.totalTokens} tok`);
-							} else {
-								meta.createDiv({ cls: 'ai-message-info', text: `${usage.totalTokens} tok` });
-							}
-						}
-					},
-					onError: (error: Error) => {
-						errorSeen = true;
-						console.error('[Curtis] Agent error:', error);
-						const friendly = friendlyError(error, this.currentSendHasImages);
-						new Notice(friendly.message, 8000);
-						this.streamingContent += `\n\n*⚠️ ${friendly.message}*`;
-						this.renderer.renderStreamedMessage(assistantContent, this.streamingContent);
-					},
-					onToolCall: (call: ToolCall) => {
-						// Render the invocation as a stored assistant message + a
-						// live bubble inserted before the streaming assistant wrapper.
-						this.store.addMessageTo(convId, {
-							role: 'assistant',
-							content: '',
-							tool_calls: [call],
-							provider: provider.id,
-							model: this.activeModelId,
-						});
-						const bubble = this.messagesContainer.createDiv({ cls: 'ai-message ai-message-tool-call' });
-						this.messagesContainer.insertBefore(bubble, assistantWrapper);
-						this.renderToolCallBubble(bubble, call);
-						this.scrollToBottom();
-					},
-					onToolResult: (call: ToolCall, result: { content: string; isError: boolean }) => {
-						this.store.addMessageTo(convId, {
-							role: 'tool',
-							content: result.content,
-							tool_call_id: call.id,
-							tool_error: result.isError || undefined,
-						});
-						const bubble = this.messagesContainer.createDiv({
-							cls: 'ai-message ai-message-tool' + (result.isError ? ' is-error' : ''),
-						});
-						this.messagesContainer.insertBefore(bubble, assistantWrapper);
-						this.appendToolResultContentInto(bubble, result.content, result.isError);
-						this.scrollToBottom();
-					},
-					signal: this.abortController.signal,
-				});
-			} else {
-				await this.plugin.callAI(aiMessages, this.activeModelId, {
-					onChunk: (chunk: string) => {
-						if (!firstChunkReceived) {
-							firstChunkReceived = true;
-							assistantWrapper.removeClass('ai-message-thinking');
-							assistantWrapper.addClass('ai-message-streaming');
-						}
-						this.streamingContent += chunk;
-						this.renderer.renderStreamedMessage(assistantContent, this.streamingContent);
-						this.scrollToBottom();
-					},
-					onUsage: (usage: TokenUsage) => {
-						if (!assistantStored) {
-							const stored = this.store.addMessageTo(convId, {
-								role: 'assistant',
-								content: this.streamingContent,
-								tokens: usage,
-								cost: this.estimateMessageCost(provider.id, this.activeModelId, usage) ?? undefined,
-								provider: provider.id,
-								model: this.activeModelId,
-								memoriesUsedIds: memoryIds.length > 0 ? memoryIds : undefined,
-							});
-							if (stored) {
-								storedMessageId = stored.id;
-								assistantStored = true;
-							}
-						}
-						if (this.plugin.settings.showTokenUsage) {
-							// Update token count in the meta row (same gate as the
-							// persisted-message badge so the count doesn't flash
-							// for users who turned token display off).
-							const info = assistantWrapper.querySelector('.ai-message-info');
-							if (info instanceof HTMLElement) {
-								info.setText(`${usage.totalTokens} tok`);
-							} else {
-								meta.createDiv({ cls: 'ai-message-info', text: `${usage.totalTokens} tok` });
-							}
-						}
-					},
-					onError: (error: Error) => {
-						errorSeen = true;
-						console.error('[Curtis] Stream error:', error);
-						const friendly = friendlyError(error, this.currentSendHasImages);
-						new Notice(friendly.message, 8000);
-						this.streamingContent += `\n\n*⚠️ ${friendly.message}*`;
-						this.renderer.renderStreamedMessage(assistantContent, this.streamingContent);
-					},
-					signal: this.abortController.signal,
-				});
-			}
-
-			// If no usage callback fired, store the message without token counts
-			if (!assistantStored && this.streamingContent) {
-				const stored = this.store.addMessageTo(convId, {
-					role: 'assistant',
-					content: this.streamingContent,
-					provider: provider.id,
-					model: this.activeModelId,
-					memoriesUsedIds: memoryIds.length > 0 ? memoryIds : undefined,
-				});
-				if (stored) {
-					storedMessageId = stored.id;
-					assistantStored = true;
-				}
-			}
-		} catch (e) {
-			if ((e as Error).name !== 'AbortError') {
-				errorSeen = true;
-				console.error('[Curtis] AI call failed:', e);
-				new Notice('AI request failed. Check console for details.');
-			}
-		} finally {
-			// Read the abort state before nulling the controller — an aborted
-			// stream must not fire a completion notification.
-			const aborted = this.abortController?.signal.aborted ?? false;
-			this.isGenerating = false;
-			this.setGeneratingUI(false);
-			this.abortController = null;
-			assistantWrapper.removeClass('ai-message-streaming');
-			assistantWrapper.removeClass('ai-message-thinking');
-			// Final markdown render — replaces the streaming plain-text preview
-			// with a fully-parsed markdown view (code blocks, links, etc.).
-			this.renderer.renderStreamedMessage(assistantContent, this.streamingContent, true);
-			this.scrollToBottom();
-
-			// The store writes below are self-initiated — other panes still get
-			// the conversation:changed event; this one manages its own DOM.
-			this.suppressStoreEvents = true;
-			try {
-				// Attach hover-visible actions now that the message is final.
-				if (storedMessageId && this.streamingContent) {
-					// Sync final content into the stored message in case usage fired
-					// early (before the final chunk) and the snapshot is stale.
-					this.store.updateMessage(storedMessageId, { content: this.streamingContent }, convId);
-					const stored = this.store.getConversation(convId)?.messages.find((m) => m.id === storedMessageId);
-					if (stored) {
-						attachMessageActions({
-							app: this.app,
-							wrapper: assistantWrapper,
-							message: stored,
-							saveFolder: this.plugin.settings.noteSaveFolder,
-							callbacks: {
-								onRegenerate: (m) => void this.regenerateMessage(m.id),
-								onQuoteIntoInput: (m) => this.quoteMessageIntoInput(m),
-							},
-						});
-						this.attachSpeakAction(assistantWrapper, stored);
-						// Auto-speak the fresh response if the toggle is on.
-						this.maybeAutoSpeak(stored);
-						// Auto-save (silent) if the user opted in.
-						if (this.plugin.settings.autoSaveAssistantResponses) {
-							const folder = this.plugin.settings.autoSaveFolder || this.plugin.settings.noteSaveFolder;
-							void saveMessageAsNote(this.app, stored, folder).catch((e) =>
-								console.error('[Curtis] auto-save failed:', e)
-							);
-						}
-					}
-				}
-				// Memory chip — shows which remembered facts were in context.
-				if (memoryIds.length > 0) this.renderMemoryChipInto(meta, memoryIds);
-			} finally {
-				this.suppressStoreEvents = false;
-			}
-			this.notifyResponseFinished(convId, {
-				aborted,
-				failed: errorSeen,
-				content: this.streamingContent,
-			});
-			// Background fact extraction — fire-and-forget.
-			// Reset image-flag + extract facts.
-			this.currentSendHasImages = false;
-			this.maybeExtractFacts(convId);
+		// Stream the reply (shared with the regenerate path — see
+		// streamAssistantReply for everything that happens from here).
+		// Leader chats get the tool loop even with agent mode off — spawning
+		// followers IS the point of a leader, and requiring a second toggle
+		// is one more way to silently no-op the feature.
+		const isLeader = this.store.getConversation(convId)?.role === 'leader';
+		const wantAgent = isLeader || this.plugin.settings.enableAgent;
+		// Agent lane: the Settings → Agent model override, pinned for this
+		// send. Tool support is checked against the lane provider — the
+		// override can enable the tool loop even when the chat model can't
+		// call tools. When the override model can't call tools but the chat
+		// model can, fall back to the chat model rather than losing tools.
+		let agentLane = this.resolveAgentLane(agent);
+		let agentMode = wantAgent && (agentLane?.provider ?? provider).supportsToolCalls?.() === true;
+		if (wantAgent && agentLane && !agentMode && provider.supportsToolCalls?.() === true) {
+			new Notice(`${agentLane.provider.name} — ${agentLane.modelId} doesn't support tool calling; running tools on the chat model`);
+			agentLane = null;
+			agentMode = true;
 		}
+		await this.streamAssistantReply(convId, provider, {
+			agent: agentMode,
+			errorNotice: 'AI request failed. Check console for details.',
+			modelId,
+			agentProvider: agentLane?.provider,
+			agentModelId: agentLane?.modelId,
+			...(agent ? { agentId: agent.id } : {}),
+		});
 	}
 
 	/** Completion/failure notification for a finished stream. No-op when the
@@ -2270,6 +2486,9 @@ export class ChatView extends ItemView {
 	private maybeExtractFacts(convId: string): void {
 		const conv = this.store.getConversation(convId);
 		if (!conv) return;
+		// Memory-gated agents (memory: 'off') don't feed the shared file —
+		// the whole point of a local-only lane.
+		if (!this.plugin.agents.memoryEnabled(conv)) return;
 		const msgs = conv.messages;
 		const assistant: ConversationMessage | undefined = msgs[msgs.length - 1];
 		if (!assistant || assistant.role !== 'assistant') return;
@@ -2450,13 +2669,32 @@ export class ChatView extends ItemView {
 		const messages: AIMessage[] = [];
 
 		// System prompt = CORE (non-negotiable identity/capabilities) + user
-		// extension (editable in settings) + memory block (if enabled).
-		// The CORE guarantees Curtis always knows what it is and what tools
-		// it has — users add context via the extension, they cannot remove it.
-		const sysParts: string[] = [composeSystemPrompt(this.plugin.settings.systemPrompt)];
-		if (this.plugin.settings.enableMemory) {
+		// extension (editable in settings) + agent persona (if bound) + memory
+		// block (if enabled for this conversation). The CORE guarantees Curtis
+		// always knows what it is and what tools it has — users add context
+		// via the extension, they cannot remove it. Layering order is most
+		// specific last: standing orders survive role switches, the role wins
+		// ties.
+		const agent = this.plugin.agents.getAgent(conv.agentId);
+		const sysParts: string[] = [composeSystemPrompt(
+			this.plugin.settings.systemPrompt,
+			agent ? { name: agent.name, prompt: agent.systemPrompt } : undefined
+		)];
+		if (this.plugin.agents.memoryEnabled(conv)) {
 			const memBlock = this.plugin.memoryStore.formatFactsForPrompt();
 			if (memBlock) sysParts.push(memBlock);
+		}
+		// PCP-0: consented profile claims — only for agents with a policy;
+		// no policy means nothing is read or injected.
+		if (agent && agent.claims && agent.claims.length > 0) {
+			const claimsBlock = await this.plugin.agents.loadConsentedClaimsBlock(agent);
+			if (claimsBlock) sysParts.push(claimsBlock);
+		}
+		// Leaders with a roster need to know which specialists exist — without
+		// this block spawn_agent's "agent" parameter has nothing to name.
+		if (conv.role === 'leader') {
+			const roster = this.plugin.agents.rosterBlock();
+			if (roster) sysParts.push(roster);
 		}
 		const ragBlock = await this.buildRetrievedContextBlock(conv);
 		if (ragBlock) sysParts.push(ragBlock);
@@ -2611,13 +2849,14 @@ export class ChatView extends ItemView {
 
 		// Authenticate BEFORE truncating — the auth check inside the re-stream
 		// only shows a Notice, and by then the old reply is already deleted
-		// (data loss with no replacement when the key is gone).
-		try {
-			this.plugin.getAuthenticatedProvider();
-		} catch {
+		// (data loss with no replacement when the key is gone). Resolves the
+		// conversation's lane (agent provider/model) like a normal send.
+		const sendConfig = this.resolveSendConfig();
+		if (!sendConfig) {
 			new Notice('No AI provider configured or authenticated. Check settings.');
 			return;
 		}
+		const { provider, modelId, agent } = sendConfig;
 
 		// Truncate the conversation so the dropped assistant message and
 		// everything after it are removed; the re-stream replaces them.
@@ -2630,10 +2869,15 @@ export class ChatView extends ItemView {
 		}
 		this.renderCurrentConversation();
 
-		// Trigger a no-op "user" send path: we re-use sendMessage's body by
-		// synthesizing an empty user input — but that path early-returns on empty.
-		// Instead, inline the assistant-stream logic by calling a dedicated helper.
-		await this.streamAssistantResponse();
+		// Re-stream over the truncated history. Regenerate replays as a plain
+		// completion (no tool catalog) — the stored tool history is context, not
+		// an invitation to call tools again.
+		await this.streamAssistantReply(conv.id, provider, {
+			agent: false,
+			errorNotice: 'Regenerate failed',
+			modelId,
+			...(agent ? { agentId: agent.id } : {}),
+		});
 	}
 
 	/**
@@ -2682,28 +2926,67 @@ export class ChatView extends ItemView {
 	}
 
 	/**
-	 * Stream a fresh assistant response from the current conversation state,
-	 * without consuming input. Used by /regen and regenerate-message.
+	 * Push the current extended-thinking settings into the Anthropic provider
+	 * ahead of a request. Field reads are defensive — the settings keys can be
+	 * absent from older data.json until a save rewrites it.
 	 */
-	private async streamAssistantResponse(): Promise<void> {
-		let provider;
-		try {
-			provider = this.plugin.getAuthenticatedProvider();
-		} catch {
-			new Notice('No AI provider configured or authenticated. Check settings.');
-			return;
+	private syncThinkingHints(): void {
+		const s = this.plugin.settings as { anthropicExtendedThinking?: boolean; anthropicThinkingBudget?: number };
+		setAnthropicThinkingHints({
+			enabled: s.anthropicExtendedThinking === true,
+			budgetTokens: typeof s.anthropicThinkingBudget === 'number' ? s.anthropicThinkingBudget : 8000,
+		});
+	}
+
+	/**
+	 * Stream an assistant reply into this pane, then wire everything that
+	 * follows it: persistence (tokens + cost + memory provenance), error
+	 * translation, the thinking→streaming→final DOM transitions, hover
+	 * actions, auto-speak, auto-save, the memory chip, the background
+	 * notification, and fact extraction. One implementation shared by send
+	 * and regenerate — these were copies and had already drifted (a failed
+	 * regenerate never flagged its error, so a background failure notified
+	 * as a completion).
+	 *
+	 * `convId` is pinned by the caller: every store write lands in the
+	 * conversation the reply was launched from, even if the pane switches
+	 * mid-stream. `agent` routes the call through the tool-calling loop
+	 * (send path only — regenerate replays history as a plain completion).
+	 * `agentProvider`/`agentModelId` reroute that loop onto the Settings →
+	 * Agent override pair; chat turns always use the chat pair.
+	 */
+	private async streamAssistantReply(
+		convId: string,
+		provider: AIProvider,
+		opts: {
+			agent: boolean;
+			errorNotice: string;
+			modelId?: string;
+			agentId?: string;
+			agentProvider?: AIProvider;
+			agentModelId?: string;
 		}
-		const conv = this.getConversationForView();
+	): Promise<void> {
+		const conv = this.store.getConversation(convId);
 		if (!conv) return;
-		// Pin store writes to this conversation for the whole re-stream.
-		const convId = conv.id;
-		// Same memory snapshot as sendMessage — powers the chip on regens.
-		const memoryIds = this.plugin.settings.enableMemory
+		// The conversation's lane: a bound agent's model, else the pane picker.
+		const modelId = opts.modelId ?? this.activeModelId;
+		// The tool loop's pair — the agent override when set, else the chat
+		// pair. Label, attribution, and cost all use it so the transcript
+		// stays truthful about which model actually answered.
+		const laneProvider = opts.agent && opts.agentProvider ? opts.agentProvider : provider;
+		const laneModelId = opts.agent && opts.agentModelId ? opts.agentModelId : modelId;
+		// Snapshot of the memory ids injected this turn. Attached to the stored
+		// assistant message so the "N memories" chip stays truthful even after
+		// the fact set changes (removed facts render as "since removed").
+		// Agents gate participation (a local-only agent must not feed the
+		// shared memory file).
+		const memoryIds = this.plugin.agents.memoryEnabled(conv)
 			? this.plugin.memoryStore.getFacts().map((f) => f.id)
 			: [];
-
-		// Set the image flag based on the last user message (it may have
-		// attached images that an error would blame).
+		// Whether this round carries images — derived from the conversation's
+		// last user message so both the send and regenerate paths resolve it
+		// the same way (friendlyError blames images only when there were some).
 		const lastUser = this.store.getLastUserMessage(convId);
 		this.currentSendHasImages = !!(lastUser?.images && lastUser.images.length > 0);
 
@@ -2711,59 +2994,115 @@ export class ChatView extends ItemView {
 		this.setGeneratingUI(true);
 		this.streamingContent = '';
 
+		// Assistant message placeholder with role label + "Thinking…" state.
 		const assistantWrapper = this.messagesContainer.createDiv({
 			cls: 'ai-message ai-message-assistant ai-message-thinking',
 		});
-		const modelLabel = (() => {
-			const p = this.plugin.providerRegistry.getProvider(provider.id);
-			const m = p?.models.find((x) => x.id === this.activeModelId);
-			return m?.name || this.activeModelId || 'Assistant';
-		})();
+		const registered = this.plugin.providerRegistry.getProvider(laneProvider.id);
+		const modelLabel = registered?.models.find((x) => x.id === laneModelId)?.name
+			|| laneModelId || 'Assistant';
 		const meta = assistantWrapper.createDiv({ cls: 'ai-message-meta' });
-		const color = providerColor(provider.id);
+		const color = providerColor(laneProvider.id);
 		if (color) assistantWrapper.style.setProperty('--provider-color', color);
+		meta.createDiv({ cls: 'ai-message-avatar' });
 		meta.createDiv({ cls: 'ai-message-role-dot' });
 		meta.createDiv({ cls: 'ai-message-role', text: modelLabel });
+		meta.createDiv({
+			cls: 'ai-message-time',
+			text: this.messageTime(Date.now()),
+			attr: { title: new Date().toLocaleString() },
+		});
+
+		// Extended-thinking host (Anthropic): sits before the answer content so
+		// the collapsible reasoning block renders above it. Materializes only
+		// when thinking deltas actually stream in.
+		let thinkingHost: HTMLElement | null = null;
+		const ensureThinkingHost = (): HTMLElement => {
+			if (!thinkingHost) {
+				thinkingHost = assistantWrapper.createDiv({ cls: 'ai-thinking-host' });
+				assistantWrapper.insertBefore(thinkingHost, assistantContent);
+			}
+			return thinkingHost;
+		};
 
 		const assistantContent = assistantWrapper.createDiv({ cls: 'ai-message-content' });
 		this.scrollToBottom();
 		this.abortController = new AbortController();
 
+		// Track whether the assistant message was already persisted (via onUsage)
+		// to avoid the double-add bug — usage may fire before or after final chunk.
 		let assistantStored = false;
 		let storedMessageId: string | null = null;
 		let firstChunkReceived = false;
+		// Set by onError callbacks / a thrown error — drives the failure
+		// notification and suppresses the completion one.
 		let errorSeen = false;
+		// Extended-thinking split (Anthropic): sentinel-tagged chunks are routed
+		// into the reasoning buffer, never into the answer content. Pure
+		// pass-through for every other provider — no sentinels ever arrive.
+		const thinkingSplitter = new ThinkingStreamSplitter();
+		let streamingThinking = '';
+
+		/** Persist the assistant message exactly once. Usage may arrive before
+		 *  any chunk (then content is still empty and the finally re-syncs it);
+		 *  the no-usage fallback at the end only fires when something streamed. */
+		const storeAssistant = (usage: TokenUsage | null): void => {
+			if (assistantStored) return;
+			const stored = this.store.addMessageTo(convId, {
+				role: 'assistant',
+				content: this.streamingContent,
+				...(usage
+					? { tokens: usage, cost: this.estimateMessageCost(laneProvider.id, laneModelId, usage) ?? undefined }
+					: {}),
+				provider: laneProvider.id,
+				model: laneModelId,
+				...(opts.agentId ? { agentId: opts.agentId } : {}),
+				memoriesUsedIds: memoryIds.length > 0 ? memoryIds : undefined,
+			});
+			if (stored) {
+				storedMessageId = stored.id;
+				assistantStored = true;
+			}
+		};
 
 		try {
-			const aiMessages = await this.buildMessagesArray(conv);
-			await this.plugin.callAI(aiMessages, this.activeModelId, {
+			// Build messages array from conversation history
+			const aiMessages: AIMessage[] = await this.buildMessagesArray(conv);
+
+			const shared = {
 				onChunk: (chunk: string) => {
 					if (!firstChunkReceived) {
 						firstChunkReceived = true;
 						assistantWrapper.removeClass('ai-message-thinking');
 						assistantWrapper.addClass('ai-message-streaming');
 					}
-					this.streamingContent += chunk;
-					this.renderer.renderStreamedMessage(assistantContent, this.streamingContent);
-					this.scrollToBottom();
+					const parts = thinkingSplitter.push(chunk);
+					if (parts.thinking) {
+						streamingThinking += parts.thinking;
+						this.renderer.renderThinkingBlock(ensureThinkingHost(), streamingThinking, true);
+					}
+					if (parts.answer) {
+						this.streamingContent += parts.answer;
+						this.renderer.renderStreamedMessage(assistantContent, this.streamingContent);
+						this.scrollToBottom(false);
+					}
 				},
 				onUsage: (usage: TokenUsage) => {
-					if (!assistantStored) {
-						const stored = this.store.addMessageTo(convId, {
-							role: 'assistant',
-							content: this.streamingContent,
-							tokens: usage,
-							cost: this.estimateMessageCost(provider.id, this.activeModelId, usage) ?? undefined,
-							provider: provider.id,
-							model: this.activeModelId,
-						});
-						if (stored) {
-							storedMessageId = stored.id;
-							assistantStored = true;
+					storeAssistant(usage);
+					// Update token count in the meta row (same gate as the
+					// persisted-message badge so the count doesn't flash
+					// for users who turned token display off).
+					if (this.plugin.settings.showTokenUsage) {
+						const info = assistantWrapper.querySelector('.ai-message-info');
+						if (info instanceof HTMLElement) {
+							info.setText(`${usage.totalTokens} tok`);
+						} else {
+							meta.createDiv({ cls: 'ai-message-info', text: `${usage.totalTokens} tok` });
 						}
 					}
 				},
 				onError: (error: Error) => {
+					errorSeen = true;
 					console.error('[Curtis] Stream error:', error);
 					const friendly = friendlyError(error, this.currentSendHasImages);
 					new Notice(friendly.message, 8000);
@@ -2771,37 +3110,88 @@ export class ChatView extends ItemView {
 					this.renderer.renderStreamedMessage(assistantContent, this.streamingContent);
 				},
 				signal: this.abortController.signal,
-			});
-			if (!assistantStored && this.streamingContent) {
-				const stored = this.store.addMessageTo(convId, {
-					role: 'assistant',
-					content: this.streamingContent,
-					provider: provider.id,
-					model: this.activeModelId,
-					memoriesUsedIds: memoryIds.length > 0 ? memoryIds : undefined,
-				});
-				if (stored) {
-					storedMessageId = stored.id;
-					assistantStored = true;
-				}
+			};
+
+			// Refresh the Anthropic extended-thinking hints from settings so the
+			// outgoing request reflects the current toggle (the provider reads
+			// them at formatRequest time).
+			this.syncThinkingHints();
+
+			if (opts.agent) {
+				// Agent mode: tool invocations render as separate bubbles inserted
+				// BEFORE the final assistant bubble. The final text still arrives
+				// via onChunk so the streaming UI works. The conversation context
+				// lets the loop gate the swarm tool to leader chats and lets the
+				// spawn tool write followers back into the store.
+				await this.plugin.callAgentLoop(aiMessages, laneModelId, {
+					...shared,
+					onToolCall: (call: ToolCall) => {
+						// Render the invocation as a stored assistant message + a
+						// live bubble inserted before the streaming assistant wrapper.
+						this.store.addMessageTo(convId, {
+							role: 'assistant',
+							content: '',
+							tool_calls: [call],
+							provider: laneProvider.id,
+							model: laneModelId,
+							...(opts.agentId ? { agentId: opts.agentId } : {}),
+						});
+						const bubble = this.messagesContainer.createDiv({ cls: 'ai-message ai-message-tool-call' });
+						this.messagesContainer.insertBefore(bubble, assistantWrapper);
+						this.renderToolCallBubble(bubble, call);
+						this.scrollToBottom(false);
+					},
+					onToolResult: (call: ToolCall, result: { content: string; isError: boolean }) => {
+						this.store.addMessageTo(convId, {
+							role: 'tool',
+							content: result.content,
+							tool_call_id: call.id,
+							tool_error: result.isError || undefined,
+						});
+						const bubble = this.messagesContainer.createDiv({
+							cls: 'ai-message ai-message-tool' + (result.isError ? ' is-error' : ''),
+						});
+						this.messagesContainer.insertBefore(bubble, assistantWrapper);
+						this.appendToolResultContentInto(bubble, result.content, result.isError);
+						this.scrollToBottom(false);
+					},
+				}, { conversationId: convId, providerId: laneProvider.id });
+			} else {
+				await this.plugin.callAI(aiMessages, modelId, shared);
 			}
+
+			// No usage callback fired — store the message without token counts.
+			if (!assistantStored && this.streamingContent) storeAssistant(null);
 		} catch (e) {
 			if ((e as Error).name !== 'AbortError') {
 				errorSeen = true;
-				console.error('[Curtis] Regenerate failed:', e);
-				new Notice('Regenerate failed');
+				console.error('[Curtis] AI call failed:', e);
+				new Notice(opts.errorNotice);
 			}
 		} finally {
+			// Read the abort state before nulling the controller — an aborted
+			// stream must not fire a completion notification.
 			const aborted = this.abortController?.signal.aborted ?? false;
 			this.isGenerating = false;
 			this.setGeneratingUI(false);
 			this.abortController = null;
 			assistantWrapper.removeClass('ai-message-streaming');
 			assistantWrapper.removeClass('ai-message-thinking');
+			// Collapse the extended-thinking block (it stays open while the
+			// deltas stream); skipped entirely when no thinking arrived.
+			if (streamingThinking) {
+				this.renderer.renderThinkingBlock(ensureThinkingHost(), streamingThinking, false);
+			}
+			// Final markdown render — replaces the streaming plain-text preview
+			// with a fully-parsed markdown view (code blocks, links, etc.).
 			this.renderer.renderStreamedMessage(assistantContent, this.streamingContent, true);
-			this.scrollToBottom();
+			this.scrollToBottom(false);
+
+			// The store writes below are self-initiated — other panes still get
+			// the conversation:changed event; this one manages its own DOM.
 			this.suppressStoreEvents = true;
 			try {
+				// Attach hover-visible actions now that the message is final.
 				if (storedMessageId && this.streamingContent) {
 					// Sync final content into the stored message in case usage fired
 					// early (before the final chunk) and the snapshot is stale.
@@ -2819,7 +3209,9 @@ export class ChatView extends ItemView {
 							},
 						});
 						this.attachSpeakAction(assistantWrapper, stored);
+						// Auto-speak the fresh response if the toggle is on.
 						this.maybeAutoSpeak(stored);
+						// Auto-save (silent) if the user opted in.
 						if (this.plugin.settings.autoSaveAssistantResponses) {
 							const folder = this.plugin.settings.autoSaveFolder || this.plugin.settings.noteSaveFolder;
 							void saveMessageAsNote(this.app, stored, folder).catch((e) =>
@@ -2839,10 +3231,23 @@ export class ChatView extends ItemView {
 				content: this.streamingContent,
 			});
 			// Background fact extraction — fire-and-forget.
-			// Reset image-flag + extract facts.
 			this.currentSendHasImages = false;
 			this.maybeExtractFacts(convId);
 		}
+	}
+
+	/** Run a leading slash command. Returns true when a command consumed the
+	 *  input (the send is suppressed); the box is cleared only when the
+	 *  command left it untouched — /paste REPLACES it with clipboard text. */
+	private async runSlashCommand(trimmed: string): Promise<boolean> {
+		if (!trimmed.startsWith('/')) return false;
+		const before = this.inputEl.value;
+		const consumed = await handleSlashCommand(trimmed, this.slashContext());
+		if (consumed && this.inputEl.value === before) {
+			this.inputEl.value = '';
+			this.autoResizeInput();
+		}
+		return consumed;
 	}
 
 	/** Build the SlashContext passed into slash-command handlers. */
@@ -2873,7 +3278,11 @@ export class ChatView extends ItemView {
 		};
 	}
 
-	private scrollToBottom(): void {
+	private scrollToBottom(force = true): void {
+		// respectUserScroll — while the user has scrolled up to read, per-chunk
+		// and completion updates pass force=false and leave the view alone;
+		// the jump-to-latest button is their way back down.
+		if (!force && this.userScrolledUp) return;
 		// The view's OWN window — in a popout, window.requestAnimationFrame
 		// would schedule on the main window and never fire for this pane.
 		const win = this.contentEl.ownerDocument.defaultView;
@@ -2883,6 +3292,12 @@ export class ChatView extends ItemView {
 	}
 
 	// --- Arena mode -------------------------------------------------------
+
+	/** Sync the composer's arena toggle with `active`. */
+	private setArenaToggle(active: boolean): void {
+		const btn = this.contentEl.querySelector('.ai-chat-arena-btn');
+		if (btn instanceof HTMLElement) btn.toggleClass('is-active', active);
+	}
 
 	/** Toggle arena on/off. When turning on, open the multi-select modal. */
 	private toggleArenaMode(btn: HTMLElement): void {
@@ -2908,8 +3323,7 @@ export class ChatView extends ItemView {
 		if (enabled.length === 0) {
 			new Notice('No enabled providers. Configure one in settings first.');
 			this.arenaMode = false;
-			const btn = this.contentEl.querySelector('.ai-chat-arena-btn');
-			if (btn instanceof HTMLElement) btn.removeClass('is-active');
+			this.setArenaToggle(false);
 			return;
 		}
 		const entries: ArenaModelEntry[] = [];
@@ -2921,24 +3335,13 @@ export class ChatView extends ItemView {
 		if (entries.length < 2) {
 			new Notice('Need at least 2 models across enabled providers for arena');
 			this.arenaMode = false;
-			const btn = this.contentEl.querySelector('.ai-chat-arena-btn');
-			if (btn instanceof HTMLElement) btn.removeClass('is-active');
+			this.setArenaToggle(false);
 			return;
 		}
-		// Pre-select the active provider+model to save a click.
-		const preselected: ArenaSelection[] = [];
+		// Pre-fill the selection set with the active model (when one is
+		// resolvable) so the user just needs to pick one more to start.
 		const activeProvider = this.plugin.providerRegistry.getProvider(this.activeProviderId);
 		const activeModel = activeProvider?.models.find((m) => m.id === this.activeModelId);
-		if (activeProvider && activeModel) {
-			preselected.push({
-				providerId: this.activeProviderId,
-				modelId: this.activeModelId,
-				providerName: activeProvider.name,
-				modelName: activeModel.name,
-			});
-		}
-		// Pre-fill the selection set with the active model so the user just
-		// needs to pick one more to start.
 		const modal = new ArenaModelPickerModal(
 			this.app,
 			entries,
@@ -2950,17 +3353,16 @@ export class ChatView extends ItemView {
 			}
 		);
 		// Pre-select via the modal's internal API once it opens.
-		modal.onOpenHook = () => {
-			for (const sel of preselected) {
-				modal.toggleFromOutside(`${sel.providerId}|${sel.modelId}`);
-			}
-		};
+		if (activeProvider && activeModel) {
+			modal.onOpenHook = () => {
+				modal.toggleFromOutside(`${this.activeProviderId}|${this.activeModelId}`);
+			};
+		}
 		modal.onCancel = () => {
 			// User backed out — turn arena mode off and clear pre-fetched state.
 			this.arenaMode = false;
 			this.arenaSelectedModels = [];
-			const btn = this.contentEl.querySelector('.ai-chat-arena-btn');
-			if (btn instanceof HTMLElement) btn.removeClass('is-active');
+			this.setArenaToggle(false);
 		};
 		modal.open();
 	}
@@ -3046,6 +3448,8 @@ export class ChatView extends ItemView {
 		// below it as the assistant's response surface.
 		const arenaLayout = this.messagesContainer.createDiv({ cls: 'ai-arena-layout' });
 		arenaLayout.style.setProperty('--arena-columns', String(this.arenaSelectedModels.length));
+		// 3-4 way rounds opt into the narrow-window 2-column wrap (CSS).
+		if (this.arenaSelectedModels.length > 2) arenaLayout.addClass('ai-arena-wide');
 
 		const promises: Promise<ArenaColumnResult>[] = [];
 		for (const sel of this.arenaSelectedModels) {
@@ -3058,6 +3462,12 @@ export class ChatView extends ItemView {
 			const headerText = header.createDiv({ cls: 'ai-arena-column-header-text' });
 			headerText.createDiv({ cls: 'ai-arena-column-model', text: sel.modelName });
 			headerText.createDiv({ cls: 'ai-arena-column-provider', text: sel.providerName });
+			// Muted line of non-default request params for this contestant —
+			// '' (all defaults) renders nothing.
+			const paramSummary = this.plugin.getEffectiveParamsSummary(sel.providerId, sel.modelId);
+			if (paramSummary) {
+				headerText.createDiv({ cls: 'ai-arena-param-summary', text: paramSummary });
+			}
 
 			const responseEl = column.createDiv({ cls: 'ai-arena-column-response ai-message-thinking' });
 			const footer = column.createDiv({ cls: 'ai-arena-column-footer' });
@@ -3090,7 +3500,7 @@ export class ChatView extends ItemView {
 			this.setGeneratingUI(false);
 			this.currentSendHasImages = false;
 			this.arenaAbortControllers.clear();
-			this.scrollToBottom();
+			this.scrollToBottom(false);
 			// One notification for the whole round (not per column). A column
 			// the user manually stopped doesn't sink the round — any clean
 			// finish still counts.
@@ -3131,8 +3541,14 @@ export class ChatView extends ItemView {
 		let assistantStored = false;
 		let errorSeen = false;
 		let storedArenaMessageId: string | null = null;
+		// Extended-thinking split (Anthropic): reasoning renders as a collapsible
+		// block above the column's answer; the stored/promoted text stays clean.
+		const thinkingSplitter = new ThinkingStreamSplitter();
+		let streamingThinking = '';
+		let thinkingHost: HTMLElement | null = null;
 
 		try {
+			this.syncThinkingHints();
 			await this.plugin.callAI(messages, sel.modelId, {
 				providerId: sel.providerId,
 				signal: abortController.signal,
@@ -3142,10 +3558,21 @@ export class ChatView extends ItemView {
 						responseEl.removeClass('ai-message-thinking');
 						responseEl.addClass('ai-message-streaming');
 					}
-					streamed += chunk;
-					responseEl.dataset.content = streamed;
-					this.renderer.renderStreamedMessage(responseEl, streamed);
-					this.scrollToBottom();
+					const parts = thinkingSplitter.push(chunk);
+					if (parts.thinking) {
+						streamingThinking += parts.thinking;
+						if (!thinkingHost) {
+							thinkingHost = createDiv({ cls: 'ai-thinking-host' });
+							responseEl.parentElement?.insertBefore(thinkingHost, responseEl);
+						}
+						this.renderer.renderThinkingBlock(thinkingHost, streamingThinking, true);
+					}
+					if (parts.answer) {
+						streamed += parts.answer;
+						responseEl.dataset.content = streamed;
+						this.renderer.renderStreamedMessage(responseEl, streamed);
+						this.scrollToBottom(false);
+					}
 				},
 				onUsage: (usage: TokenUsage) => {
 					const usageEl = footer.querySelector('.ai-arena-column-usage');
@@ -3216,6 +3643,10 @@ export class ChatView extends ItemView {
 		} finally {
 			responseEl.removeClass('ai-message-streaming');
 			responseEl.removeClass('ai-message-thinking');
+			// Collapse the extended-thinking block (open while streaming).
+			if (streamingThinking && thinkingHost) {
+				this.renderer.renderThinkingBlock(thinkingHost, streamingThinking, false);
+			}
 			stopBtn.remove();
 			// Final markdown render even for an aborted column so partial text
 			// keeps its formatting, and promote becomes available for whatever
@@ -3262,8 +3693,7 @@ export class ChatView extends ItemView {
 		// Exit arena mode but keep the just-promoted message in history.
 		this.arenaMode = false;
 		this.arenaSelectedModels = [];
-		const btn = this.contentEl.querySelector('.ai-chat-arena-btn');
-		if (btn instanceof HTMLElement) btn.removeClass('is-active');
+		this.setArenaToggle(false);
 		// Switch this pane's provider/model to the promoted column's so the
 		// next message continues with the same model the user just picked.
 		this.setActiveModel(sel.providerId, sel.modelId);

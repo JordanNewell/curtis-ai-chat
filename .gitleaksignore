@@ -1,0 +1,5 @@
+# Test fixtures only — these PEMs are generated at test runtime via
+# crypto.subtle.generateKey (throwaway RSA pairs) or are stub strings.
+# No real credentials ship in this repo.
+src/gcp/auth.test.ts:private-key:43
+src/gcp/auth.test.ts:private-key:103

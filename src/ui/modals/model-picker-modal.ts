@@ -6,6 +6,8 @@
 
 import { App, FuzzySuggestModal, setIcon } from 'obsidian';
 import type { AIModel } from '../../types';
+import { providerColor } from '../../providers/colors';
+import { CURTIS_ICON_ID } from '../../icons';
 
 interface ModelPickerEntry {
 	providerId: string;
@@ -36,7 +38,17 @@ export class ModelPickerModal extends FuzzySuggestModal<ModelPickerEntry> {
 		this.entries = entries;
 		this.activeKey = activeKey;
 		this.onPick = onPick;
-		this.setPlaceholder('Search models... (Type to filter)');
+		// Same surface language as the anchored dropdown — rounded, hairline
+		// border, deep shadow — styled under .ai-model-picker-modal.
+		this.modalEl.addClass('ai-model-picker-modal');
+		this.setPlaceholder('Search models…');
+		this.emptyStateText = 'No models match';
+		// Branded title: the mark id is registered by main.ts (addIcon) at
+		// startup, before any modal can open.
+		this.titleEl.addClass('curtis-mark-title');
+		const mark = this.titleEl.createSpan({ cls: 'curtis-modal-title-icon', attr: { 'aria-hidden': 'true' } });
+		setIcon(mark, CURTIS_ICON_ID);
+		this.titleEl.appendText('Models');
 	}
 
 	getItems(): ModelPickerEntry[] {
@@ -48,7 +60,7 @@ export class ModelPickerModal extends FuzzySuggestModal<ModelPickerEntry> {
 		return `${entry.providerName} ${entry.model.name}`;
 	}
 
-	/** Custom row: name + provider + capability pills. */
+	/** Custom row: provider dot + name + provider + capability pills. */
 	renderSuggestion(entry: { item: ModelPickerEntry }, el: HTMLElement): void {
 		el.empty();
 		el.addClass('ai-model-suggestion-row');
@@ -58,6 +70,11 @@ export class ModelPickerModal extends FuzzySuggestModal<ModelPickerEntry> {
 		// Active marker — highlight current model
 		const key = `${entry.item.providerId}|${entry.item.model.id}`;
 		const isActive = key === this.activeKey;
+
+		// Provider dot — same brand-color read as the pill and the dropdown.
+		const dot = row.createDiv({ cls: 'ai-model-suggestion-dot' });
+		const color = providerColor(entry.item.providerId);
+		if (color) dot.style.setProperty('--provider-color', color);
 
 		const text = row.createDiv({ cls: 'ai-model-suggestion-text' });
 		const name = text.createDiv({

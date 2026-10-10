@@ -21,7 +21,7 @@
 //     and retrieval excerpts never wander into a shot.
 //
 // Usage:  node scripts/capture-arena-shots.mjs
-// Env:    OBSIDIAN_EXE (default: %LOCALAPPDATA%\Programs\Obsidian\Obsidian.exe)
+// Env:    OBSIDIAN_EXE (default: scoop obsidian current)
 //
 // The user's running Obsidian is closed for the duration and relaunched at
 // the end (same contract as npm run shots).
@@ -43,7 +43,7 @@ const OUT_DIR = resolve(ROOT, 'assets/screenshots');
 
 const OBSIDIAN_EXE =
 	process.env.OBSIDIAN_EXE ||
-	resolve(process.env.LOCALAPPDATA, 'Programs/Obsidian/Obsidian.exe');
+	resolve(process.env.USERPROFILE ?? process.env.HOME, 'scoop/apps/obsidian/current/Obsidian.exe');
 
 // The arena pair — two deepseek models. z.ai throttles under repeated
 // capture runs (big GLMs answer too slowly to catch mid-flight; flash

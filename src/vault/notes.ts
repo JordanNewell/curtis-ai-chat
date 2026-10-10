@@ -161,14 +161,15 @@ export async function createNote(
 }
 
 /**
- * Save a single message as a note. Title derived from content; folder from
- * settings. Returns the created file (or null).
+ * Save a single message as a note. Title is `opts.name` when given, else
+ * derived from content; folder from settings. Returns the created file (or
+ * null).
  */
 export async function saveMessageAsNote(
 	app: App,
 	msg: ConversationMessage,
 	folder: string,
-	opts: { open?: boolean } = {}
+	opts: { open?: boolean; name?: string } = {}
 ): Promise<TFile | null> {
 	// Locale strings contain path-invalid chars on some OSes; use a safe stamp.
 	const stamp = new Date(msg.timestamp)
@@ -176,7 +177,7 @@ export async function saveMessageAsNote(
 		.replace(/[T]/g, ' ')
 		.replace(/[:.]/g, '-')
 		.slice(0, 19);
-	const basename = deriveNoteBasename(msg.content, `AI Response ${stamp}`);
+	const basename = opts.name?.trim() || deriveNoteBasename(msg.content, `AI Response ${stamp}`);
 	const frontmatter = {
 		source: 'Curtis',
 		provider: msg.provider || '',

@@ -8,6 +8,8 @@ import { downloadConversationMarkdown } from './export';
 import { runRecap } from './recap';
 import { createNote, renderConversationAsMarkdown, saveMessageAsNote } from '../vault/notes';
 import { SlashHelpModal } from '../ui/modals/slash-help-modal';
+import { AgentPickerModal } from '../ui/modals/agent-picker-modal';
+import { confirmAction } from '../ui/modals/confirm-modal';
 import type CurtisPlugin from '../main';
 
 export interface SlashCommand {
@@ -94,6 +96,22 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 		},
 	},
 	{
+		name: 'leader',
+		usage: '/leader',
+		description: 'Toggle leader mode — this chat can spawn follower agents',
+		run: (ctx) => {
+			const conv = findConv(ctx.plugin.conversationStore, ctx.conversationId);
+			if (!conv) return true;
+			const isLeader = conv.role === 'leader';
+			ctx.plugin.conversationStore.setConversationRole(conv.id, isLeader ? undefined : 'leader');
+			ctx.refresh();
+			new Notice(isLeader
+				? 'Leader mode off — this chat is a normal chat again'
+				: `Leader mode on — this chat can now spawn up to ${ctx.plugin.settings.swarmMaxFollowers} follower agent(s) per message`);
+			return true;
+		},
+	},
+	{
 		name: 'copy',
 		usage: '/copy',
 		description: 'Copy the last assistant response',
@@ -123,10 +141,10 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 				return true;
 			}
 			const folder = ctx.plugin.settings.noteSaveFolder;
-			const name = ctx.args.trim();
-			const file = name
-				? await createNote(ctx.app, folder, name, last.content, { open: true, frontmatter: { source: 'Curtis', provider: last.provider, model: last.model } })
-				: await saveMessageAsNote(ctx.app, last, folder, { open: true });
+			const file = await saveMessageAsNote(ctx.app, last, folder, {
+				open: true,
+				name: ctx.args.trim() || undefined,
+			});
 			if (file instanceof TFile) new Notice(`Saved: ${file.basename}`);
 			return true;
 		},
@@ -256,6 +274,45 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 		},
 	},
 	{
+		name: 'agent',
+		usage: '/agent [name|off]',
+		description: 'Bind a named agent to this chat (bare = picker)',
+		run: (ctx) => {
+			const conv = findConv(ctx.plugin.conversationStore, ctx.conversationId);
+			if (!conv) {
+				new Notice('No conversation — send a message first');
+				return true;
+			}
+			const arg = ctx.args.trim();
+			if (!arg) {
+				new AgentPickerModal(ctx.app, ctx.plugin, (agent) => {
+					ctx.plugin.conversationStore.setConversationAgent(conv.id, agent?.id);
+					new Notice(agent
+						? `${agent.emoji} ${agent.name} — this chat now runs on ${agent.modelId}`
+						: 'Agent cleared — default assistant');
+					ctx.refresh();
+				}).open();
+				return true;
+			}
+			if (arg.toLowerCase() === 'off') {
+				ctx.plugin.conversationStore.setConversationAgent(conv.id, undefined);
+				ctx.refresh();
+				new Notice('Agent cleared — default assistant');
+				return true;
+			}
+			const agent = ctx.plugin.agents.findByRef(arg);
+			if (!agent) {
+				const names = ctx.plugin.agents.getAgents().map((a) => a.name).join(', ');
+				new Notice(`No agent matching "${arg}"${names ? ` — available: ${names}` : ' — create one in Settings → Agents'}`);
+				return true;
+			}
+			ctx.plugin.conversationStore.setConversationAgent(conv.id, agent.id);
+			ctx.refresh();
+			new Notice(`${agent.emoji} ${agent.name} — this chat now runs on ${agent.modelId}`);
+			return true;
+		},
+	},
+	{
 		name: 'system',
 		usage: '/system <text>',
 		description: 'Set the system prompt (empty resets to default)',
@@ -279,8 +336,14 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 		description: 'Show conversation stats (tokens, messages)',
 		run: (ctx) => {
 			const stats = ctx.plugin.conversationStore.getStats();
+			// Autocomplete usage is session-only (in-memory) — surfaced here so
+			// its background cost is observable without leaving the vault.
+			const auto = ctx.plugin.autocompleteUsage;
+			const autoLine = auto.requests > 0
+				? `\nAutocomplete: ${auto.requests} req · ${auto.tokens.toLocaleString()} tokens (this session)`
+				: '';
 			new Notice(
-				`${stats.totalConversations} conv · ${stats.totalMessages} msgs · ${stats.totalTokens.toLocaleString()} tokens`,
+				`${stats.totalConversations} conv · ${stats.totalMessages} msgs · ${stats.totalTokens.toLocaleString()} tokens${autoLine}`,
 				5000
 			);
 			return true;
@@ -348,13 +411,22 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 				return true;
 			}
 			if (sub === 'clear') {
+				const count = facts.length;
+				const ok = await confirmAction(
+					ctx.app,
+					'Clear memory?',
+					`This deletes all ${count} remembered fact${count === 1 ? '' : 's'}. This cannot be undone.`,
+					'Clear memory'
+				);
+				if (!ok) return true;
 				await ctx.plugin.memoryStore.clear();
+				new Notice(`Memory cleared — ${count} fact${count === 1 ? '' : 's'} deleted`);
 				return true;
 			}
-		// Default: show a Notice with a short summary.
-		const sample = facts.slice(-8).map((f) => `• ${f.content}${f.category ? ` [${f.category}]` : ''}`).join('\n');
-		new Notice(`Memory (${facts.length} facts):\n${sample}`, 8000);
-		return true;
+			// Default: show a Notice with a short summary.
+			const sample = facts.slice(-8).map((f) => `• ${f.content}${f.category ? ` [${f.category}]` : ''}`).join('\n');
+			new Notice(`Memory (${facts.length} facts):\n${sample}`, 8000);
+			return true;
 	},
 },
 {

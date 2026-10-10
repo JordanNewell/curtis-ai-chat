@@ -1,20 +1,21 @@
 # Curtis AI
 
-> Curtis AI is an applied AI company (est. 2026); its first product is Curtis AI Chat, a polyglot AI chat plugin for Obsidian.
+> Curtis AI is an applied AI company (est. 2026); its first product is Curtis AI, a polyglot AI chat plugin for Obsidian.
 
 ## About Curtis AI
 
 - Applied AI company, established 2026.
 - Ships products and runs a research arm; the lab is in setup.
-- First research subject: the memory system shipping inside Curtis AI Chat.
+- First research subject: the memory system shipping inside Curtis AI.
 
 ## Curtis AI Chat (Product 01)
 
-- Polyglot AI chat for Obsidian: 30+ providers, one sidebar.
+- Polyglot AI chat for Obsidian: 53 built-in providers, one sidebar.
 - Local-first: Ollama and LM Studio supported for fully offline use; nothing leaves the machine unless a provider points at the cloud.
 - Bring-your-own keys; API keys stored in the OS keychain (Obsidian 1.13+).
-- Agent mode: AI calls 10 built-in tools to read, create, and edit vault notes, plus any tool exposed by user-connected MCP servers (Streamable HTTP, opt-in).
-- Other features: multi-model arena (2 models side by side), inline diff rewrite, @-mention notes as context, voice I/O (Whisper speech-to-text in, browser TTS out), cross-chat search, /export to Markdown, editable long-term memory.
+- Agent mode: AI calls eleven built-in tools (read/search/create/edit vault notes, semantic search when vault retrieval is on, and more), plus any tool exposed by user-connected MCP servers (Streamable HTTP, opt-in) and read-only Cloud Storage on a user-connected GCP project (service-account key, opt-in).
+- Named agents: reusable worker configs — persona + model routing + tool ceilings — bound to any chat or spawned as swarm specialists; swarm mode lets a leader chat spawn follower agents that work subtasks in their own panes.
+- Other features: multi-model arena (2-4 models streaming one prompt in parallel), multi-pane chat (tabs and popout windows), terminal pane with an opt-in run_command agent tool, scheduled runs (a prompt or agent on a daily/interval cadence, headless, results as notes), MCP server mode (serve the vault and agents to external AI apps on localhost), a public plugin API for other Obsidian plugins, inline autocomplete (off by default), inline diff rewrite, @-mention notes as context, voice I/O (Whisper dictation in; read-aloud with a sentence player, voice picker, and karaoke highlight), cross-conversation search, vault retrieval (semantic context auto-injected), desktop notifications, chat import from ChatGPT/Claude plus the portable .curt format, /export to Markdown, editable long-term memory.
 
 ## Install
 
@@ -24,14 +25,14 @@
 
 ## Facts
 
-- Current version: 1.4.0
+- Current version: 2.0.0
 - Minimum Obsidian version: 1.13.0
 - License: MIT (Copyright (c) 2026 Jordan Newell)
-- No telemetry or analytics. Source contains no sendBeacon/XHR/WebSocket/analytics calls; network requests go only to the user-configured AI provider endpoint, OpenAI's transcription endpoint when voice dictation is used, opt-in (off-by-default) web_search/read_url agent tools (DuckDuckGo, Jina Reader), and opt-in (off-by-default) user-configured MCP server URLs.
+- No telemetry or analytics. Source contains no sendBeacon/XHR/WebSocket/analytics calls; network requests go only to the user-configured AI provider endpoint, OpenAI's transcription endpoint when voice dictation is used, OpenAI's OAuth endpoints (auth.openai.com) when the "Sign in with ChatGPT" provider is used (desktop, user-initiated, official OpenAI program; tokens stored in the OS keychain), site favicons for external links in chat (icons.duckduckgo.com, one request per domain; "Link favicons" toggle under Settings -> Chat UI, on by default; off keeps chat rendering fully local), opt-in (off-by-default) web_search/read_url agent tools (DuckDuckGo, Jina Reader), opt-in (off-by-default) user-configured MCP server URLs, and Google's OAuth/Cloud Storage endpoints when the opt-in (off-by-default) GCP connector is enabled. The opt-in (off-by-default) plugin MCP server mode additionally serves the vault on localhost (127.0.0.1, bearer-token protected) when enabled; that is inbound local connections, not egress.
 
 ## Links
 
-- Site: https://jordannewell.github.io/curtis-ai-chat/
+- Site: https://curtisai.jordannewell.com/
 - Source: https://github.com/JordanNewell/curtis-ai-chat
 - Releases: https://github.com/JordanNewell/curtis-ai-chat/releases
 - Obsidian community listing: https://community.obsidian.md/plugins/curtis-ai-chat

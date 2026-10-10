@@ -15,6 +15,14 @@ data.json
 .zcode/
 # Reference plugin research (large, not part of source)
 _research/
+# Provider research scrapes (docs/OpenAPI/sitemap dumps, probe responses)
+rep*.json
+rep*.html
+l.txt
+rl.txt
+gpt5.html
+sitemap*.xml
+probe.json
 
 # IDE
 .vscode/
@@ -32,5 +40,10 @@ Thumbs.db
 
 # Local test vault
 demo-vault/
+# Swarm test vault
+demo-swarm/
 # ZCode superpowers session state
 .superpowers/
+# Capture scratch — playwright logs, crops, old-shot comparisons, theme-audit output
+_preview/
+shots/

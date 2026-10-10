@@ -4,6 +4,18 @@ Move your chat history from other AI tools into Curtis and continue without miss
 
 Curtis chats are plain markdown files in your vault, so "importing" means writing those files — imported conversations land in `AI/Conversations/` like any other chat: searchable in Obsidian, synced across devices, and readable by the agent. Continuing an imported chat sends its full history to **whatever provider you have active** — the original provider/model is kept as display metadata on each message.
 
+## Where chats live
+
+Every conversation — new, imported, or spawned by the [swarm](SWARM.md) — persists as one markdown note in **`AI/Conversations/`** (change the folder under Settings → Conversations). The file is the storage: there is no database. Edit it by hand and Curtis picks up your edits; delete it and the chat is gone.
+
+The layout is stable and human-readable:
+
+- **Frontmatter** — `curtis: conversation`, plus the id, created/updated timestamps, and the provider/model the chat is currently on ([swarm](SWARM.md) chats record `role: leader` / `follower`, and a follower keeps its `leaderId`)
+- **`# Title`** — the conversation title
+- **One section per message** — `## You`, `## AI`, `## Tool`, or `## System`, each opening with a small `<!-- curtis:msg {...} -->` HTML comment that carries the machine metadata: id, timestamp, role, and where applicable the provider/model, token and cost figures, image and attachment references, tool-call records, and which memories a reply used
+
+The serializer/parser for this format is deliberately Obsidian-free, so external tools can read and write it — [Curtis Porter](https://github.com/JordanNewell/curtis-ai-chat-porter) does exactly that. History that predates conversation files (the old localStorage store) imports itself into the folder once on upgrade; the original copy is left in place.
+
 ## Supported sources (auto-detected)
 
 You never pick a format. Drop or select a file and Curtis figures out what it is:

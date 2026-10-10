@@ -2,7 +2,28 @@ import { App, TFile } from 'obsidian';
 import { asStringArray, isRecord } from './types/json-helpers';
 import { getActiveNoteFile } from '../vault/active-note';
 import { WEB_SEARCH_TOOL, READ_URL_TOOL } from './web-tools';
+import { RUN_COMMAND_TOOL } from './command-tools';
 import type { RagIndexManager } from '../rag/index-manager';
+import type CurtisPlugin from '../main';
+import type { JsonSchemaObject, ToolParameter } from './tool-schema';
+import { buildToolParametersSchema } from './tool-schema';
+
+// The pure schema-builder half lives in ./tool-schema (Obsidian-free, so
+// providers and their tests can import it under node). Re-exported here to
+// keep this module's public surface unchanged.
+export { buildToolParametersSchema };
+export type { JsonSchemaObject };
+export type { ToolParameter } from './tool-schema';
+
+/** Coerce a tool param value to string. Empty string if absent or wrong type. */
+function str(v: unknown): string {
+	return typeof v === 'string' ? v : '';
+}
+
+/** Coerce a tool param value to number. 0 if absent or wrong type. */
+function num(v: unknown): number {
+	return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
 
 /** Registry key of the vault-retrieval tool (Settings → Vault retrieval). */
 const SEMANTIC_SEARCH_TOOL_NAME = 'semantic_search';
@@ -30,10 +51,18 @@ const SEMANTIC_SEARCH_TOOL_NAME = 'semantic_search';
 //   web_search       — Search the web (DuckDuckGo)
 //   read_url         — Fetch and read a URL
 //
+// Optional command tool (settings toggle, desktop only):
+//   run_command      — Run a shell command; confirmation-gated in
+//                      callAgentLoop, cwd restricted to the vault by default.
+//
 // MCP tools (Settings → MCP servers, via McpManager):
 //   mcp__<server>__<tool> — any tool exposed by a user-configured MCP server.
 //   Not enumerated here: the registry's MCP slice is replaced wholesale
 //   (setMcpTools) whenever connections change.
+//
+// GCP connector tools (Settings → GCP, via GcpManager):
+//   gcp__storage__* — read-only Cloud Storage on the user's GCP project.
+//   Replaced wholesale (setGcpTools) whenever connection state changes.
 //
 // Optional vault retrieval tool (Settings → Vault retrieval):
 //   semantic_search  — Embedding-based search over the RAG index
@@ -54,26 +83,19 @@ export interface ToolDefinition {
 	inputSchema?: JsonSchemaObject;
 }
 
-/** JSON Schema object shape — deliberately loose so server-provided schemas
- *  ($defs, oneOf, nested arrays…) pass through untouched. */
-export interface JsonSchemaObject {
-	type: 'object';
-	properties?: Record<string, unknown>;
-	required?: string[];
-	[key: string]: unknown;
-}
-
-export interface ToolParameter {
-	type: 'string' | 'number' | 'boolean';
-	description: string;
-	required?: boolean;
-	enum?: string[];
-	default?: unknown;
-}
-
 export interface ToolContext {
 	app: App;
 	conversationId?: string;
+	/** The plugin — only for tools that orchestrate above the vault layer
+	 *  (the swarm's spawn_agent). Ordinary tools never see it. */
+	plugin?: CurtisPlugin;
+	/** The abort signal of the agent loop that issued the call — stopping
+	 *  the leader tears down work the tool started (nested agent runs). */
+	signal?: AbortSignal;
+	/** Provider/model of the loop that issued the call, so orchestrating
+	 *  tools can inherit the caller's model for the work they spawn. */
+	providerId?: string;
+	modelId?: string;
 }
 
 export interface ToolCall {
@@ -82,56 +104,36 @@ export interface ToolCall {
 	arguments: Record<string, unknown>;
 }
 
-/** Coerce a tool param value to string. Empty string if absent or wrong type. */
-function str(v: unknown): string {
-	return typeof v === 'string' ? v : '';
-}
-
-/** Coerce a tool param value to number. 0 if absent or wrong type. */
-function num(v: unknown): number {
-	return typeof v === 'number' && Number.isFinite(v) ? v : 0;
-}
-
-/**
- * Build the JSON Schema `parameters` object for a tool definition. Shared by
- * every provider dialect: OpenAI-compat sends it as `parameters`, Anthropic
- * as `input_schema`, Gemini as the function-declaration body.
- */
-export function buildToolParametersSchema(tool: ToolDefinition): JsonSchemaObject {
-	// MCP tools (and anything else with a server-provided schema) bypass the
-	// flat builder — their schemas are already wire-ready JSON Schema.
-	if (tool.inputSchema) return tool.inputSchema;
-	const properties: Record<string, Record<string, unknown>> = {};
-	const required: string[] = [];
-	for (const key of Object.keys(tool.parameters)) {
-		const param: ToolParameter = tool.parameters[key];
-		const schema: Record<string, unknown> = {
-			type: param.type,
-			description: param.description,
-		};
-		if (param.enum) schema.enum = param.enum;
-		if (param.default !== undefined) schema.default = param.default;
-		properties[key] = schema;
-		if (param.required) required.push(key);
-	}
-	return { type: 'object', properties, required };
-}
-
 export interface ToolResult {
 	tool_call_id: string;
 	content: string;
 	is_error?: boolean;
 }
 
+/** Extra per-call context for orchestrating tools (swarm). Ordinary
+ *  tools ignore it; executeTool just forwards it into ToolContext. */
+export interface ExecuteToolOpts {
+	signal?: AbortSignal;
+	plugin?: CurtisPlugin;
+	providerId?: string;
+	modelId?: string;
+}
+
 export class ToolRegistry {
 	private tools: Map<string, ToolDefinition> = new Map();
 	private mcpToolNames: Set<string> = new Set();
+	private gcpToolNames: Set<string> = new Set();
 	private app: App;
 	private ragIndex: RagIndexManager | null = null;
 
 	constructor(
 		app: App,
-		opts: { enableWebSearch?: boolean; enableRag?: boolean; ragIndex?: RagIndexManager } = {}
+		opts: {
+			enableWebSearch?: boolean;
+			enableRag?: boolean;
+			enableCommands?: boolean;
+			ragIndex?: RagIndexManager;
+		} = {}
 	) {
 		this.app = app;
 		if (opts.ragIndex) this.ragIndex = opts.ragIndex;
@@ -142,6 +144,9 @@ export class ToolRegistry {
 		}
 		if (opts.enableRag) {
 			this.setRagToolEnabled(true);
+		}
+		if (opts.enableCommands) {
+			this.setCommandToolsEnabled(true);
 		}
 	}
 
@@ -170,6 +175,20 @@ export class ToolRegistry {
 	}
 
 	/**
+	 * Hot-reload the command tool (run_command) without rebuilding the rest
+	 * of the registry — same pattern as setWebToolsEnabled, called from the
+	 * Settings → Terminal toggle. Execution itself is desktop-only and
+	 * confirmation-gated in callAgentLoop; this only controls advertising.
+	 */
+	setCommandToolsEnabled(enabled: boolean): void {
+		if (enabled) {
+			if (!this.tools.has(RUN_COMMAND_TOOL.name)) this.register(RUN_COMMAND_TOOL);
+		} else {
+			this.unregister(RUN_COMMAND_TOOL.name);
+		}
+	}
+
+	/**
 	 * Replace the MCP tool slice of the registry (tools from user-configured
 	 * MCP servers, namespaced mcp__*). Idempotent: clears the previous MCP
 	 * set first so removed servers/tools disappear. The manager calls this
@@ -181,6 +200,21 @@ export class ToolRegistry {
 		for (const def of defs) {
 			this.tools.set(def.name, def);
 			this.mcpToolNames.add(def.name);
+		}
+	}
+
+	/**
+	 * Replace the GCP connector tool slice (gcp__storage__*, read-only Cloud
+	 * Storage from the user's GCP project). Idempotent, same contract as
+	 * setMcpTools — the GcpManager calls this whenever connection state
+	 * changes.
+	 */
+	setGcpTools(defs: ToolDefinition[]): void {
+		for (const name of this.gcpToolNames) this.tools.delete(name);
+		this.gcpToolNames.clear();
+		for (const def of defs) {
+			this.tools.set(def.name, def);
+			this.gcpToolNames.add(def.name);
 		}
 	}
 
@@ -234,7 +268,7 @@ export class ToolRegistry {
 	/**
 	 * Execute a tool call and return the result.
 	 */
-	async executeTool(call: ToolCall, conversationId?: string): Promise<ToolResult> {
+	async executeTool(call: ToolCall, conversationId?: string, opts?: ExecuteToolOpts): Promise<ToolResult> {
 		const tool = this.tools.get(call.name);
 		if (!tool) {
 			return {
@@ -276,6 +310,10 @@ export class ToolRegistry {
 			const result = await tool.execute(call.arguments, {
 				app: this.app,
 				conversationId,
+				signal: opts?.signal,
+				plugin: opts?.plugin,
+				providerId: opts?.providerId,
+				modelId: opts?.modelId,
 			});
 
 			return {

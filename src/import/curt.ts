@@ -5,11 +5,16 @@
 // be byte-robust: no marker-escaping edge cases, and base64 images / tool
 // calls survive verbatim. The export path uses a browser download; the import
 // path validates strictly — a hand-corrupted file is reported, not guessed.
+//
+// Exports also stamp a `generator` field ("curtis-ai-chat@<version>") naming
+// the app and version that wrote the file — provenance only. Readers ignore
+// it entirely: first-party files written before the field existed and
+// third-party writers without it import identically.
 
 import { Notice, TFile, type App } from 'obsidian';
 import { zipSync, strToU8 } from 'fflate';
 import type { Conversation, ConversationMessage } from '../types';
-import type { ParsedMessage } from './types';
+import { downloadBlob, sanitizeFilename, slugify } from '../utils/download';
 
 const CURT_MAGIC = 'curtis-conversation';
 const CURT_VERSION = 1;
@@ -17,6 +22,13 @@ const CURT_VERSION = 1;
 interface CurtFile {
 	curt: typeof CURT_MAGIC;
 	version: number;
+	/**
+	 * Provenance: which app and version produced the file, formatted as
+	 * "curtis-ai-chat@<version>". Optional — older first-party files and
+	 * third-party writers omit it. Readers must ignore it for compatibility:
+	 * its presence, absence, or value never affects parsing.
+	 */
+	generator?: string;
 	conversation: Conversation;
 }
 
@@ -31,9 +43,15 @@ function isMessage(v: unknown): v is ConversationMessage {
 	);
 }
 
-/** Serialize a conversation as a .curt file body. */
-export function serializeCurt(conv: Conversation): string {
+/**
+ * Serialize a conversation as a .curt file body. When `pluginVersion` is
+ * given (callers pass `plugin.manifest.version`), the file is stamped with a
+ * `generator` provenance field; without it the field is omitted entirely —
+ * the version is never hardcoded.
+ */
+export function serializeCurt(conv: Conversation, pluginVersion?: string): string {
 	const file: CurtFile = { curt: CURT_MAGIC, version: CURT_VERSION, conversation: conv };
+	if (pluginVersion) file.generator = `curtis-ai-chat@${pluginVersion}`;
 	return JSON.stringify(file, null, '\t');
 }
 
@@ -66,37 +84,10 @@ export function parseCurt(raw: string): Conversation | null {
 	return conv as Conversation;
 }
 
-/** Sanitize a title for a .curt filename (mirrors export.ts's md rules). */
-function sanitizeFilename(name: string): string {
-	return name.replace(/[<>:"/\\|?*\p{Cc}]/gu, '_').trim() || 'conversation';
-}
-
 /** Trigger a browser download of the conversation as a .curt file. */
-export function downloadConversationCurt(conv: Conversation): void {
-	const body = serializeCurt(conv);
-	const filename = `${sanitizeFilename(conv.title || 'conversation')}.curt`;
-	const blob = new Blob([body], { type: 'application/json;charset=utf-8' });
-	const url = URL.createObjectURL(blob);
-	const a = activeDocument.body.createEl('a', { attr: { href: url, download: filename } });
-	a.click();
-	a.remove();
-	URL.revokeObjectURL(url);
-}
-
-/** Turn a conversation title into a filesystem-safe filename fragment
- *  (mirrors conversation-store's slugify — bulk export names files with the
- *  same "<date> <slug> <id6>" convention the vault transcripts use). */
-function slugify(title: string): string {
-	const cleaned = (title || '')
-		.replace(/[\\/:*?"<>|#^[\]]/g, '')
-		// eslint-disable-next-line no-control-regex -- strip ASCII control chars that are illegal in filenames
-		.replace(/[\x00-\x1f]/g, '')
-		.replace(/\s+/g, ' ')
-		.replace(/^\.+/, '')
-		.trim()
-		.replace(/[. ]+$/, '');
-	const trimmed = cleaned.length > 60 ? cleaned.slice(0, 60).trim() : cleaned;
-	return trimmed || 'Untitled';
+export function downloadConversationCurt(conv: Conversation, pluginVersion?: string): void {
+	const body = serializeCurt(conv, pluginVersion);
+	downloadBlob(body, `${sanitizeFilename(conv.title || 'conversation')}.curt`, 'application/json;charset=utf-8');
 }
 
 /** Bulk-export filename: "<created-date> <slug> <id6>.curt" — collision-safe
@@ -115,12 +106,12 @@ function curtZipEntryName(conv: Conversation): string {
  * Empty conversations are skipped; the rest land byte-identical to their
  * single-file exports.
  */
-export function downloadConversationsCurtZip(conversations: Conversation[]): void {
+export function downloadConversationsCurtZip(conversations: Conversation[], pluginVersion?: string): void {
 	const entries: Record<string, Uint8Array> = {};
 	let count = 0;
 	for (const conv of conversations) {
 		if (!conv || !Array.isArray(conv.messages) || conv.messages.length === 0) continue;
-		entries[curtZipEntryName(conv)] = strToU8(serializeCurt(conv));
+		entries[curtZipEntryName(conv)] = strToU8(serializeCurt(conv, pluginVersion));
 		count++;
 	}
 	if (count === 0) {
@@ -130,19 +121,14 @@ export function downloadConversationsCurtZip(conversations: Conversation[]): voi
 	const now = new Date();
 	const p = (n: number): string => String(n).padStart(2, '0');
 	const zipName = `curtis-chats-${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}.zip`;
-	const blob = new Blob([zipSync(entries)], { type: 'application/zip' });
-	const url = URL.createObjectURL(blob);
-	const a = activeDocument.body.createEl('a', { attr: { href: url, download: zipName } });
-	a.click();
-	a.remove();
-	URL.revokeObjectURL(url);
+	downloadBlob(zipSync(entries), zipName, 'application/zip');
 	new Notice(`Exported ${count} conversation${count === 1 ? '' : 's'} to ${zipName}`, 8000);
 }
 
 /**
- * Parse a vault .curt file (click-to-import path). Returns the conversation
- * plus a parsed-message fallback shape is NOT used — .curt round-trips full
- * fidelity, so on success the importer writes it as-is.
+ * Parse a vault .curt file (click-to-import path). Returns null when the
+ * file isn't a valid .curt conversation — .curt round-trips full fidelity,
+ * so on success the importer writes it as-is.
  */
 export async function readCurtFile(app: App, file: TFile): Promise<Conversation | null> {
 	try {
@@ -150,20 +136,4 @@ export async function readCurtFile(app: App, file: TFile): Promise<Conversation 
 	} catch {
 		return null;
 	}
-}
-
-/** Convert a Curtis markdown transcript into the ParsedChat pipeline. Used
- *  when someone imports Curtis's human-readable .md export into another
- *  vault without the marker metadata — reuse the store's own parser. */
-export function conversationToParsedMessages(conv: Conversation): ParsedMessage[] {
-	return conv.messages.map((m) => ({
-		role: m.role,
-		content: m.content,
-		timestamp: m.timestamp,
-		model: m.model,
-	}));
-}
-
-export function curtUnsupportedNotice(file: string): void {
-	new Notice(`Curtis could not read ${file} as a .curt conversation file`);
 }

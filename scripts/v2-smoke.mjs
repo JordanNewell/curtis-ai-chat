@@ -25,7 +25,7 @@
 // shares them.
 //
 // Usage: npm run smoke:v2
-// Env:   OBSIDIAN_EXE (default: %LOCALAPPDATA%\Programs\Obsidian\Obsidian.exe)
+// Env:   OBSIDIAN_EXE (default: scoop obsidian current)
 //
 // The user's running Obsidian is closed for the duration and relaunched at
 // the end (same contract as npm run shots).
@@ -47,13 +47,31 @@ const DEBUG_PORT = 9333;
 
 const OBSIDIAN_EXE =
 	process.env.OBSIDIAN_EXE ||
-	resolve(process.env.LOCALAPPDATA, 'Programs/Obsidian/Obsidian.exe');
+	resolve(process.env.USERPROFILE ?? process.env.HOME, 'scoop/apps/obsidian/current/Obsidian.exe');
 
 let pass = 0, fail = 0;
 const ok = (cond, name, detail = '') => {
 	const mark = cond ? 'PASS' : 'FAIL';
 	console.log(`[${mark}] ${name}${detail && !cond ? ` — ${detail}` : ''}`);
 	cond ? pass++ : fail++;
+};
+
+// Console gate: errors whose text or source URL names plugin:curtis-ai-chat
+// fail the run even when every assertion passes. Anything else (core Obsidian,
+// theme ENOENTs, other plugins) is surfaced but never gates.
+const pluginErrors = [];
+const watchPluginErrors = (text, url = '') => {
+	const s = `${text}\n${url}`;
+	if (!s.includes('plugin:curtis-ai-chat')) return;
+	if (!pluginErrors.includes(text)) pluginErrors.push(text);
+};
+const reportConsoleGate = () => {
+	if (pluginErrors.length > 0) {
+		console.log(`[smoke] FAIL: ${pluginErrors.length} plugin console error(s):`);
+		for (const e of pluginErrors) console.log(`[obsidian] ${e}`);
+	} else {
+		console.log('[smoke] console clean');
+	}
 };
 
 // ---------------------------------------------------------------------------
@@ -245,9 +263,15 @@ async function main() {
 	}
 	if (!browser) { child.kill(); throw new Error('could not attach to the debug port'); }
 	const ctx = browser.contexts()[0];
-	const logLine = (m) => { if (m.type() === 'error') console.log(`[obsidian] ${m.text().slice(0, 160)}`); };
-	for (const p of ctx.pages()) p.on('console', logLine);
-	ctx.on('page', (p) => p.on('console', logLine));
+	const logLine = (m) => {
+		if (m.type() !== 'error') return;
+		console.log(`[obsidian] ${m.text().slice(0, 160)}`);
+		watchPluginErrors(m.text(), m.location()?.url);
+	};
+	// Uncaught exceptions / unhandled rejections surface as pageerror, not console.
+	const pageError = (e) => watchPluginErrors(e?.stack ?? String(e));
+	for (const p of ctx.pages()) { p.on('console', logLine); p.on('pageerror', pageError); }
+	ctx.on('page', (p) => { p.on('console', logLine); p.on('pageerror', pageError); });
 
 	// If Obsidian dies MID-RUN, CDP calls can hang forever — bail loudly.
 	// (During normal teardown the script kills Obsidian itself; that
@@ -566,13 +590,14 @@ async function main() {
 
 	// --- summary ----------------------------------------------------------------
 	console.log(`\n[smoke] ${pass} passed, ${fail} failed`);
+	reportConsoleGate();
 	finished = true;
 	await browser.close();
 	child.kill();
 	restoreLaunchVault();
 	// Relaunch the user's Obsidian on their original vault, as the harness took it over.
 	try { spawn(OBSIDIAN_EXE, [], { detached: true, stdio: 'ignore' }).unref(); } catch { /* best effort */ }
-	process.exit(fail > 0 ? 1 : 0);
+	process.exit(fail > 0 || pluginErrors.length > 0 ? 1 : 0);
 }
 
 main().catch((e) => {

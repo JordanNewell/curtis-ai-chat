@@ -3,7 +3,7 @@
 // running Obsidian is closed for the duration and NOT reopened afterwards).
 //
 //   P1  baseline send on pane one
-//   P2  "Open new chat pane" → two distinct ChatViews, new pane binds current
+//   P2  "Open new chat tab" → two distinct ChatViews, new tab starts fresh
 //   P3  independent conversations — pane two's new chat leaves pane one alone
 //   P4  cross-pane sync — a send in pane two re-renders pane one (same conv)
 //   P5  delete-rebind — deleting the bound conversation rebinds every pane
@@ -35,13 +35,31 @@ const DEBUG_PORT = 9334;
 
 const OBSIDIAN_EXE =
 	process.env.OBSIDIAN_EXE ||
-	resolve(process.env.LOCALAPPDATA, 'Programs', 'Obsidian', 'Obsidian.exe');
+	resolve(process.env.USERPROFILE ?? process.env.HOME, 'scoop/apps/obsidian/current/Obsidian.exe');
 
 let pass = 0, fail = 0;
 const ok = (cond, name, detail = '') => {
 	const mark = cond ? 'PASS' : 'FAIL';
 	console.log(`[${mark}] ${name}${detail && !cond ? ` — ${detail}` : ''}`);
 	cond ? pass++ : fail++;
+};
+
+// Console gate: errors whose text or source URL names plugin:curtis-ai-chat
+// fail the run even when every assertion passes. Anything else (core Obsidian,
+// theme ENOENTs, other plugins) is surfaced but never gates.
+const pluginErrors = [];
+const watchPluginErrors = (text, url = '') => {
+	const s = `${text}\n${url}`;
+	if (!s.includes('plugin:curtis-ai-chat')) return;
+	if (!pluginErrors.includes(text)) pluginErrors.push(text);
+};
+const reportConsoleGate = () => {
+	if (pluginErrors.length > 0) {
+		console.log(`[smoke] FAIL: ${pluginErrors.length} plugin console error(s):`);
+		for (const e of pluginErrors) console.log(`[obsidian] ${e}`);
+	} else {
+		console.log('[smoke] console clean');
+	}
 };
 
 // ---------------------------------------------------------------------------
@@ -160,13 +178,16 @@ const INSTALL_HELPERS = `(() => {
 			window.app.commands.executeCommandById('curtis-ai-chat:open-chat');
 			const deadline = Date.now() + 10000;
 			while (Date.now() < deadline) {
-				if (document.querySelector('.workspace-leaf-content[data-type="curtis-chat"]')) return true;
+				// Wait for the COMPOSER, not just the leaf — the leaf-content
+				// element exists before async onOpen finishes, and driving a
+				// half-open view (no textarea/imageStrip) crashes the helpers.
+				if (document.querySelector('.workspace-leaf-content[data-type="curtis-chat"] .ai-chat-input-wrap')) return true;
 				await sleepP(200);
 			}
 			throw new Error('chat view never opened');
 		},
-		openNewPane() {
-			window.app.commands.executeCommandById('curtis-ai-chat:open-chat-new-pane');
+		openNewTab() {
+			window.app.commands.executeCommandById('curtis-ai-chat:open-new-chat-tab');
 		},
 		/** Deterministic offline AI. chunkDelay controls stream length so the
 		 *  abort test has a window to click Stop in. Both call paths are
@@ -250,7 +271,15 @@ async function main() {
 	}
 	if (!browser) { child.kill(); throw new Error('could not attach to the debug port'); }
 	const ctx = browser.contexts()[0];
-	for (const p of ctx.pages()) p.on('console', (m) => { if (m.type() === 'error') console.log(`[obsidian] ${m.text().slice(0, 160)}`); });
+	const logLine = (m) => {
+		if (m.type() !== 'error') return;
+		console.log(`[obsidian] ${m.text().slice(0, 160)}`);
+		watchPluginErrors(m.text(), m.location()?.url);
+	};
+	// Uncaught exceptions / unhandled rejections surface as pageerror, not console.
+	const pageError = (e) => watchPluginErrors(e?.stack ?? String(e));
+	for (const p of ctx.pages()) { p.on('console', logLine); p.on('pageerror', pageError); }
+	ctx.on('page', (p) => { p.on('console', logLine); p.on('pageerror', pageError); });
 
 	let finished = false;
 	browser.on('disconnected', () => {
@@ -299,6 +328,9 @@ async function main() {
 			window.app.commands.executeCommandById('curtis-ai-chat:open-chat');
 		}
 	});
+	// The command path above doesn't wait for onOpen — hold here until the
+	// composer exists, for the same half-open-view reason as openChat().
+	await until(page, () => !!document.querySelector('.ai-chat-view .ai-chat-input-wrap'), 10000, 'chat composer ready');
 	await until(page, () => __smoke.chatViews().length === 1, 5000, 'normalized to one pane');
 	// Stable identity for pane one — the second pane opens in the CENTER area,
 	// which changes getLeavesOfType order, so index-based access is not stable.
@@ -346,25 +378,25 @@ async function main() {
 	ok(p1ok.stored === 2 && p1ok.reply.includes('Fake reply'),
 		'P1 baseline send stores user + assistant in the pane conversation', JSON.stringify(p1ok));
 
-	// --- P2: open a second pane ------------------------------------------------
+	// --- P2: open a second chat tab --------------------------------------------
 	const cmdResult = await page.evaluate(() => {
 		try {
-			const r = window.app.commands.executeCommandById('curtis-ai-chat:open-chat-new-pane');
+			const r = window.app.commands.executeCommandById('curtis-ai-chat:open-new-chat-tab');
 			return { ran: r !== false, leaves: __smoke.chatViews().length };
 		} catch (e) {
 			return { err: String(e) };
 		}
 	});
-	console.log(`[smoke] P2 open-new-pane command: ${JSON.stringify(cmdResult)}`);
+	console.log(`[smoke] P2 open-new-chat-tab command: ${JSON.stringify(cmdResult)}`);
 	await until(page, () => __smoke.chatViews().length === 2, 10000, 'second chat pane');
 	const p2 = await page.evaluate((firstId) => {
 		const views = __smoke.chatViews();
 		__smoke.p2 = views.find((v) => v !== __smoke.p1);
-		// The new pane must live in the CENTER root split, not a sidebar —
+		// The new tab must live in the CENTER root split, not a sidebar —
 		// walk the leaf's ancestor chain to find which root owns it.
 		let root = __smoke.p2?.leaf?.parent ?? null;
 		while (root && root.parent) root = root.parent;
-		// And it must be roomy, not a sliver: a healthy share of the window.
+		// A tab, not a sliver split: it should own a healthy share of the window.
 		const paneWidth = __smoke.p2?.contentEl?.getBoundingClientRect().width ?? 0;
 		const windowWidth = window.innerWidth;
 		return {
@@ -374,37 +406,69 @@ async function main() {
 			paneWidth,
 			windowWidth,
 			share: windowWidth > 0 ? +(paneWidth / windowWidth).toFixed(2) : 0,
-			otherBound: __smoke.p2?.conversationId,
-			want: firstId,
+			freshBound: __smoke.p2?.conversationId != null && __smoke.p2.conversationId !== firstId,
+			freshTitle: __smoke.p2?.getDisplayText?.(),
 		};
 	}, pane1.id);
 	ok(p2.count === 2 && p2.distinct, 'P2 two distinct ChatView instances', JSON.stringify(p2));
-	ok(p2.inCenter, 'P2 new pane opens in the center area (not a cramped sidebar split)', JSON.stringify(p2));
+	ok(p2.inCenter, 'P2 new tab opens in the center area (not a sidebar)', JSON.stringify(p2));
 	console.log(`[smoke] P2 pane width: ${p2.paneWidth}px of ${p2.windowWidth}px window (${Math.round(p2.share * 100)}%)`);
-	ok(p2.share >= 0.25, 'P2 new pane gets a roomy share of the window (≥25%)', JSON.stringify(p2));
-	ok(p2.otherBound === p2.want, 'P2 new pane binds the most recent conversation', JSON.stringify(p2));
+	ok(p2.share >= 0.25, 'P2 new tab gets a roomy share of the window (≥25%)', JSON.stringify(p2));
+	ok(p2.freshBound && p2.freshTitle === 'New chat',
+		'P2 new tab starts a fresh conversation (not a mirror of pane one)', JSON.stringify(p2));
 
-	// --- P2b: stacked-header tools row is centered, not left-packed ---------
-	// (The test pane is under the 560px container-query threshold, so the
-	// header stacks — the layout where left-packed tools looked shifted.)
+	// --- P2b: composer + top bar layout contract -----------------------------
+	// The composer holds textarea + the control row (attach, mic, arena,
+	// auto-speak left; send anchored right). The top bar holds the session
+	// chrome with the model picker centered between title and tools. All
+	// classes the demo scripts click by name must be present and inside the
+	// right container.
 	const p2b = await page.evaluate(() => {
-		const tools = __smoke.p2.contentEl.querySelector('.ai-chat-header-tools');
-		if (!tools) return { ok: false, why: 'no tools row' };
-		const btns = Array.from(tools.querySelectorAll(':scope > button'));
-		if (btns.length < 4) return { ok: false, why: `only ${btns.length} tools` };
-		const row = tools.getBoundingClientRect();
-		const first = btns[0].getBoundingClientRect();
-		const last = btns[btns.length - 1].getBoundingClientRect();
-		const clusterMid = (first.left + last.right) / 2;
-		const rowMid = row.left + row.width / 2;
+		const pane = __smoke.p2.contentEl;
+		const composer = pane.querySelector('.ai-chat-input-wrap');
+		const topbar = pane.querySelector('.ai-chat-topbar');
+		const row = composer?.querySelector('.ai-chat-btn-row');
+		const inComposer = (sel) => !!composer?.querySelector(sel);
+		const inTopbar = (sel) => !!topbar?.querySelector(sel);
+		const attachCol = row?.querySelector('.ai-chat-attach-col');
 		return {
-			ok: Math.abs(clusterMid - rowMid) < 6,
-			offset: +(clusterMid - rowMid).toFixed(1),
-			tools: btns.length,
-			rowWidth: Math.round(row.width),
+			composer: !!composer,
+			topbar: !!topbar,
+			textarea: inComposer('.ai-chat-input'),
+			controlRow: inComposer('.ai-chat-btn-row'),
+			attach: !!attachCol?.querySelector('.ai-chat-attach-btn'),
+			mic: !!attachCol?.querySelector('.ai-chat-mic-button'),
+			arena: inComposer('.ai-chat-arena-btn'),
+			send: inComposer('.ai-chat-send-col .ai-chat-send-btn'),
+			modelPicker: inTopbar('.ai-model-picker-btn'),
+			topbarNewChat: inTopbar('.ai-chat-icon-btn'),
+			hintGone: !pane.querySelector('.ai-chat-input-hint'),
+			oldHeaderGone: !pane.querySelector('.ai-chat-header'),
 		};
 	});
-	ok(p2b.ok, 'P2b stacked-header tools cluster is centered under the picker row', JSON.stringify(p2b));
+	const p2bOk = p2b.composer && p2b.topbar && p2b.textarea && p2b.controlRow
+		&& p2b.attach && p2b.mic && p2b.arena && p2b.send
+		&& p2b.modelPicker && p2b.topbarNewChat && p2b.hintGone && p2b.oldHeaderGone;
+	ok(p2bOk, 'P2b composer + top bar layout contract holds', JSON.stringify(p2b));
+
+	// --- P2c: titled panes — the tab names the conversation; renames flow ------
+	const pane2Fresh = await page.evaluate(() => __smoke.p2.conversationId);
+	created.convIds.push(pane2Fresh);
+	await page.evaluate((id) => {
+		__smoke.plugin().conversationStore.renameCurrentConversation('Pane two renamed', id);
+	}, pane2Fresh);
+	await sleep(300);
+	const p2c = await page.evaluate(() => {
+		const v = __smoke.p2;
+		return {
+			tabTitle: v.getDisplayText(),
+			label: v.contentEl.querySelector('.ai-chat-topbar-title')?.textContent ?? null,
+			// Debug-only: the real tab header DOM (internal API, may be absent).
+			leafHeader: v.leaf?.tabHeaderEl?.innerText ?? null,
+		};
+	});
+	ok(p2c.tabTitle === 'Pane two renamed' && p2c.label === 'Pane two renamed',
+		'P2c tab + topbar title follow the conversation rename', JSON.stringify(p2c));
 
 	// --- P3: independent conversations -----------------------------------------
 	await page.evaluate(() => {
@@ -591,12 +655,13 @@ async function main() {
 	console.log('[smoke] cleaned up');
 
 	console.log(`\n[smoke] ${pass} passed, ${fail} failed`);
+	reportConsoleGate();
 	finished = true;
 	await browser.close();
 	child.kill();
 	restoreLaunchVault();
 	// No relaunch — the user asked the harness to leave Obsidian closed.
-	process.exit(fail > 0 ? 1 : 0);
+	process.exit(fail > 0 || pluginErrors.length > 0 ? 1 : 0);
 }
 
 main().catch((e) => {

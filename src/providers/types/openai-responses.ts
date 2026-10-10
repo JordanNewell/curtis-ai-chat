@@ -69,3 +69,76 @@ export function isOpenAIChatCompletion(v: unknown): v is OpenAIChatCompletion {
 export function isOpenAIChunk(v: unknown): v is OpenAIChatCompletionChunk {
   return isRecord(v) && hasStringProp(v, 'id') && hasArrayProp(v, 'choices');
 }
+
+// ---------------------------------------------------------------------------
+// OpenAI Responses API (POST /v1/responses) — the surface Sign in with
+// ChatGPT plan-usage tokens call. Distinct wire shape from Chat Completions:
+// output is a flat item array (message / function_call), usage uses
+// input_tokens/output_tokens, and streams are typed events, not chunks.
+// ---------------------------------------------------------------------------
+
+export interface ResponsesUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens?: number;
+}
+
+export interface ResponsesOutputTextPart {
+  type: 'output_text';
+  text: string;
+}
+
+export interface ResponsesOutputMessage {
+  type: 'message';
+  role: string;
+  content: ResponsesOutputTextPart[];
+}
+
+export interface ResponsesFunctionCall {
+  type: 'function_call';
+  /** call_id pairs the call with its function_call_output on the next turn. */
+  call_id?: string;
+  id?: string;
+  name: string;
+  /** JSON-encoded arguments string, same convention as Chat Completions. */
+  arguments: string;
+}
+
+export type ResponsesOutputItem = ResponsesOutputMessage | ResponsesFunctionCall;
+
+export interface ResponsesResponse {
+  id: string;
+  object?: string;  // 'response'
+  model?: string;
+  /** 'completed' | 'failed' | 'incomplete' (streaming final states and the
+   *  non-streaming body share this field). */
+  status?: string;
+  error?: { message?: string; code?: string } | null;
+  incomplete_details?: { reason?: string } | null;
+  output: ResponsesOutputItem[];
+  usage?: ResponsesUsage;
+}
+
+export type ResponsesStreamEvent =
+  | { type: 'response.output_text.delta'; delta: string }
+  | { type: 'response.output_item.done'; item: ResponsesOutputItem }
+  | { type: 'response.completed'; response: ResponsesResponse }
+  | { type: 'response.incomplete'; response: ResponsesResponse }
+  | { type: 'response.failed'; response: ResponsesResponse }
+  | { type: 'error'; message?: string; code?: string };
+
+export function isResponsesResponse(v: unknown): v is ResponsesResponse {
+  return isRecord(v) && hasStringProp(v, 'id') && hasArrayProp(v, 'output');
+}
+
+export function isResponsesStreamEvent(v: unknown): v is ResponsesStreamEvent {
+  return isRecord(v) && hasStringProp(v, 'type');
+}
+
+export function isResponsesOutputMessage(v: ResponsesOutputItem): v is ResponsesOutputMessage {
+  return v.type === 'message';
+}
+
+export function isResponsesFunctionCall(v: ResponsesOutputItem): v is ResponsesFunctionCall {
+  return v.type === 'function_call';
+}

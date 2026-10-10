@@ -22,7 +22,7 @@ Attached notes show as chips above the input — click the `×` on a chip to rem
 
 ## Active-note pill
 
-The chat header shows a pill with the **currently active note's name** (the note open in the editor). Click the pill to attach that note instantly — same as typing `@` and selecting it, but one click.
+The chat top bar shows a pill with the **currently active note's name** (the note open in the editor). Click the pill to attach that note instantly — same as typing `@` and selecting it, but one click. Long names truncate; on mobile the pill collapses to an icon (the full path lives in its tooltip). Attaching shows a Notice, and attaching the same note twice tells you it's already there.
 
 This reuses the same attachment pipeline as `@`-mention selection, so everything below applies equally.
 
@@ -82,12 +82,11 @@ There's no deduplication. If you `@`-attach a note and the agent also reads it, 
 - **Filenames only in the dropdown.** The fuzzy-search dropdown shows note titles, not content previews. You can't preview a note from the dropdown — use the active-note pill or the editor if you need to peek first.
 - **No fuzzy content search in the dropdown.** The dropdown filters by filename/basename only. To search note contents, use `/` slash commands or the agent's `search_notes` tool.
 - **No inline expansion.** The chip shows the note name; it doesn't expand to show contents inline. Send the message to see what the AI sees.
-- **No drag-and-drop from the file explorer (yet).** Use `@` or the active-note pill.
+- **Dragging a note onto the chat doesn't attach it.** Dropping files on the chat pane imports them as conversations (`.curt`, ChatGPT/Claude exports, markdown transcripts — see [IMPORT.md](IMPORT.md)); images attach for vision. To attach a note's *contents* as context, use `@` or the active-note pill.
 
 ## Roadmap
 
 - Content previews in the dropdown
-- Drag-and-drop attachment from Obsidian's file explorer
 - Inline expansion of attachment chips
 - Attachment chip shows a content snippet on hover
 - "Attach all notes tagged #X" bulk operation

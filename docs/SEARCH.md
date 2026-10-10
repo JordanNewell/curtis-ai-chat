@@ -2,7 +2,7 @@
 
 > Find any message across every conversation, past and present.
 
-Curtis AI Chat keeps full conversation history in `localStorage`. Cross-conversation search fuzzy-matches against **every conversation title and every message body** at once, then jumps you straight to the result.
+Curtis AI keeps full conversation history in `localStorage`. Cross-conversation search fuzzy-matches against **every conversation title and every message body** at once, then jumps you straight to the result.
 
 ## Opening the search
 

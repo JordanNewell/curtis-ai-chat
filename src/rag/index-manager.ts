@@ -289,7 +289,7 @@ export class RagIndexManager {
 
 		let done = 0;
 		for (const item of toEmbed) {
-			const vectors = await embedTexts(endpoint, item.pieces.map((p) => p.content), (d, t) => {
+			const vectors = await embedTexts(endpoint, item.pieces.map((p) => p.content), (d, _t) => {
 				onProgress?.(done + d, totalChunks);
 			});
 			done += item.pieces.length;

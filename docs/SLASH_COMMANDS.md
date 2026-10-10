@@ -11,6 +11,8 @@ Unknown commands (e.g. `/typo hello`) fall through and get sent as a literal use
 | `/clear` | — | Start a new chat. Previous conversation stays in history. |
 | `/regen` · `/regenerate` | — | Regenerate the last assistant response. |
 | `/title` | `<new name>` | Rename the current conversation. |
+| `/leader` | — | Toggle leader mode — this chat can spawn follower agents. See [SWARM.md](SWARM.md). |
+| `/agent` | `[name\|off]` | Bind a named agent to this chat (bare = picker, `off` clears). See [AGENTS.md](AGENTS.md). |
 | `/copy` | — | Copy the last assistant response to clipboard. |
 | `/note` | `[name]` | Save the last assistant response as a new note. |
 | `/save-all` | `[name]` | Export the entire conversation as one structured markdown note in your vault. |
@@ -18,11 +20,12 @@ Unknown commands (e.g. `/typo hello`) fall through and get sent as a literal use
 | `/paste` | — | Paste from system clipboard into the chat input. |
 | `/model` | `<query>` | Switch the active model via fuzzy match. |
 | `/provider` | `<query>` | Switch the active provider via fuzzy match. |
-| `/system` | `<text>` | Set the system prompt for the session. No arg resets to default. |
+| `/system` | `<text>` | Set your default system prompt — global, applies to all chats, persists. No arg resets to default. |
 | `/stats` | — | Show conversation stats (conversations, messages, tokens). |
 | `/remember` | `<fact>` | Manually save a durable fact to long-term memory. |
 | `/forget` | `<substring>` | Delete the first memory fact matching the substring. |
 | `/memory` | `[open\|clear]` | List recent facts, or `open`/`clear` the memory file. |
+| `/recap` | — | Summarize this conversation and log it to the journal. |
 | `/help` | — | Open a modal listing every slash command. |
 
 ## Conversation management
@@ -43,9 +46,17 @@ Rename the current conversation. The title shows up in the history dropdown.
 /title Q3 planning notes
 ```
 
+### `/leader`
+
+Toggle leader mode on the current conversation. A leader chat can spawn follower agents — separate chats that work subtasks in parallel and report back. Run again to turn it off. See [SWARM.md](SWARM.md).
+
+### `/agent [name|off]`
+
+Bind one of your named agents to this conversation — its persona, model routing, and tool ceilings take over for this chat. Bare `/agent` opens the picker; `/agent editor` fuzzy-matches a name; `/agent off` returns the chat to the default assistant. Switching mid-conversation is fine: the transcript records which agent wrote each turn. See [AGENTS.md](AGENTS.md).
+
 ### `/stats`
 
-Show a Notice with conversation stats: total conversations, total messages, total tokens used.
+Show a Notice with conversation stats: total conversations, total messages, total tokens used. If the @/slash autocomplete has run this session, the Notice also shows autocomplete request/token usage for the session.
 
 ## Saving & exporting
 
@@ -60,7 +71,7 @@ Save the last assistant response as a new note in your configured Note save fold
 - Without a name: the basename is derived from the first line of the response
 - With a name: uses what you provide
 - Opens the note in a new split
-- Frontmatter records `source: Curtis AI Chat`, `provider`, `model`, `created`
+- Frontmatter records `source: Curtis`, `provider`, `model`, `created`
 - Embeds any attached images as `![[filename.png]]`
 
 ```
@@ -69,7 +80,7 @@ Save the last assistant response as a new note in your configured Note save fold
 
 ### `/save-all [name]`
 
-Export the entire current conversation as a single structured markdown note **inside your vault**. Each message becomes a section:
+Export the entire current conversation as a single structured markdown note **inside your vault**. Without a name, the note is titled after the conversation. Each message becomes a section:
 
 ```markdown
 # Conversation title
@@ -125,7 +136,7 @@ Attached images are emitted as `![](vault/path.png)` references — they won't r
 
 ### `/paste`
 
-Paste from the system clipboard into the chat input. Useful when you've copied text from elsewhere and want to ask about it.
+Paste from the system clipboard into the chat input, **replacing** whatever is currently there. Useful when you've copied text from elsewhere and want to ask about it.
 
 > [!NOTE]
 > Requires clipboard-read permission. If Obsidian blocks it, paste normally with `Ctrl+V`.
@@ -152,7 +163,7 @@ Switch the active provider via fuzzy match. Sets the provider's first available 
 
 ### `/system <text>`
 
-Set the system prompt for the session. Without an argument, resets to the default.
+Set your **default** system prompt. This is a global setting — it applies to every conversation and persists across restarts, so treat it as "my standing instructions to Curtis". Without an argument, resets to the default.
 
 ```
 /system You are a senior Rust engineer. Always explain ownership and lifetimes.
@@ -184,9 +195,19 @@ Without an argument: show a Notice summarizing the last 8 facts.
 
 With arguments:
 - `/memory open` — open the memory file in Obsidian
-- `/memory clear` — wipe all facts
+- `/memory clear` — wipe all facts (asks for confirmation first)
 
 See [MEMORY.md](MEMORY.md) for how memory works and how to edit individual facts from the settings UI (new in v1.0).
+
+## Recap & journal
+
+### `/recap`
+
+Summarize the current conversation in Curtis's voice — 2–3 terse bullets covering what was worked on, what was decided, and what was left open. Curtis reads the last ~30 turns (first 500 characters each) and the summary is appended to the chat itself, so it lives in the transcript like any other message.
+
+- Needs at least 3 messages in the conversation — otherwise you get "Nothing to recap yet".
+- Also reachable from the pane's **export menu** → **Recap conversation**.
+- With **Recap journal** enabled (Settings → Curtis AI → Conversations), each recap is also appended to the journal file — default `AI/Curtis Journal.md`, path configurable right below the toggle. The journal is plain, append-only markdown: one entry per recap, and Curtis never rewrites it, so hand edits are safe. It syncs and searches like any vault note.
 
 ## Reference
 

@@ -4,7 +4,8 @@
 // signatures, then the Curtis markdown frontmatter, then generic markdown —
 // and generic only when both sides of a conversation are confidently found.
 
-import { parseConversationMarkdown } from '../chat/conversation-store';
+import { parseConversationMarkdown } from '../chat/conversation-format';
+import { vaultYamlPort } from '../chat/conversation-files';
 import { unzipSync, strFromU8 } from 'fflate';
 import type { Conversation } from '../types';
 import type { DetectedFile, ParsedChat } from './types';
@@ -104,7 +105,7 @@ export function detectAndParse(name: string, buf: ArrayBuffer): DetectedFile {
 
 	// Curtis markdown (a transcript exported from another vault, or a vault
 	// file copied by hand) — the store's parser owns that contract.
-	const curtisMd = parseConversationMarkdown(text, 0);
+	const curtisMd = parseConversationMarkdown(text, 0, vaultYamlPort);
 	if (curtisMd) return { format: 'curtis-md', chats: [], conversations: [curtisMd] };
 
 	// Generic role-headed markdown.
