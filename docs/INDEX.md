@@ -16,6 +16,7 @@ Reference documentation for every feature. Start here, follow links to the detai
 | @ **[MENTIONS.md](MENTIONS.md)** | `@`-mention vault notes — fuzzy-search, attach as context. Active-note pill. |
 | 🔍 **[SEARCH.md](SEARCH.md)** | Cross-conversation search — `Ctrl+Shift+F` fuzzy search across all conversations + messages. |
 | 🖼️ **[IMAGES.md](IMAGES.md)** | Image attachments — paste, drag, or paperclip. Vision-capable models. |
+| 🗂️ **[MARKDOWN-PROTOCOL.md](MARKDOWN-PROTOCOL.md)** | The Curtis Markdown File Protocol — open storage spec for `AI/Conversations/` + memory files. Any markdown app becomes a compatible frontend. |
 | 🧠 **[MEMORY.md](MEMORY.md)** | Long-term memory — markdown-file-backed. Auto-capture, manual recall, edit UI. |
 | ✂️ **[SELECTION_ACTIONS.md](SELECTION_ACTIONS.md)** | Inline note transformations — explain, summarize, refactor, etc. Right-click in any note. |
 | ⌨️ **[SLASH_COMMANDS.md](SLASH_COMMANDS.md)** | 16 slash commands — `/clear`, `/regen`, `/model`, `/memory`, `/export`, etc. |
